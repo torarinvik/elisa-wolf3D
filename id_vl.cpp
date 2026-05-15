@@ -534,9 +534,8 @@ void VL_UnlockSurface(SDL_Surface *surface)
 
 void VL_Plot (int x, int y, int color)
 {
-    assert(x >= 0 && (unsigned) x < screenWidth
-            && y >= 0 && (unsigned) y < screenHeight
-            && "VL_Plot: Pixel out of bounds!");
+    if (wolf3d_validate_pixel_bounds(x, y, (int32_t) screenWidth, (int32_t) screenHeight) != 0)
+        Quit ("VL_Plot: Pixel out of bounds!");
 
     VL_LockSurface(curSurface);
     ((byte *) curSurface->pixels)[y * curPitch + x] = color;
@@ -553,9 +552,8 @@ void VL_Plot (int x, int y, int color)
 
 byte VL_GetPixel (int x, int y)
 {
-    assert_ret(x >= 0 && (unsigned) x < screenWidth
-            && y >= 0 && (unsigned) y < screenHeight
-            && "VL_GetPixel: Pixel out of bounds!");
+    if (wolf3d_validate_pixel_bounds(x, y, (int32_t) screenWidth, (int32_t) screenHeight) != 0)
+        Quit ("VL_GetPixel: Pixel out of bounds!");
 
     VL_LockSurface(curSurface);
     byte col = ((byte *) curSurface->pixels)[y * curPitch + x];
