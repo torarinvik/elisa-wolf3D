@@ -20,7 +20,7 @@
 #   include <stdint.h>
 #   include <string.h>
 #   include <stdarg.h>
-#include <SDL/SDL.h>
+#include "sdl_compat.h"
 
 #endif
 

@@ -1189,14 +1189,14 @@ static void InitGame()
 #if defined _WIN32
     putenv("SDL_VIDEODRIVER=directx");
 #endif
-    if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0)
+    if(!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK))
     {
         printf("Unable to init SDL: %s\n", SDL_GetError());
         exit(1);
     }
     atexit(SDL_Quit);
 
-    int numJoysticks = SDL_NumJoysticks();
+    int numJoysticks = SDL_NumJoysticksCompat();
     if(param_joystickindex && (param_joystickindex < -1 || param_joystickindex >= numJoysticks))
     {
         if(!numJoysticks)
@@ -1622,7 +1622,7 @@ static void DemoLoop()
         if (Keyboard[sc_Tab] && param_debugmode)
             RecordDemo ();
         else
-            US_ControlPanel (0);
+            US_ControlPanel (sc_None);
 #else
         US_ControlPanel (0);
 #endif

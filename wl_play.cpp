@@ -333,11 +333,14 @@ void PollKeyboardMove (void)
 
 void PollMouseMove (void)
 {
-    int mousexmove, mouseymove;
+    float mousexf, mouseyf;
 
-    SDL_GetMouseState(&mousexmove, &mouseymove);
+    SDL_GetMouseState(&mousexf, &mouseyf);
     if(IN_IsInputGrabbed())
         IN_CenterMouse();
+
+    int mousexmove = (int)mousexf;
+    int mouseymove = (int)mouseyf;
 
     mousexmove -= screenWidth / 2;
     mouseymove -= screenHeight / 2;

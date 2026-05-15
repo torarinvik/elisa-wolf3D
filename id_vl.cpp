@@ -35,6 +35,10 @@ unsigned bufferPitch;
 SDL_Surface *curSurface = NULL;
 unsigned curPitch;
 
+SDL_Window *sdlWindow = NULL;
+SDL_GLContext sdlGLContext = NULL;
+SDL_Palette *sdlGamePalette = NULL;
+
 unsigned scaleFactor;
 
 boolean  screenfaded;
@@ -85,37 +89,46 @@ void    VL_Shutdown (void)
 void    VL_SetVGAPlaneMode (void)
 {
 #ifdef SPEAR
-    SDL_WM_SetCaption("Spear of Destiny", NULL);
+    const char *windowTitle = "Spear of Destiny";
 #else
-    SDL_WM_SetCaption("Wolfenstein 3D", NULL);
+    const char *windowTitle = "Wolfenstein 3D";
 #endif
 
-    if(screenBits == -1)
-    {
-        const SDL_VideoInfo *vidInfo = SDL_GetVideoInfo();
-        screenBits = vidInfo->vfmt->BitsPerPixel;
-    }
+    screenBits = 8;
 
     //Fab's CRT Hack
     //Adjust height so the screen is 4:3 aspect ratio
     screenHeight=screenWidth * 3.0/4.0;
-    
-    screen = SDL_SetVideoMode(screenWidth, screenHeight, screenBits,
-          (usedoublebuffering ? SDL_HWSURFACE | SDL_DOUBLEBUF : 0)
-        | (screenBits == 8 ? SDL_HWPALETTE : 0)
-        | (fullscreen ? SDL_FULLSCREEN : 0) | SDL_OPENGL | SDL_OPENGLBLIT);
-    
-    
-    if(!screen)
+
+    SDL_WindowFlags windowFlags = SDL_WINDOW_OPENGL;
+    if(fullscreen)
+        windowFlags |= SDL_WINDOW_FULLSCREEN;
+
+    sdlWindow = SDL_CreateWindow(windowTitle, screenWidth, screenHeight, windowFlags);
+    if(!sdlWindow)
     {
-        printf("Unable to set %ix%ix%i video mode: %s\n", screenWidth, screenHeight, screenBits, SDL_GetError());
+        printf("Unable to create %ix%i OpenGL window: %s\n", screenWidth, screenHeight, SDL_GetError());
         exit(1);
     }
-    if((screen->flags & SDL_DOUBLEBUF) != SDL_DOUBLEBUF)
-        usedoublebuffering = false;
-    SDL_ShowCursor(SDL_DISABLE);
 
-    SDL_SetColors(screen, gamepal, 0, 256);
+    sdlGLContext = SDL_GL_CreateContext(sdlWindow);
+    if(!sdlGLContext)
+    {
+        printf("Unable to create OpenGL context: %s\n", SDL_GetError());
+        exit(1);
+    }
+    SDL_GL_MakeCurrent(sdlWindow, sdlGLContext);
+    SDL_GL_SetSwapInterval(usedoublebuffering ? 1 : 0);
+
+    SDL_HideCursor();
+
+    sdlGamePalette = SDL_CreatePalette(256);
+    if(!sdlGamePalette)
+    {
+        printf("Unable to create palette: %s\n", SDL_GetError());
+        exit(1);
+    }
+    SDL_SetPaletteColors(sdlGamePalette, gamepal, 0, 256);
     memcpy(curpal, gamepal, sizeof(SDL_Color) * 256);
 
     //Fab's CRT Hack
@@ -124,15 +137,20 @@ void    VL_SetVGAPlaneMode (void)
     //Fab's CRT Hack
     screenWidth=320;
     screenHeight=200;
-    
-    screenBuffer = SDL_CreateRGBSurface(SDL_SWSURFACE, screenWidth,
-        screenHeight, 8, 0, 0, 0, 0);
+
+    screen = SDL_CreateIndexedSurface(screenWidth, screenHeight);
+    if(!screen)
+    {
+        printf("Unable to create screen surface: %s\n", SDL_GetError());
+        exit(1);
+    }
+
+    screenBuffer = SDL_CreateIndexedSurface(screenWidth, screenHeight);
     if(!screenBuffer)
     {
         printf("Unable to create screen buffer surface: %s\n", SDL_GetError());
         exit(1);
     }
-    SDL_SetColors(screenBuffer, gamepal, 0, 256);
 
     screenPitch = screen->pitch;
     bufferPitch = screenBuffer->pitch;
@@ -150,6 +168,46 @@ void    VL_SetVGAPlaneMode (void)
     CHECKMALLOCRESULT(wallheight);
     
     
+}
+
+SDL_Surface *SDL_CreateIndexedSurface(int width, int height)
+{
+    SDL_Surface *surface = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_INDEX8);
+    if(surface)
+        SDL_SetSurfacePalette(surface, sdlGamePalette);
+    return surface;
+}
+
+void SDL_SetGamePalette(SDL_Surface *surface, const SDL_Color *colors, int firstcolor, int ncolors)
+{
+    if(sdlGamePalette)
+        SDL_SetPaletteColors(sdlGamePalette, colors, firstcolor, ncolors);
+    if(surface)
+        SDL_SetSurfacePalette(surface, sdlGamePalette);
+}
+
+void SDL_SetGamePaletteColor(SDL_Surface *surface, const SDL_Color *color, int firstcolor)
+{
+    SDL_SetGamePalette(surface, color, firstcolor, 1);
+}
+
+int SDL_NumJoysticksCompat(void)
+{
+    int count = 0;
+    SDL_JoystickID *ids = SDL_GetJoysticks(&count);
+    SDL_free(ids);
+    return count;
+}
+
+SDL_Joystick *SDL_OpenJoystickByIndex(int index)
+{
+    int count = 0;
+    SDL_JoystickID *ids = SDL_GetJoysticks(&count);
+    SDL_Joystick *joystick = NULL;
+    if(ids && index >= 0 && index < count)
+        joystick = SDL_OpenJoystick(ids[index]);
+    SDL_free(ids);
+    return joystick;
 }
 
 /*
@@ -215,17 +273,12 @@ void VL_FillPalette (int red, int green, int blue)
 
 void VL_SetColor    (int color, int red, int green, int blue)
 {
-    SDL_Color col = { red, green, blue };
+    SDL_Color col = { (Uint8)red, (Uint8)green, (Uint8)blue, 255 };
     curpal[color] = col;
 
-    if(screenBits == 8)
-        SDL_SetPalette(screen, SDL_PHYSPAL, &col, color, 1);
-    else
-    {
-        SDL_SetPalette(curSurface, SDL_LOGPAL, &col, color, 1);
-        SDL_BlitSurface(screenBuffer, NULL, screen, NULL);
-        SDL_Flip(screen);
-    }
+    SDL_SetGamePaletteColor(curSurface, &col, color);
+    SDL_BlitSurface(screenBuffer, NULL, screen, NULL);
+    SDL_Flip(screen);
 }
 
 //===========================================================================
@@ -260,16 +313,11 @@ void VL_SetPalette (SDL_Color *palette, bool forceupdate)
 {
     memcpy(curpal, palette, sizeof(SDL_Color) * 256);
 
-    if(screenBits == 8)
-        SDL_SetPalette(screen, SDL_PHYSPAL, palette, 0, 256);
-    else
+    SDL_SetGamePalette(curSurface, palette, 0, 256);
+    if(forceupdate)
     {
-        SDL_SetPalette(curSurface, SDL_LOGPAL, palette, 0, 256);
-        if(forceupdate)
-        {
-            SDL_BlitSurface(screenBuffer, NULL, screen, NULL);
-            SDL_Flip(screen);
-        }
+        SDL_BlitSurface(screenBuffer, NULL, screen, NULL);
+        SDL_Flip(screen);
     }
 }
 
@@ -404,7 +452,7 @@ byte *VL_LockSurface(SDL_Surface *surface)
 {
     if(SDL_MUSTLOCK(surface))
     {
-        if(SDL_LockSurface(surface) < 0)
+        if(!SDL_LockSurface(surface))
             return NULL;
     }
     return (byte *) surface->pixels;

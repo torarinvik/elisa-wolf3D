@@ -8,15 +8,6 @@
 
 #include "crt.h"
 
-// Win32
-#ifdef _WIN32
-#include "SDL.h"
-#elif __linux__
-#include "SDL/SDL.h"
-#else
-#include "SDL/SDL.h"
-#endif
-
 static int width;
 static int height;
 
@@ -56,7 +47,7 @@ void CRT_Init(int _width){
  
     glClearColor(0, 0, 0, 0);
     glClear(GL_COLOR_BUFFER_BIT);
-    SDL_GL_SwapBuffers();
+    SDL_GL_SwapWindow(sdlWindow);
 }
 
 #include "id_vl.h"
@@ -97,11 +88,11 @@ void CRT_DAC(void){
     
     
     //Flip buffer
-    SDL_GL_SwapBuffers();
+    SDL_GL_SwapWindow(sdlWindow);
 	
-	Uint8 *keystate = SDL_GetKeyState(NULL);
+	const bool *keystate = SDL_GetKeyboardState(NULL);
 	static int wasPressed = 0;
-	if ( keystate[SDLK_i] ){
+	if ( keystate[SDL_SCANCODE_I] ){
 		if (!wasPressed){
 			wasPressed = 1;
 			CRT_Screenshot();
@@ -138,7 +129,14 @@ void CRT_Screenshot(void){
  
  
    unsigned char TGAheader[12]={0,0,2,0,0,0,0,0,0,0,0,0};
-   unsigned char header[6] = { width%256,width/256,height%256,height/256,24,0};
+   unsigned char header[6] = {
+       (unsigned char)(width % 256),
+       (unsigned char)(width / 256),
+       (unsigned char)(height % 256),
+       (unsigned char)(height / 256),
+       24,
+       0
+   };
 
    // We write the headers
    fwrite(TGAheader,	sizeof(unsigned char),	12,	filePtr);

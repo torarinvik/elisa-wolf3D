@@ -28,13 +28,7 @@
 //
 
 #include "wl_def.h"
-#ifdef _WIN32
-#include "SDL_mixer.h"
-#elif __linux__
-#include <SDL/SDL_mixer.h>
-#else
-#include <SDL/SDL_mixer.h>
-#endif
+#include "mix_compat.h"
 #include "fmopl.h"
 
 #pragma hdrstop
@@ -562,8 +556,8 @@ void SD_PrepareSound(int which)
         Quit("Unable to allocate wave buffer for sound %i!\n", which);
 
     headchunk head = {{'R','I','F','F'}, 0, {'W','A','V','E'},
-        {'f','m','t',' '}, 0x10, 0x0001, 1, param_samplerate, param_samplerate*2, 2, 16};
-    wavechunk dhead = {{'d', 'a', 't', 'a'}, destsamples*2};
+        {'f','m','t',' '}, 0x10, 0x0001, 1, (longword)param_samplerate, (longword)(param_samplerate*2), 2, 16};
+    wavechunk dhead = {{'d', 'a', 't', 'a'}, (longword)(destsamples*2)};
     head.filelenminus8 = sizeof(head) + destsamples*2;  // (sizeof(dhead)-8 = 0)
     memcpy(wavebuffer, &head, sizeof(head));
     memcpy(wavebuffer+sizeof(head), &dhead, sizeof(dhead));

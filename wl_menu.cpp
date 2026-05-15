@@ -333,7 +333,8 @@ static byte *ExtScanNames[] =   // Names corresponding to ExtScanCodes
                                         };*/
 
 #else
-static const char* const ScanNames[SDLK_LAST] =
+#if 0
+static const char* const ScanNames[SDL_SCANCODE_COUNT] =
     {
         "?","?","?","?","?","?","?","?",                                //   0
         "BkSp","Tab","?","?","?","Return","?","?",                      //   8
@@ -377,6 +378,7 @@ static const char* const ScanNames[SDLK_LAST] =
         "?","?","?","?","PrtSc","?","?","?",                            // 312
         "?","?"                                                         // 320
     };
+#endif
 
 #endif
 
@@ -3585,8 +3587,10 @@ ReadAnyControl (ControlInfo * ci)
 
     if (mouseenabled && IN_IsInputGrabbed())
     {
-        int mousex, mousey, buttons;
-        buttons = SDL_GetMouseState(&mousex, &mousey);
+        float mousexf, mouseyf;
+        int buttons = (int)SDL_GetMouseState(&mousexf, &mouseyf);
+        int mousex = (int)mousexf;
+        int mousey = (int)mouseyf;
         int middlePressed = buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE);
         int rightPressed = buttons & SDL_BUTTON(SDL_BUTTON_RIGHT);
         buttons &= ~(SDL_BUTTON(SDL_BUTTON_MIDDLE) | SDL_BUTTON(SDL_BUTTON_RIGHT));
@@ -3878,7 +3882,8 @@ IN_GetScanName (ScanCode scan)
         if (*s == scan)
             return (*p);*/
 
-    return (ScanNames[scan]);
+    const char *name = SDL_GetScancodeName((SDL_Scancode)scan);
+    return (name && *name) ? name : "?";
 }
 
 

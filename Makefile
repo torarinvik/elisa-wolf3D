@@ -13,9 +13,9 @@ INSTALL_MAN     ?= $(INSTALL) -m 444
 INSTALL_DATA    ?= $(INSTALL) -m 444
 
 
-SDL_CONFIG  ?= sdl-config
-CFLAGS_SDL  ?= $(shell $(SDL_CONFIG) --cflags)
-LDFLAGS_SDL ?= $(shell $(SDL_CONFIG) --libs)
+PKG_CONFIG ?= pkg-config
+CFLAGS_SDL  ?= $(shell $(PKG_CONFIG) --cflags sdl3 sdl3-mixer)
+LDFLAGS_SDL ?= $(shell $(PKG_CONFIG) --libs sdl3 sdl3-mixer)
 
 
 CFLAGS += $(CFLAGS_SDL)
@@ -37,14 +37,15 @@ CXXFLAGS += $(CFLAGS)
 
 LDFLAGS += $(LDFLAGS_SDL)
 ifeq ($(UNAME), Darwin)
-	LDFLAGS += -lSDL_mixer -framework OpenGL
+	LDFLAGS += -framework OpenGL -Wl,-no_fixup_chains
 endif
 ifeq ($(UNAME), Linux)
-	LDFLAGS += -lSDL_mixer -lGL
+	LDFLAGS += -lGL
 endif
 
 SRCS :=
 SRCS += fmopl.cpp
+SRCS += mix_compat.cpp
 SRCS += id_ca.cpp
 SRCS += id_in.cpp
 SRCS += id_pm.cpp

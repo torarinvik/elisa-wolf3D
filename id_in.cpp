@@ -37,7 +37,7 @@ boolean forcegrabmouse;
 
 
 //  Global variables
-volatile boolean    Keyboard[SDLK_LAST];
+volatile boolean    Keyboard[SDL_SCANCODE_COUNT];
 volatile boolean    Paused;
 volatile char       LastASCII;
 volatile ScanCode   LastScan;
@@ -126,7 +126,7 @@ static  Direction   DirTable[] =        // Quick lookup for total direction
 static int
 INL_GetMouseButtons(void)
 {
-    int buttons = SDL_GetMouseState(NULL, NULL);
+    int buttons = (int)SDL_GetMouseState(NULL, NULL);
     int middlePressed = buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE);
     int rightPressed = buttons & SDL_BUTTON(SDL_BUTTON_RIGHT);
     buttons &= ~(SDL_BUTTON(SDL_BUTTON_MIDDLE) | SDL_BUTTON(SDL_BUTTON_RIGHT));
@@ -232,6 +232,25 @@ boolean IN_JoyPresent()
     return Joystick != NULL;
 }
 
+static void normalizeKeypadScan(ScanCode *scan)
+{
+    if(*scan == SDL_SCANCODE_KP_ENTER) *scan = SDL_SCANCODE_RETURN;
+    else if(*scan == SDL_SCANCODE_RSHIFT) *scan = SDL_SCANCODE_LSHIFT;
+    else if(*scan == SDL_SCANCODE_RALT) *scan = SDL_SCANCODE_LALT;
+    else if(*scan == SDL_SCANCODE_RCTRL) *scan = SDL_SCANCODE_LCTRL;
+    else if((SDL_GetModState() & SDL_KMOD_NUM) == 0)
+    {
+        switch(*scan)
+        {
+            case SDL_SCANCODE_KP_2: *scan = SDL_SCANCODE_DOWN; break;
+            case SDL_SCANCODE_KP_4: *scan = SDL_SCANCODE_LEFT; break;
+            case SDL_SCANCODE_KP_6: *scan = SDL_SCANCODE_RIGHT; break;
+            case SDL_SCANCODE_KP_8: *scan = SDL_SCANCODE_UP; break;
+            default: break;
+        }
+    }
+}
+
 static void processEvent(SDL_Event *event)
 {
     switch (event->type)
@@ -243,87 +262,43 @@ static void processEvent(SDL_Event *event)
         // check for keypresses
         case SDL_KEYDOWN:
         {
-            if(event->key.keysym.sym==SDLK_SCROLLOCK || event->key.keysym.sym==SDLK_F12)
+            ScanCode scan = event->key.scancode;
+            if(scan == SDL_SCANCODE_SCROLLLOCK || scan == SDL_SCANCODE_F12)
             {
                 GrabInput = !GrabInput;
-                SDL_WM_GrabInput(GrabInput ? SDL_GRAB_ON : SDL_GRAB_OFF);
+                SDL_SetWindowKeyboardGrab(sdlWindow, GrabInput);
+                SDL_SetWindowMouseGrab(sdlWindow, GrabInput);
                 return;
             }
 
-            LastScan = event->key.keysym.sym;
-            SDLMod mod = SDL_GetModState();
+            LastScan = scan;
+            SDL_Keymod mod = SDL_GetModState();
             if(Keyboard[sc_Alt])
             {
-                if(LastScan==SDLK_F4)
+                if(LastScan == SDL_SCANCODE_F4)
                     Quit(NULL);
             }
 
-            if(LastScan == SDLK_KP_ENTER) LastScan = SDLK_RETURN;
-            else if(LastScan == SDLK_RSHIFT) LastScan = SDLK_LSHIFT;
-            else if(LastScan == SDLK_RALT) LastScan = SDLK_LALT;
-            else if(LastScan == SDLK_RCTRL) LastScan = SDLK_LCTRL;
-            else
-            {
-                if((mod & KMOD_NUM) == 0)
-                {
-                    switch(LastScan)
-                    {
-                        case SDLK_KP2: LastScan = SDLK_DOWN; break;
-                        case SDLK_KP4: LastScan = SDLK_LEFT; break;
-                        case SDLK_KP6: LastScan = SDLK_RIGHT; break;
-                        case SDLK_KP8: LastScan = SDLK_UP; break;
-                    }
-                }
-            }
+            normalizeKeypadScan((ScanCode *)&LastScan);
 
-            int sym = LastScan;
-            if(sym >= 'a' && sym <= 'z')
-                sym -= 32;  // convert to uppercase
+            SDL_Keycode key = event->key.key;
+            if((key & SDLK_SCANCODE_MASK) == 0 && key > 0 && key < 128)
+                LastASCII = (char) key;
 
-            if(mod & (KMOD_SHIFT | KMOD_CAPS))
-            {
-                if(sym < lengthof(ShiftNames) && ShiftNames[sym])
-                    LastASCII = ShiftNames[sym];
-            }
-            else
-            {
-                if(sym < lengthof(ASCIINames) && ASCIINames[sym])
-                    LastASCII = ASCIINames[sym];
-            }
-
-			if (LastScan<SDLK_i){
-			}
-
-			if(LastScan<SDLK_LAST){
+			if(LastScan >= 0 && LastScan < SDL_SCANCODE_COUNT){
                 Keyboard[LastScan] = 1;
 			}
-            if(LastScan == SDLK_PAUSE)
+            if(LastScan == SDL_SCANCODE_PAUSE)
                 Paused = true;
             break;
         }
 
         case SDL_KEYUP:
         {
-            int key = event->key.keysym.sym;
-            if(key == SDLK_KP_ENTER) key = SDLK_RETURN;
-            else if(key == SDLK_RSHIFT) key = SDLK_LSHIFT;
-            else if(key == SDLK_RALT) key = SDLK_LALT;
-            else if(key == SDLK_RCTRL) key = SDLK_LCTRL;
-            else
-            {
-                if((SDL_GetModState() & KMOD_NUM) == 0)
-                {
-                    switch(key)
-                    {
-                        case SDLK_KP2: key = SDLK_DOWN; break;
-                        case SDLK_KP4: key = SDLK_LEFT; break;
-                        case SDLK_KP6: key = SDLK_RIGHT; break;
-                        case SDLK_KP8: key = SDLK_UP; break;
-                    }
-                }
-            }
+            ScanCode key = event->key.scancode;
+            normalizeKeypadScan(&key);
 
-			if(key<SDLK_LAST){
+			if(key >= 0 && key < SDL_SCANCODE_COUNT){
                 Keyboard[key] = 0;
 			}
             break;
@@ -367,9 +342,9 @@ IN_Startup(void)
 
     IN_ClearKeysDown();
 
-    if(param_joystickindex >= 0 && param_joystickindex < SDL_NumJoysticks())
+    if(param_joystickindex >= 0 && param_joystickindex < SDL_NumJoysticksCompat())
     {
-        Joystick = SDL_JoystickOpen(param_joystickindex);
+        Joystick = SDL_OpenJoystickByIndex(param_joystickindex);
         if(Joystick)
         {
             JoyNumButtons = SDL_JoystickNumButtons(Joystick);
@@ -380,12 +355,11 @@ IN_Startup(void)
         }
     }
 
-    SDL_EventState(SDL_MOUSEMOTION, SDL_IGNORE);
-
     if(fullscreen || forcegrabmouse)
     {
         GrabInput = true;
-        SDL_WM_GrabInput(SDL_GRAB_ON);
+        SDL_SetWindowKeyboardGrab(sdlWindow, true);
+        SDL_SetWindowMouseGrab(sdlWindow, true);
     }
 
     // I didn't find a way to ask libSDL whether a mouse is present, yet...
@@ -614,5 +588,5 @@ bool IN_IsInputGrabbed()
 
 void IN_CenterMouse()
 {
-    SDL_WarpMouse(screenWidth / 2, screenHeight / 2);
+    SDL_WarpMouseInWindow(sdlWindow, screenWidth / 2, screenHeight / 2);
 }

@@ -232,13 +232,12 @@ void LoadLatchMem (void)
 // tile 8s
 //
     
-    surf = SDL_CreateRGBSurface(SDL_HWSURFACE, 8*8,
-        ((NUMTILE8 + 7) / 8) * 8, 8, 0, 0, 0, 0);
+    surf = SDL_CreateIndexedSurface(8*8, ((NUMTILE8 + 7) / 8) * 8);
     if(surf == NULL)
     {
         Quit("Unable to create surface for tiles!");
     }
-    SDL_SetColors(surf, gamepal, 0, 256);
+    SDL_SetGamePalette(surf, gamepal, 0, 256);
 
     latchpics[0] = surf;
     CA_CacheGrChunk (STARTTILE8);
@@ -261,12 +260,12 @@ void LoadLatchMem (void)
     {
         width = pictable[i-STARTPICS].width;
         height = pictable[i-STARTPICS].height;
-        surf = SDL_CreateRGBSurface(SDL_HWSURFACE, width, height, 8, 0, 0, 0, 0);
+        surf = SDL_CreateIndexedSurface(width, height);
         if(surf == NULL)
         {
             Quit("Unable to create surface for picture!");
         }
-        SDL_SetColors(surf, gamepal, 0, 256);
+        SDL_SetGamePalette(surf, gamepal, 0, 256);
 
         latchpics[2+i-start] = surf;
         CA_CacheGrChunk (i);
@@ -355,8 +354,8 @@ boolean FizzleFade (SDL_Surface *source, int x1, int y1,
 
     //can't rely on screen as dest b/c crt.cpp writes over it with screenBuffer
     //can't rely on screenBuffer as source for same reason: every flip it has to be updated
-    SDL_Surface *source_copy = SDL_ConvertSurface(source, source->format, source->flags);
-    SDL_Surface *screen_copy = SDL_ConvertSurface(screen, screen->format, screen->flags);
+    SDL_Surface *source_copy = SDL_DuplicateSurface(source);
+    SDL_Surface *screen_copy = SDL_DuplicateSurface(screen);
 
     byte *srcptr = VL_LockSurface(source_copy);
     do
@@ -415,9 +414,7 @@ boolean FizzleFade (SDL_Surface *source, int x1, int y1,
                 else
                 {
                     byte col = *(srcptr + (y1 + y) * source->pitch + x1 + x);
-                    uint32_t fullcol = SDL_MapRGB(screen->format, curpal[col].r, curpal[col].g, curpal[col].b);
-                    memcpy(destptr + (y1 + y) * screen->pitch + (x1 + x) * screen->format->BytesPerPixel,
-                        &fullcol, screen->format->BytesPerPixel);
+                    *(destptr + (y1 + y) * screen->pitch + x1 + x) = col;
                 }
 
                 if(rndval == 0)     // entire sequence has been completed
