@@ -212,6 +212,43 @@ def fill_linear_rect(dest: mutable u8&, width: i32, height: i32, pitch: i32, col
 
     return 0
 
+def draw_prop_string_scaled(text: u8&, font_base: u8&, font_locations: i16&, font_width: u8&, dest: mutable u8&, font_height: i32, scale: i32, dest_pitch: i32, color: i32) -> i32 can[Video.Text, Video.Picture]:
+    if font_height < 0 or scale <= 0:
+        return -1
+
+    drawn_width: mutable i32 = 0
+    text_index: mutable usize = 0
+    dest_column: mutable usize = 0
+
+    can Video.Text:
+        signal Video.Text
+
+    can Video.Picture:
+        signal Video.Picture
+
+        scale_usize: usize = scale.usize()
+        pitch: usize = dest_pitch.usize()
+        value: u8 = color.u8()
+
+        while text[text_index] != 0.u8():
+            ch: usize = text[text_index].usize()
+            width: i32 = font_width[ch].i32()
+            step: usize = width.usize()
+            glyph_offset: usize = font_locations[ch].usize()
+
+            for x in 0..<step:
+                for y in 0..<font_height.usize():
+                    if font_base[glyph_offset + x + y * step] != 0.u8():
+                        for sy in 0..<scale_usize:
+                            for sx in 0..<scale_usize:
+                                dest[(y * scale_usize + sy) * pitch + dest_column + x * scale_usize + sx] <- value
+
+            drawn_width <- drawn_width + width
+            dest_column <- dest_column + step * scale_usize
+            text_index <- text_index + 1
+
+    return drawn_width
+
 def checked_measure_prop_string_width(text: u8&, font_width: u8&) -> i32 can[Video.Text]:
     width: mutable i32 = 0
     index: mutable usize = 0
@@ -520,6 +557,7 @@ export func wolf3d_copy_linear_scaled_to_linear(source: u8&, dest: mutable u8&, 
 export func wolf3d_fill_linear_span(dest: mutable u8&, width: i32, color: i32) -> i32 = fill_linear_span
 export func wolf3d_fill_linear_vline(dest: mutable u8&, height: i32, pitch: i32, color: i32) -> i32 = fill_linear_vline
 export func wolf3d_fill_linear_rect(dest: mutable u8&, width: i32, height: i32, pitch: i32, color: i32) -> i32 = fill_linear_rect
+export func wolf3d_draw_prop_string_scaled(text: u8&, font_base: u8&, font_locations: i16&, font_width: u8&, dest: mutable u8&, font_height: i32, scale: i32, dest_pitch: i32, color: i32) -> i32 = draw_prop_string_scaled
 export func wolf3d_validate_fizzle_frames(frames: u32) -> i32 = validate_fizzle_frames
 export func wolf3d_fizzle_bits_for_dimensions(width: u32, height: u32) -> i32 = fizzle_bits_for_dimensions
 export func wolf3d_fizzle_mask_for_dimensions(width: u32, height: u32) -> u32 = fizzle_mask_for_dimensions
@@ -739,6 +777,36 @@ def fill_linear_rect_writes_each_row() -> void can[Abort.Panic, Video.Picture]:
 
             if dest[0] != 0.u8() or dest[3] != 0.u8() or dest[4] != 0.u8() or dest[7] != 0.u8():
                 panic("rect fill touched outside the expected area")
+
+@test
+def draw_prop_string_scaled_renders_glyph_columns() -> void can[Abort.Panic, Video.Text, Video.Picture]:
+    can Video.Text:
+        can Video.Picture:
+            can Abort.Panic:
+                text: mutable u8[2] = zeroed
+                font_base: mutable u8[6] = zeroed
+                font_locations: mutable i16[256] = zeroed
+                font_width: mutable u8[256] = zeroed
+                dest: mutable u8[24] = zeroed
+
+                text[0] <- 65.u8()
+                font_width[65] <- 2.u8()
+                font_locations[65] <- 0.i16()
+
+                font_base[0] <- 1.u8()
+                font_base[3] <- 1.u8()
+
+                if draw_prop_string_scaled(text[0].ref[u8&], font_base[0].ref[u8&], font_locations[0].ref[i16&], font_width[0].ref[u8&], dest[0].ref[mutable u8&], 3, 2, 8, 12) != 2:
+                    panic("drawn width should match glyph width")
+
+                if dest[0] != 12.u8() or dest[1] != 12.u8() or dest[8] != 12.u8() or dest[9] != 12.u8():
+                    panic("top glyph pixel was not scaled")
+
+                if dest[18] != 12.u8() or dest[19] != 12.u8():
+                    panic("bottom glyph pixel was not scaled")
+
+                if dest[2] != 0.u8() or dest[16] != 0.u8():
+                    panic("blank glyph pixels should remain untouched")
 
 @test
 def validate_fizzle_frames_rejects_zero() -> void can[Abort.Panic, Video.Fizzle]:

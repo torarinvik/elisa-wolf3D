@@ -18,6 +18,7 @@ int32_t wolf3d_copy_linear_scaled_to_linear(const uint8_t *source, uint8_t *dest
 int32_t wolf3d_fill_linear_span(uint8_t *dest, int32_t width, int32_t color);
 int32_t wolf3d_fill_linear_vline(uint8_t *dest, int32_t height, int32_t pitch, int32_t color);
 int32_t wolf3d_fill_linear_rect(uint8_t *dest, int32_t width, int32_t height, int32_t pitch, int32_t color);
+int32_t wolf3d_draw_prop_string_scaled(const uint8_t *text, const uint8_t *font_base, const int16_t *font_locations, const uint8_t *font_width, uint8_t *dest, int32_t font_height, int32_t scale, int32_t dest_pitch, int32_t color);
 int32_t wolf3d_validate_fizzle_frames(uint32_t frames);
 int32_t wolf3d_fizzle_bits_for_dimensions(uint32_t width, uint32_t height);
 uint32_t wolf3d_fizzle_mask_for_dimensions(uint32_t width, uint32_t height);

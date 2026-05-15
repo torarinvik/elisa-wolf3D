@@ -14,37 +14,15 @@ int     fontnumber;
 void VWB_DrawPropString(const char* string)
 {
     fontstruct  *font;
-    int         width, step, height;
-    byte        *source, *dest;
-    byte        ch;
+    byte        *dest;
 
     byte *vbuf = LOCK();
 
     font = (fontstruct *) grsegs[STARTFONT+fontnumber];
-    height = font->height;
     dest = vbuf + scaleFactor * (py * curPitch + px);
-
-    while ((ch = (byte)*string++)!=0)
-    {
-        width = step = font->width[ch];
-        source = ((byte *)font)+font->location[ch];
-        while (width--)
-        {
-            for(int i=0;i<height;i++)
-            {
-                if(source[i*step])
-                {
-                    for(unsigned sy=0; sy<scaleFactor; sy++)
-                        for(unsigned sx=0; sx<scaleFactor; sx++)
-                            dest[(scaleFactor*i+sy)*curPitch+sx]=fontcolor;
-                }
-            }
-
-            source++;
-            px++;
-            dest+=scaleFactor;
-        }
-    }
+    px += wolf3d_draw_prop_string_scaled((const uint8_t *) string, (const uint8_t *) font,
+        font->location, (const uint8_t *) font->width, dest, font->height, scaleFactor,
+        curPitch, fontcolor);
 
     UNLOCK();
 }
