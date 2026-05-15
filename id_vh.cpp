@@ -301,6 +301,9 @@ boolean FizzleFade (SDL_Surface *source, int x1, int y1,
     int      first = 1;
 
     lastrndval = 0;
+    if (wolf3d_validate_fizzle_work_area(x1, y1, (int) width, (int) height, (int) source->w, (int) source->h, (int) screenWidth, (int) screenHeight) != 0)
+        Quit ("FizzleFade: rectangle out of bounds!");
+
     if (wolf3d_validate_fizzle_frames(frames) != 0)
         Quit ("FizzleFade: frames must be greater than zero!");
     pixperframe = width * height / frames;

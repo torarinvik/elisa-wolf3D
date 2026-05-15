@@ -196,6 +196,32 @@ def validate_mem_to_latch_bounds(dest_x: i32, dest_y: i32, width: i32, height: i
     can Video.Picture:
         return try checked_mem_to_latch_bounds(dest_x, dest_y, width, height, surface_width, surface_height) else -1
 
+def checked_fizzle_work_area(dest_x: i32, dest_y: i32, width: i32, height: i32, source_width: i32, source_height: i32, screen_width: i32, screen_height: i32) -> i32 error[VideoCoordinateError] can[Video.Picture]:
+    if width <= 0.i32() or height <= 0.i32():
+        raise VideoCoordinateError.OutOfBounds
+
+    if dest_x < 0.i32() or dest_y < 0.i32():
+        raise VideoCoordinateError.OutOfBounds
+
+    src_right: i64 = dest_x.i64() + width.i64()
+    src_bottom: i64 = dest_y.i64() + height.i64()
+    screen_right: i64 = dest_x.i64() + width.i64()
+    screen_bottom: i64 = dest_y.i64() + height.i64()
+
+    if src_right > source_width.i64() or src_bottom > source_height.i64():
+        raise VideoCoordinateError.OutOfBounds
+
+    if screen_right > screen_width.i64() or screen_bottom > screen_height.i64():
+        raise VideoCoordinateError.OutOfBounds
+
+    can Video.Picture:
+        signal Video.Picture
+    return 0
+
+def validate_fizzle_work_area(dest_x: i32, dest_y: i32, width: i32, height: i32, source_width: i32, source_height: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        return try checked_fizzle_work_area(dest_x, dest_y, width, height, source_width, source_height, screen_width, screen_height) else -1
+
 def validate_pixel_bounds(dest_x: i32, dest_y: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture]:
     can Video.Picture:
         return try checked_rect_bounds(dest_x, dest_y, 1.i32(), 1.i32(), screen_width, screen_height) else -1
@@ -249,6 +275,7 @@ export func wolf3d_validate_vline_bounds(dest_x: i32, dest_y: i32, height: i32, 
 export func wolf3d_validate_bar_bounds(dest_x: i32, dest_y: i32, width: i32, height: i32, screen_width: i32, screen_height: i32) -> i32 = validate_bar_bounds
 export func wolf3d_validate_mem_to_latch_bounds(dest_x: i32, dest_y: i32, width: i32, height: i32, surface_width: i32, surface_height: i32) -> i32 = validate_mem_to_latch_bounds
 export func wolf3d_validate_pixel_bounds(dest_x: i32, dest_y: i32, screen_width: i32, screen_height: i32) -> i32 = validate_pixel_bounds
+export func wolf3d_validate_fizzle_work_area(dest_x: i32, dest_y: i32, width: i32, height: i32, source_width: i32, source_height: i32, screen_width: i32, screen_height: i32) -> i32 = validate_fizzle_work_area
 export func wolf3d_fade_scale_6bit_color_component(component: i32) -> i32 = fade_scale_6bit_color_component
 export func wolf3d_fade_interpolated_channel(origin: i32, target: i32, frame: i32, steps: i32) -> i32 = fade_interpolated_channel
 
@@ -499,3 +526,22 @@ def validate_pixel_bounds_enforces_single_pixel_geometry() -> void can[Abort.Pan
 
             if validate_pixel_bounds(10, 480, 640, 480) != -1:
                 panic("y on or beyond height should fail validation")
+
+@test
+def validate_fizzle_work_area_rejects_oob_inputs() -> void can[Abort.Panic, Video.Picture]:
+    can Video.Picture:
+        can Abort.Panic:
+            if validate_fizzle_work_area(0, 0, 320, 200, 320, 200, 640, 480) != 0:
+                panic("valid rectangle inside both source and screen should pass")
+
+            if validate_fizzle_work_area(-1, 0, 1, 1, 320, 200, 640, 480) != -1:
+                panic("negative x should fail")
+
+            if validate_fizzle_work_area(0, 0, 0, 1, 320, 200, 640, 480) != -1:
+                panic("zero width should fail")
+
+            if validate_fizzle_work_area(319, 0, 2, 1, 320, 200, 640, 480) != -1:
+                panic("source overflow should fail")
+
+            if validate_fizzle_work_area(10, 10, 1, 1, 320, 200, 10, 10) != -1:
+                panic("screen overflow should fail")
