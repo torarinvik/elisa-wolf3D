@@ -1,0 +1,17 @@
+permission Video:
+    Geometry
+
+def log2_ceil_impl(value: u32) -> i32 can[Video.Geometry]:
+    can Video.Geometry:
+        signal Video.Geometry
+
+    n: mutable i32 = 0
+    v: mutable u32 = 1
+
+    while v < value:
+        n <- n + 1
+        v <- v << 1
+
+    return n
+
+export func wolf3d_log2_ceil(value: u32) -> i32 = log2_ceil_impl

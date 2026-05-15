@@ -29,6 +29,8 @@
 
 #include "wl_def.h"
 #include "mix_compat.h"
+#include "elisa_wolf3d_audio.h"
+#include "elisa_wolf3d_effects.h"
 #include "fmopl.h"
 
 #pragma hdrstop
@@ -486,6 +488,7 @@ SD_StopDigitized(void)
             break;
         case sds_SoundBlaster:
 //            SDL_SBStopSampleInIRQ();
+            wolf3d_effect_audio_playback();
             Mix_HaltChannel(-1);
             break;
     }
@@ -495,6 +498,7 @@ int SD_GetChannelForDigi(int which)
 {
     if(DigiChannel[which] != -1) return DigiChannel[which];
 
+    wolf3d_effect_audio_playback();
     int channel = Mix_GroupAvailable(1);
     if(channel == -1) channel = Mix_GroupOldest(1);
     if(channel == -1)           // All sounds stopped in the meantime?
@@ -504,35 +508,23 @@ int SD_GetChannelForDigi(int which)
 
 void SD_SetPosition(int channel, int leftpos, int rightpos)
 {
-    if((leftpos < 0) || (leftpos > 15) || (rightpos < 0) || (rightpos > 15)
-            || ((leftpos == 15) && (rightpos == 15)))
+    if(wolf3d_validate_playback_position(leftpos, rightpos) != 0)
         Quit("SD_SetPosition: Illegal position");
 
     switch (DigiMode)
     {
         case sds_SoundBlaster:
 //            SDL_PositionSBP(leftpos,rightpos);
-            Mix_SetPanning(channel, ((15 - leftpos) << 4) + 15,
-                ((15 - rightpos) << 4) + 15);
+            wolf3d_effect_audio_playback();
+            Mix_SetPanning(channel, wolf3d_playback_pan_for_position(leftpos),
+                wolf3d_playback_pan_for_position(rightpos));
             break;
     }
 }
 
 Sint16 GetSample(float csample, byte *samples, int size)
 {
-    float s0=0, s1=0, s2=0;
-    int cursample = (int) csample;
-    float sf = csample - (float) cursample;
-
-    if(cursample-1 >= 0) s0 = (float) (samples[cursample-1] - 128);
-    s1 = (float) (samples[cursample] - 128);
-    if(cursample+1 < size) s2 = (float) (samples[cursample+1] - 128);
-
-    float val = s0*sf*(sf-1)/2 - s1*(sf*sf-1) + s2*(sf+1)*sf/2;
-    int32_t intval = (int32_t) (val * 256);
-    if(intval < -32768) intval = -32768;
-    else if(intval > 32767) intval = 32767;
-    return (Sint16) intval;
+    return wolf3d_interpolate_u8_sample_to_s16(csample, samples, size);
 }
 
 void SD_PrepareSound(int which)
@@ -575,6 +567,7 @@ void SD_PrepareSound(int which)
     }
     SoundBuffers[which] = wavebuffer;
 
+    wolf3d_effect_audio_load();
     SoundChunks[which] = Mix_LoadWAV_RW(SDL_RWFromMem(wavebuffer,
         sizeof(headchunk) + sizeof(wavechunk) + destsamples * 2), 1);
 }
@@ -595,12 +588,15 @@ int SD_PlayDigitized(word which,int leftpos,int rightpos)
     Mix_Chunk *sample = SoundChunks[which];
     if(sample == NULL)
     {
+        wolf3d_effect_diagnostics_console();
         printf("SoundChunks[%i] is NULL!\n", which);
         return 0;
     }
 
+    wolf3d_effect_audio_playback();
     if(Mix_PlayChannel(channel, sample, 0) == -1)
     {
+        wolf3d_effect_diagnostics_console();
         printf("Unable to play sound: %s\n", Mix_GetError());
         return 0;
     }
@@ -931,7 +927,10 @@ SD_SetMusicMode(SMMode mode)
 
     SD_FadeOutMusic();
     while (SD_MusicPlaying())
+    {
+        wolf3d_effect_time_delay();
         SDL_Delay(5);
+    }
 
     switch (mode)
     {
@@ -1048,12 +1047,15 @@ SD_Startup(void)
     if (SD_Started)
         return;
 
+    wolf3d_effect_audio_device();
     if(Mix_OpenAudio(param_samplerate, AUDIO_S16, 2, param_audiobuffer))
     {
+        wolf3d_effect_diagnostics_console();
         printf("Unable to open audio: %s\n", Mix_GetError());
         return;
     }
 
+    wolf3d_effect_audio_device();
     Mix_ReserveChannels(2);  // reserve player and boss weapon channels
     Mix_GroupChannels(2, MIX_CHANNELS-1, 1); // group remaining channels
 
@@ -1063,6 +1065,7 @@ SD_Startup(void)
 
     if(YM3812Init(1,3579545,param_samplerate))
     {
+        wolf3d_effect_diagnostics_console();
         printf("Unable to create virtual OPL!!\n");
     }
 
@@ -1072,6 +1075,7 @@ SD_Startup(void)
     YM3812Write(0,1,0x20); // Set WSE=1
 //    YM3812Write(0,8,0); // Set CSM=0 & SEL=0       // already set in for statement
 
+    wolf3d_effect_audio_device();
     Mix_HookMusic(SDL_IMFMusicPlayer, 0);
     Mix_ChannelFinished(SD_ChannelFinished);
     AdLibPresent = true;
@@ -1104,7 +1108,11 @@ SD_Shutdown(void)
 
     for(int i = 0; i < STARTMUSIC - STARTDIGISOUNDS; i++)
     {
-        if(SoundChunks[i]) Mix_FreeChunk(SoundChunks[i]);
+        if(SoundChunks[i])
+        {
+            wolf3d_effect_audio_load();
+            Mix_FreeChunk(SoundChunks[i]);
+        }
         if(SoundBuffers[i]) free(SoundBuffers[i]);
     }
 
@@ -1276,7 +1284,10 @@ void
 SD_WaitSoundDone(void)
 {
     while (SD_SoundPlaying())
+    {
+        wolf3d_effect_time_delay();
         SDL_Delay(5);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////

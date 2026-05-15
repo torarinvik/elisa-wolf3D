@@ -3,6 +3,8 @@
 #include <string.h>
 #include "wl_def.h"
 #include "crt.h"
+#include "elisa_wolf3d_effects.h"
+#include "elisa_wolf3d_palette.h"
 #pragma hdrstop
 
 // Uncomment the following line, if you get destination out of bounds
@@ -104,30 +106,42 @@ void    VL_SetVGAPlaneMode (void)
     if(fullscreen)
         windowFlags |= SDL_WINDOW_FULLSCREEN;
 
+    wolf3d_effect_video_window();
     sdlWindow = SDL_CreateWindow(windowTitle, screenWidth, screenHeight, windowFlags);
     if(!sdlWindow)
     {
+        wolf3d_effect_diagnostics_console();
         printf("Unable to create %ix%i OpenGL window: %s\n", screenWidth, screenHeight, SDL_GetError());
+        wolf3d_effect_process_abort();
         exit(1);
     }
 
+    wolf3d_effect_video_window();
     sdlGLContext = SDL_GL_CreateContext(sdlWindow);
     if(!sdlGLContext)
     {
+        wolf3d_effect_diagnostics_console();
         printf("Unable to create OpenGL context: %s\n", SDL_GetError());
+        wolf3d_effect_process_abort();
         exit(1);
     }
+    wolf3d_effect_video_window();
     SDL_GL_MakeCurrent(sdlWindow, sdlGLContext);
     SDL_GL_SetSwapInterval(usedoublebuffering ? 1 : 0);
 
+    wolf3d_effect_input_grab();
     SDL_HideCursor();
 
+    wolf3d_effect_video_palette();
     sdlGamePalette = SDL_CreatePalette(256);
     if(!sdlGamePalette)
     {
+        wolf3d_effect_diagnostics_console();
         printf("Unable to create palette: %s\n", SDL_GetError());
+        wolf3d_effect_process_abort();
         exit(1);
     }
+    wolf3d_effect_video_palette();
     SDL_SetPaletteColors(sdlGamePalette, gamepal, 0, 256);
     memcpy(curpal, gamepal, sizeof(SDL_Color) * 256);
 
@@ -141,14 +155,18 @@ void    VL_SetVGAPlaneMode (void)
     screen = SDL_CreateIndexedSurface(screenWidth, screenHeight);
     if(!screen)
     {
+        wolf3d_effect_diagnostics_console();
         printf("Unable to create screen surface: %s\n", SDL_GetError());
+        wolf3d_effect_process_abort();
         exit(1);
     }
 
     screenBuffer = SDL_CreateIndexedSurface(screenWidth, screenHeight);
     if(!screenBuffer)
     {
+        wolf3d_effect_diagnostics_console();
         printf("Unable to create screen buffer surface: %s\n", SDL_GetError());
+        wolf3d_effect_process_abort();
         exit(1);
     }
 
@@ -172,18 +190,28 @@ void    VL_SetVGAPlaneMode (void)
 
 SDL_Surface *SDL_CreateIndexedSurface(int width, int height)
 {
+    wolf3d_effect_video_surface();
     SDL_Surface *surface = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_INDEX8);
     if(surface)
+    {
+        wolf3d_effect_video_palette();
         SDL_SetSurfacePalette(surface, sdlGamePalette);
+    }
     return surface;
 }
 
 void SDL_SetGamePalette(SDL_Surface *surface, const SDL_Color *colors, int firstcolor, int ncolors)
 {
     if(sdlGamePalette)
+    {
+        wolf3d_effect_video_palette();
         SDL_SetPaletteColors(sdlGamePalette, colors, firstcolor, ncolors);
+    }
     if(surface)
+    {
+        wolf3d_effect_video_palette();
         SDL_SetSurfacePalette(surface, sdlGamePalette);
+    }
 }
 
 void SDL_SetGamePaletteColor(SDL_Surface *surface, const SDL_Color *color, int firstcolor)
@@ -194,6 +222,7 @@ void SDL_SetGamePaletteColor(SDL_Surface *surface, const SDL_Color *color, int f
 int SDL_NumJoysticksCompat(void)
 {
     int count = 0;
+    wolf3d_effect_input_poll();
     SDL_JoystickID *ids = SDL_GetJoysticks(&count);
     SDL_free(ids);
     return count;
@@ -202,10 +231,14 @@ int SDL_NumJoysticksCompat(void)
 SDL_Joystick *SDL_OpenJoystickByIndex(int index)
 {
     int count = 0;
+    wolf3d_effect_input_poll();
     SDL_JoystickID *ids = SDL_GetJoysticks(&count);
     SDL_Joystick *joystick = NULL;
     if(ids && index >= 0 && index < count)
+    {
+        wolf3d_effect_input_grab();
         joystick = SDL_OpenJoystick(ids[index]);
+    }
     SDL_free(ids);
     return joystick;
 }
@@ -230,11 +263,25 @@ SDL_Joystick *SDL_OpenJoystickByIndex(int index)
 
 void VL_ConvertPalette(byte *srcpal, SDL_Color *destpal, int numColors)
 {
-    for(int i=0; i<numColors; i++)
+    if(numColors <= 0)
+        return;
+
+    byte rgb[256 * 3];
+
+    for(int baseColor=0; baseColor<numColors; baseColor += 256)
     {
-        destpal[i].r = *srcpal++ * 255 / 63;
-        destpal[i].g = *srcpal++ * 255 / 63;
-        destpal[i].b = *srcpal++ * 255 / 63;
+        int chunkColors = numColors - baseColor;
+        if(chunkColors > 256)
+            chunkColors = 256;
+
+        wolf3d_convert_palette_6bit_rgb_to_8bit_rgb(srcpal + baseColor * 3, rgb, chunkColors);
+
+        for(int i=0; i<chunkColors; i++)
+        {
+            destpal[baseColor + i].r = rgb[i * 3];
+            destpal[baseColor + i].g = rgb[i * 3 + 1];
+            destpal[baseColor + i].b = rgb[i * 3 + 2];
+        }
     }
 }
 
@@ -276,7 +323,9 @@ void VL_SetColor    (int color, int red, int green, int blue)
     SDL_Color col = { (Uint8)red, (Uint8)green, (Uint8)blue, 255 };
     curpal[color] = col;
 
+    wolf3d_effect_video_palette();
     SDL_SetGamePaletteColor(curSurface, &col, color);
+    wolf3d_effect_video_render();
     SDL_BlitSurface(screenBuffer, NULL, screen, NULL);
     SDL_Flip(screen);
 }
@@ -313,9 +362,11 @@ void VL_SetPalette (SDL_Color *palette, bool forceupdate)
 {
     memcpy(curpal, palette, sizeof(SDL_Color) * 256);
 
+    wolf3d_effect_video_palette();
     SDL_SetGamePalette(curSurface, palette, 0, 256);
     if(forceupdate)
     {
+        wolf3d_effect_video_render();
         SDL_BlitSurface(screenBuffer, NULL, screen, NULL);
         SDL_Flip(screen);
     }

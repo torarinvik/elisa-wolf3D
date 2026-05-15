@@ -18,6 +18,7 @@
 //
 
 #include "wl_def.h"
+#include "elisa_wolf3d_effects.h"
 
 
 /*
@@ -126,6 +127,7 @@ static  Direction   DirTable[] =        // Quick lookup for total direction
 static int
 INL_GetMouseButtons(void)
 {
+    wolf3d_effect_input_poll();
     int buttons = (int)SDL_GetMouseState(NULL, NULL);
     int middlePressed = buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE);
     int rightPressed = buttons & SDL_BUTTON(SDL_BUTTON_RIGHT);
@@ -150,6 +152,7 @@ void IN_GetJoyDelta(int *dx,int *dy)
         return;
     }
 
+    wolf3d_effect_input_poll();
     SDL_JoystickUpdate();
 
     int x = SDL_JoystickGetAxis(Joystick, 0) >> 8;
@@ -193,6 +196,7 @@ void IN_GetJoyFineDelta(int *dx, int *dy)
         return;
     }
 
+    wolf3d_effect_input_poll();
     SDL_JoystickUpdate();
     int x = SDL_JoystickGetAxis(Joystick, 0);
     int y = SDL_JoystickGetAxis(Joystick, 1);
@@ -219,6 +223,7 @@ int IN_JoyButtons()
 {
     if(!Joystick) return 0;
 
+    wolf3d_effect_input_poll();
     SDL_JoystickUpdate();
 
     int res = 0;
@@ -266,12 +271,14 @@ static void processEvent(SDL_Event *event)
             if(scan == SDL_SCANCODE_SCROLLLOCK || scan == SDL_SCANCODE_F12)
             {
                 GrabInput = !GrabInput;
+                wolf3d_effect_input_grab();
                 SDL_SetWindowKeyboardGrab(sdlWindow, GrabInput);
                 SDL_SetWindowMouseGrab(sdlWindow, GrabInput);
                 return;
             }
 
             LastScan = scan;
+            wolf3d_effect_input_poll();
             SDL_Keymod mod = SDL_GetModState();
             if(Keyboard[sc_Alt])
             {
@@ -310,19 +317,20 @@ static void processEvent(SDL_Event *event)
 void IN_WaitAndProcessEvents()
 {
     SDL_Event event;
+    wolf3d_effect_input_poll();
     if(!SDL_WaitEvent(&event)) return;
     do
     {
         processEvent(&event);
     }
-    while(SDL_PollEvent(&event));
+    while((wolf3d_effect_input_poll(), SDL_PollEvent(&event)));
 }
 
 void IN_ProcessEvents()
 {
     SDL_Event event;
 
-    while (SDL_PollEvent(&event))
+    while ((wolf3d_effect_input_poll(), SDL_PollEvent(&event)))
     {
         processEvent(&event);
     }
@@ -347,6 +355,7 @@ IN_Startup(void)
         Joystick = SDL_OpenJoystickByIndex(param_joystickindex);
         if(Joystick)
         {
+            wolf3d_effect_input_poll();
             JoyNumButtons = SDL_JoystickNumButtons(Joystick);
             if(JoyNumButtons > 32) JoyNumButtons = 32;      // only up to 32 buttons are supported
             JoyNumHats = SDL_JoystickNumHats(Joystick);
@@ -358,6 +367,7 @@ IN_Startup(void)
     if(fullscreen || forcegrabmouse)
     {
         GrabInput = true;
+        wolf3d_effect_input_grab();
         SDL_SetWindowKeyboardGrab(sdlWindow, true);
         SDL_SetWindowMouseGrab(sdlWindow, true);
     }
@@ -559,6 +569,7 @@ boolean IN_UserInput(longword delay)
         IN_ProcessEvents();
         if (IN_CheckAck())
             return true;
+        wolf3d_effect_time_delay();
         SDL_Delay(5);
     } while (GetTimeCount() - lasttime < delay);
     return(false);
@@ -588,5 +599,6 @@ bool IN_IsInputGrabbed()
 
 void IN_CenterMouse()
 {
+    wolf3d_effect_input_grab();
     SDL_WarpMouseInWindow(sdlWindow, screenWidth / 2, screenHeight / 2);
 }

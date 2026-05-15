@@ -1,0 +1,15 @@
+permission Video:
+    Palette
+
+def convert_palette_6bit_rgb_to_8bit_rgb(src: u8&, dst: mutable u8&, count: i32) -> i32 can[Video.Palette]:
+    can Video.Palette:
+        signal Video.Palette
+
+    for i in 0..<count.usize():
+        base: usize = i * 3
+        dst[base] <- (src[base].i32() * 255 / 63).u8()
+        dst[base + 1] <- (src[base + 1].i32() * 255 / 63).u8()
+        dst[base + 2] <- (src[base + 2].i32() * 255 / 63).u8()
+    return count
+
+export func wolf3d_convert_palette_6bit_rgb_to_8bit_rgb(src: u8&, dst: mutable u8&, count: i32) -> i32 = convert_palette_6bit_rgb_to_8bit_rgb

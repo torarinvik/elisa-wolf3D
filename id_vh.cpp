@@ -1,4 +1,5 @@
 #include "wl_def.h"
+#include "elisa_wolf3d_video.h"
 
 
 pictabletype    *pictable;
@@ -313,14 +314,7 @@ extern SDL_Color curpal[256];
 // Returns the number of bits needed to represent the given value
 static int log2_ceil(uint32_t x)
 {
-    int n = 0;
-    uint32_t v = 1;
-    while(v < x)
-    {
-        n++;
-        v <<= 1;
-    }
-    return n;
+    return wolf3d_log2_ceil(x);
 }
 
 void VH_Startup()

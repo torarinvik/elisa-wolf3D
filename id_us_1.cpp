@@ -21,6 +21,7 @@
 //
 
 #include "wl_def.h"
+#include "elisa_wolf3d_ui.h"
 
 #pragma hdrstop
 
@@ -445,20 +446,7 @@ USL_XORICursor(int x,int y,const char *s,word cursor)
 
 char USL_RotateChar(char ch, int dir)
 {
-    static const char charSet[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ.,-!?0123456789";
-    const int numChars = sizeof(charSet) / sizeof(char) - 1;
-    int i;
-    for(i = 0; i < numChars; i++)
-    {
-        if(ch == charSet[i]) break;
-    }
-
-    if(i == numChars) i = 0;
-
-    i += dir;
-    if(i < 0) i = numChars - 1;
-    else if(i >= numChars) i = 0;
-    return charSet[i];
+    return (char)wolf3d_rotate_char((uint8_t)ch, dir);
 }
 
 ///////////////////////////////////////////////////////////////////////////

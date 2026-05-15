@@ -1,0 +1,30 @@
+permission UI:
+    TextInput
+
+def rotate_char_impl(ch: u8, dir: i32) -> u8 can[UI.TextInput]:
+    can UI.TextInput:
+        signal UI.TextInput
+
+    chars: u8& = " ABCDEFGHIJKLMNOPQRSTUVWXYZ.,-!?0123456789"
+    num_chars: i32 = 42
+    index: mutable i32 = 0
+    found: mutable bool = false
+
+    while index < num_chars and not found:
+        if ch == chars[index.usize()]:
+            found <- true
+        else:
+            index <- index + 1
+
+    if not found:
+        index <- 0
+
+    index <- index + dir
+    if index < 0:
+        index <- num_chars - 1
+    elif index >= num_chars:
+        index <- 0
+
+    return chars[index.usize()]
+
+export func wolf3d_rotate_char(ch: u8, dir: i32) -> u8 = rotate_char_impl

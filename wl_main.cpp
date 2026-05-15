@@ -7,6 +7,7 @@
 #endif
 
 #include "wl_def.h"
+#include "elisa_wolf3d_save.h"
 #pragma hdrstop
 
 
@@ -323,12 +324,7 @@ void DiskFlopAnim(int x,int y)
 
 int32_t DoChecksum(byte *source,unsigned size,int32_t checksum)
 {
-    unsigned i;
-
-    for (i=0;i<size-1;i++)
-    checksum += source[i]^source[i+1];
-
-    return checksum;
+    return wolf3d_checksum(source, size, checksum);
 }
 
 
