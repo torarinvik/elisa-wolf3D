@@ -96,6 +96,39 @@ int     param_mission = 0;
 boolean param_goodtimes = false;
 boolean param_ignorenumchunks = false;
 
+enum wolf3d_hosted_shutdown_reason_e
+{
+    wolf3d_hosted_shutdown_none = 0,
+    wolf3d_hosted_shutdown_ted_launch_complete = 1
+};
+
+static int wolf3d_hosted_shutdown_reason = wolf3d_hosted_shutdown_none;
+static int wolf3d_hosted_shutdown_immediate = 0;
+static int wolf3d_hosted_shutdown_requested = 0;
+
+static void wolf3d_hosted_reset_shutdown_request()
+{
+    wolf3d_hosted_shutdown_reason = wolf3d_hosted_shutdown_none;
+    wolf3d_hosted_shutdown_immediate = 0;
+    wolf3d_hosted_shutdown_requested = 0;
+}
+
+static void wolf3d_hosted_signal_shutdown(int reason, int immediate)
+{
+    wolf3d_hosted_shutdown_reason = reason;
+    wolf3d_hosted_shutdown_immediate = immediate;
+    wolf3d_hosted_shutdown_requested = 1;
+}
+
+static int wolf3d_hosted_next_demo_index(int lastDemo)
+{
+#ifdef SPEARDEMO
+    return lastDemo;
+#else
+    return lastDemo + 1;
+#endif
+}
+
 /*
 =============================================================================
 
@@ -1319,8 +1352,16 @@ extern "C" int wolf3d_legacy_prepare_startup_assets(void)
     return 0;
 }
 
+extern "C" int wolf3d_legacy_prepare_hosted_session_state(void)
+{
+    EnableEndGameMenuItem();
+    param_nowait = true;
+    return 0;
+}
+
 static void InitGame()
 {
+    wolf3d_hosted_reset_shutdown_request();
     if (wolf3d_legacy_init_platform_and_signon() != 0)
         exit(1);
     if (wolf3d_legacy_startup_subsystems() != 0)
@@ -1521,8 +1562,7 @@ extern "C" int wolf3d_legacy_run_ted_launch_if_requested(void)
     if (param_tedlevel == -1)
         return 0;
 
-    param_nowait = true;
-    EnableEndGameMenuItem();
+    wolf3d_legacy_prepare_hosted_session_state();
     NewGame(param_difficulty,0);
 
 #ifndef SPEAR
@@ -1533,16 +1573,17 @@ extern "C" int wolf3d_legacy_run_ted_launch_if_requested(void)
     gamestate.mapon = param_tedlevel;
 #endif
     GameLoop();
+#ifdef ELISA_HOSTED
+    wolf3d_hosted_signal_shutdown(wolf3d_hosted_shutdown_ted_launch_complete, 1);
+    return 1;
+#else
     Quit (NULL);
+#endif
     return 0;
 }
 
-extern "C" int wolf3d_legacy_prepare_demo_loop(void)
+extern "C" int wolf3d_legacy_run_demo_attract_prechecks(void)
 {
-//
-// main game cycle
-//
-
 #ifndef DEMOTEST
 
     #ifndef UPLOAD
@@ -1574,6 +1615,14 @@ extern "C" int wolf3d_legacy_prepare_demo_loop(void)
 
 #endif
     return 0;
+}
+
+extern "C" int wolf3d_legacy_prepare_demo_loop(void)
+{
+//
+// main game cycle
+//
+    return wolf3d_legacy_run_demo_attract_prechecks();
 }
 
 extern "C" int wolf3d_legacy_should_run_attract_loop(void)
@@ -1637,10 +1686,10 @@ extern "C" int wolf3d_legacy_run_attract_cycle(int lastDemo)
 
 #ifndef SPEARDEMO
     PlayDemo (lastDemo%4);
-    lastDemo++;
 #else
     PlayDemo (0);
 #endif
+    lastDemo = wolf3d_hosted_next_demo_index(lastDemo);
 
     if (playstate == ex_abort)
         return -1;
@@ -1651,8 +1700,24 @@ extern "C" int wolf3d_legacy_run_attract_cycle(int lastDemo)
     return lastDemo;
 }
 
+extern "C" int wolf3d_legacy_run_control_panel_cycle_with_result(int *result);
+
+extern "C" int wolf3d_legacy_advance_demo_index(int lastDemo)
+{
+    return wolf3d_hosted_next_demo_index(lastDemo);
+}
+
 extern "C" int wolf3d_legacy_run_control_panel_cycle(void)
 {
+    return wolf3d_legacy_run_control_panel_cycle_with_result(NULL);
+}
+
+extern "C" int wolf3d_legacy_run_control_panel_cycle_with_result(int *result)
+{
+    int priorStartgame = startgame;
+    int priorLoadedgame = loadedgame;
+    int panelResult = 0;
+
     VW_FadeOut ();
 
 #ifdef DEBUGKEYS
@@ -1663,13 +1728,26 @@ extern "C" int wolf3d_legacy_run_control_panel_cycle(void)
 #else
     US_ControlPanel (0);
 #endif
+
+    if (!priorStartgame && !priorLoadedgame)
+    {
+        if (!startgame && loadedgame)
+            panelResult = 2;
+        else if (startgame)
+            panelResult = 1;
+    }
+
+    if (result != NULL)
+        *result = panelResult;
+
     return 0;
 }
 
-extern "C" int wolf3d_legacy_run_pending_game_cycle(void)
+extern "C" int wolf3d_legacy_run_active_game_cycle(void)
 {
     if (startgame || loadedgame)
     {
+        wolf3d_legacy_prepare_hosted_session_state();
         GameLoop ();
         if(!param_nowait)
         {
@@ -1680,11 +1758,33 @@ extern "C" int wolf3d_legacy_run_pending_game_cycle(void)
     return 0;
 }
 
+extern "C" int wolf3d_legacy_run_pending_game_cycle(void)
+{
+    return wolf3d_legacy_run_active_game_cycle();
+}
+
+extern "C" int wolf3d_legacy_request_hosted_shutdown(int *out_reason, int *out_immediate_shutdown)
+{
+    if (out_reason != NULL)
+        *out_reason = wolf3d_hosted_shutdown_reason;
+    if (out_immediate_shutdown != NULL)
+        *out_immediate_shutdown = wolf3d_hosted_shutdown_immediate;
+    return wolf3d_hosted_shutdown_requested;
+}
+
+extern "C" int wolf3d_legacy_request_hosted_shutdown_reset(void)
+{
+    wolf3d_hosted_reset_shutdown_request();
+    return 0;
+}
+
 static void DemoLoop()
 {
     int LastDemo = 0;
+    int controlPanelResult = 0;
 
-    wolf3d_legacy_run_ted_launch_if_requested();
+    if (wolf3d_legacy_run_ted_launch_if_requested() != 0)
+        return;
     wolf3d_legacy_prepare_demo_loop();
 
     while (1)
@@ -1697,8 +1797,13 @@ static void DemoLoop()
             LastDemo = nextDemo;
         }
 
-        wolf3d_legacy_run_control_panel_cycle();
-        wolf3d_legacy_run_pending_game_cycle();
+        controlPanelResult = 0;
+        wolf3d_legacy_run_control_panel_cycle_with_result(&controlPanelResult);
+        if (!controlPanelResult)
+            wolf3d_legacy_run_active_game_cycle();
+
+        if (wolf3d_legacy_request_hosted_shutdown(NULL, NULL))
+            return;
     }
 }
 

@@ -75,13 +75,13 @@ SRCS += crt.cpp
 
 DEPS = $(addprefix $(BUILD_DIR)/,$(filter %.d, $(SRCS:.c=.d) $(SRCS:.cpp=.d)))
 OBJS = $(addprefix $(BUILD_DIR)/,$(filter %.o, $(SRCS:.c=.o) $(SRCS:.cpp=.o)))
-ELISA_SRCS := elisa_wolf3d_effects.elisa elisa_wolf3d_audio.elisa elisa_wolf3d_save.elisa elisa_wolf3d_ui.elisa elisa_wolf3d_video.elisa elisa_wolf3d_sdl.elisa elisa_wolf3d_pagefile.elisa elisa_wolf3d_input.elisa
+ELISA_SRCS := elisa_wolf3d_effects.elisa elisa_wolf3d_audio.elisa elisa_wolf3d_save.elisa elisa_wolf3d_ui.elisa elisa_wolf3d_video.elisa elisa_wolf3d_sdl.elisa elisa_wolf3d_pagefile.elisa elisa_wolf3d_input.elisa elisa_wolf3d_main.elisa
 ELISA_OBJS := $(addprefix $(BUILD_DIR)/,$(ELISA_SRCS:.elisa=.o))
 OBJS += $(ELISA_OBJS)
-ELISA_HOSTED_MAIN := $(BUILD_DIR)/elisa_wolf3d_main.o
+ELISA_HOSTED_MAIN := $(BUILD_DIR)/elisa_wolf3d_main_entry.o
 ELISA_HOSTED_WL_MAIN := $(BUILD_DIR)/hosted/wl_main.o
 ELISA_HOSTED_OBJS := $(filter-out $(BUILD_DIR)/wl_main.o,$(OBJS)) $(ELISA_HOSTED_WL_MAIN) $(ELISA_HOSTED_MAIN)
-ELISA_TEST_SRCS := elisa_wolf3d_audio.elisa elisa_wolf3d_pagefile.elisa elisa_wolf3d_input.elisa elisa_wolf3d_video.elisa elisa_wolf3d_startup.elisa
+ELISA_TEST_SRCS := elisa_wolf3d_audio.elisa elisa_wolf3d_pagefile.elisa elisa_wolf3d_input.elisa elisa_wolf3d_video.elisa elisa_wolf3d_startup.elisa elisa_wolf3d_main.elisa
 LEGACY_OBJS := $(filter %.o, $(SRCS:.c=.o) $(SRCS:.cpp=.o)) $(ELISA_SRCS:.elisa=.o)
 LEGACY_DEPS := $(filter %.d, $(SRCS:.c=.d) $(SRCS:.cpp=.d))
 
