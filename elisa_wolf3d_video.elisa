@@ -46,6 +46,13 @@ error VideoFadeError:
     ZeroFrames
     ZeroSteps
 
+error VideoColorError:
+    PaletteIndexOutOfRange
+
+error VideoCoordinateError:
+    OutOfBounds
+    NonPositiveScale
+
 def checked_munge_pic_width(width: u32) -> i32 error[VideoPictureError] can[Video.Picture]:
     if width & 3 != 0.u32():
         raise VideoPictureError.WidthNotDivisibleBy4
@@ -99,6 +106,47 @@ def validate_fade_steps(steps: i32) -> i32 can[Video.Palette]:
     can Video.Palette:
         return try checked_fade_steps(steps) else -1
 
+def checked_palette_index(color: i32) -> i32 error[VideoColorError] can[Video.Palette]:
+    if color < 0.i32() or color >= 256.i32():
+        raise VideoColorError.PaletteIndexOutOfRange
+
+    can Video.Palette:
+        signal Video.Palette
+    return 0
+
+def validate_palette_index(color: i32) -> i32 can[Video.Palette]:
+    can Video.Palette:
+        return try checked_palette_index(color) else -1
+
+def checked_scaled_draw_bounds(dest_x: i32, dest_y: i32, width: i32, height: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 error[VideoCoordinateError] can[Video.Picture]:
+    if scale <= 0.i32():
+        raise VideoCoordinateError.NonPositiveScale
+
+    if width < 0.i32() or height < 0.i32():
+        raise VideoCoordinateError.OutOfBounds
+
+    if dest_x < 0.i32() or dest_y < 0.i32():
+        raise VideoCoordinateError.OutOfBounds
+
+    scaled_width: i64 = width.i64() * scale.i64()
+    scaled_height: i64 = height.i64() * scale.i64()
+
+    if scaled_width < 0.i64() or scaled_height < 0.i64():
+        raise VideoCoordinateError.OutOfBounds
+
+    right: i64 = dest_x.i64() + scaled_width
+    bottom: i64 = dest_y.i64() + scaled_height
+    if right > screen_width.i64() or bottom > screen_height.i64():
+        raise VideoCoordinateError.OutOfBounds
+
+    can Video.Picture:
+        signal Video.Picture
+    return 0
+
+def validate_scaled_draw_bounds(dest_x: i32, dest_y: i32, width: i32, height: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        return try checked_scaled_draw_bounds(dest_x, dest_y, width, height, scale, screen_width, screen_height) else -1
+
 def fade_scale_6bit_color_component(component: i32) -> i32 can[Video.Palette]:
     can Video.Palette:
         signal Video.Palette
@@ -141,6 +189,8 @@ export func wolf3d_validate_fizzle_frames(frames: u32) -> i32 = validate_fizzle_
 export func wolf3d_fizzle_bits_for_dimensions(width: u32, height: u32) -> i32 = fizzle_bits_for_dimensions
 export func wolf3d_fizzle_mask_for_dimensions(width: u32, height: u32) -> u32 = fizzle_mask_for_dimensions
 export func wolf3d_validate_fade_steps(steps: i32) -> i32 = validate_fade_steps
+export func wolf3d_validate_palette_index(color: i32) -> i32 = validate_palette_index
+export func wolf3d_validate_scaled_draw_bounds(dest_x: i32, dest_y: i32, width: i32, height: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 = validate_scaled_draw_bounds
 export func wolf3d_fade_scale_6bit_color_component(component: i32) -> i32 = fade_scale_6bit_color_component
 export func wolf3d_fade_interpolated_channel(origin: i32, target: i32, frame: i32, steps: i32) -> i32 = fade_interpolated_channel
 
@@ -279,3 +329,41 @@ def fade_interpolated_channel_matches_linear_math() -> void can[Abort.Panic, Vid
 
             if fade_interpolated_channel(10, 20, 2, 2) != 20:
                 panic("final step should reach target")
+
+@test
+def validate_palette_index_rejects_bad_indices() -> void can[Abort.Panic, Video.Palette]:
+    can Video.Palette:
+        can Abort.Panic:
+            if validate_palette_index(0) != 0:
+                panic("palette index zero should pass validation")
+
+            if validate_palette_index(255) != 0:
+                panic("palette index 255 should pass validation")
+
+            if validate_palette_index(-1) != -1:
+                panic("negative palette indices should fail validation")
+
+            if validate_palette_index(256) != -1:
+                panic("palette index above 255 should fail validation")
+
+@test
+def validate_scaled_draw_bounds_rejects_invalid_geometry() -> void can[Abort.Panic, Video.Picture]:
+    can Video.Picture:
+        can Abort.Panic:
+            if validate_scaled_draw_bounds(0, 0, 10, 10, 2, 640, 480) != 0:
+                panic("in-bounds scaled geometry should pass validation")
+
+            if validate_scaled_draw_bounds(630, 0, 10, 1, 1, 640, 480) != 0:
+                panic("rect at right edge should pass validation")
+
+            if validate_scaled_draw_bounds(0, 0, 320, 1, 2, 640, 480) != 0:
+                panic("scaled geometry should be validated with scale factor")
+
+            if validate_scaled_draw_bounds(-1, 0, 10, 10, 2, 640, 480) != -1:
+                panic("negative destination x should fail validation")
+
+            if validate_scaled_draw_bounds(0, 0, 10, 10, 0, 640, 480) != -1:
+                panic("non-positive scale should fail validation")
+
+            if validate_scaled_draw_bounds(640, 0, 1, 1, 1, 640, 480) != -1:
+                panic("rect overflowing right edge should fail validation")

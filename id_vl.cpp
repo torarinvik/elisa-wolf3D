@@ -321,6 +321,9 @@ void VL_FillPalette (int red, int green, int blue)
 
 void VL_SetColor    (int color, int red, int green, int blue)
 {
+    if (wolf3d_validate_palette_index(color) != 0)
+        Quit ("VL_SetColor: color must be in the range [0, 255]!");
+
     SDL_Color col = { (Uint8)red, (Uint8)green, (Uint8)blue, 255 };
     curpal[color] = col;
 
@@ -343,6 +346,9 @@ void VL_SetColor    (int color, int red, int green, int blue)
 
 void VL_GetColor    (int color, int *red, int *green, int *blue)
 {
+    if (wolf3d_validate_palette_index(color) != 0)
+        Quit ("VL_GetColor: color must be in the range [0, 255]!");
+
     SDL_Color *col = &curpal[color];
     *red = col->r;
     *green = col->g;
@@ -682,9 +688,8 @@ void VL_MemToLatch(byte *source, int width, int height,
 
 void VL_MemToScreenScaledCoord (byte *source, int width, int height, int destx, int desty)
 {
-    assert(destx >= 0 && destx + width * scaleFactor <= screenWidth
-            && desty >= 0 && desty + height * scaleFactor <= screenHeight
-            && "VL_MemToScreenScaledCoord: Destination rectangle out of bounds!");
+    if (wolf3d_validate_scaled_draw_bounds(destx, desty, width, height, scaleFactor, screenWidth, screenHeight) != 0)
+        Quit ("VL_MemToScreenScaledCoord: Destination rectangle out of bounds!");
 
     VL_LockSurface(curSurface);
     byte *vbuf = (byte *) curSurface->pixels;
@@ -721,9 +726,8 @@ void VL_MemToScreenScaledCoord (byte *source, int width, int height, int destx, 
 void VL_MemToScreenScaledCoord (byte *source, int origwidth, int origheight, int srcx, int srcy,
                                 int destx, int desty, int width, int height)
 {
-    assert(destx >= 0 && destx + width * scaleFactor <= screenWidth
-            && desty >= 0 && desty + height * scaleFactor <= screenHeight
-            && "VL_MemToScreenScaledCoord: Destination rectangle out of bounds!");
+    if (wolf3d_validate_scaled_draw_bounds(destx, desty, width, height, scaleFactor, screenWidth, screenHeight) != 0)
+        Quit ("VL_MemToScreenScaledCoord: Destination rectangle out of bounds!");
 
     VL_LockSurface(curSurface);
     byte *vbuf = (byte *) curSurface->pixels;
@@ -757,9 +761,8 @@ void VL_MemToScreenScaledCoord (byte *source, int origwidth, int origheight, int
 void VL_LatchToScreenScaledCoord(SDL_Surface *source, int xsrc, int ysrc,
     int width, int height, int scxdest, int scydest)
 {
-    assert(scxdest >= 0 && scxdest + width * scaleFactor <= screenWidth
-            && scydest >= 0 && scydest + height * scaleFactor <= screenHeight
-            && "VL_LatchToScreenScaledCoord: Destination rectangle out of bounds!");
+    if (wolf3d_validate_scaled_draw_bounds(scxdest, scydest, width, height, scaleFactor, screenWidth, screenHeight) != 0)
+        Quit ("VL_LatchToScreenScaledCoord: Destination rectangle out of bounds!");
 
     if(scaleFactor == 1)
     {
