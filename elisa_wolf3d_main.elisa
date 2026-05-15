@@ -13,6 +13,7 @@ extern wolf3d_legacy_check_parameters_default() -> i32 effects[Game.Run, Unsafe.
 extern wolf3d_legacy_prepare_config_dir() -> i32 effects[Game.Run, FileSystem.Write, Unsafe.RawExtern]
 extern wolf3d_legacy_file_exists(path: u8&) -> i32 effects[FileSystem.Read, Unsafe.RawExtern]
 extern wolf3d_legacy_apply_wolf3d_data_extension(extension: u8&, missing_episodes: i32) -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_check_parameters_default_status() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_no_wolf3d_data_files() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_init_platform_and_signon() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_startup_subsystems() -> i32 effects[Game.Run, Unsafe.RawExtern]
@@ -148,7 +149,7 @@ def run_game() -> i32 can[Game.Run, Game.Menu, Game.Session, FileSystem.Read, Fi
         signal Game.Run
 
     can Game.Run, Unsafe.RawExtern:
-        if wolf3d_legacy_check_parameters_default() != 0:
+        if wolf3d_legacy_check_parameters_default_status() != 0:
             return 1
 
     can Game.Run, FileSystem.Read, FileSystem.Write, Unsafe.RawExtern:

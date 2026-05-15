@@ -1812,7 +1812,7 @@ static void DemoLoop()
 
 #define IFARG(str) if(!strcmp(arg, (str)))
 
-void CheckParameters(int argc, char *argv[])
+static int ParseParameters(int argc, char *argv[], bool should_exit_on_error)
 {
     bool hasError = false, showHelp = false;
     bool sampleRateGiven = false, audioBufferGiven = false;
@@ -2069,8 +2069,15 @@ void CheckParameters(int argc, char *argv[])
         exit(1);
     }
 
-    if(sampleRateGiven && !audioBufferGiven)
+        if(sampleRateGiven && !audioBufferGiven)
         param_audiobuffer = 2048 / (44100 / param_samplerate);
+
+    return hasError ? 1 : 0;
+}
+
+void CheckParameters(int argc, char *argv[])
+{
+    ParseParameters(argc, argv, true);
 }
 
 /*
@@ -2083,8 +2090,8 @@ void CheckParameters(int argc, char *argv[])
 
 extern "C" int wolf3d_legacy_run(int argc, char *argv[])
 {
-
-    CheckParameters(argc, argv);
+    if (ParseParameters(argc, argv, true) != 0)
+        return 1;
 
     CheckForEpisodes();
 
@@ -2098,8 +2105,12 @@ extern "C" int wolf3d_legacy_run(int argc, char *argv[])
 
 extern "C" int wolf3d_legacy_check_parameters(int argc, char *argv[])
 {
-    CheckParameters(argc, argv);
-    return 0;
+    return ParseParameters(argc, argv, false);
+}
+
+extern "C" int wolf3d_legacy_check_parameters_status(int argc, char *argv[])
+{
+    return ParseParameters(argc, argv, false);
 }
 
 extern "C" int wolf3d_legacy_check_parameters_default(void)
@@ -2107,6 +2118,13 @@ extern "C" int wolf3d_legacy_check_parameters_default(void)
     char arg0[] = "Chocolate-Wolfenstein-3D";
     char *argv[] = { arg0, NULL };
     return wolf3d_legacy_check_parameters(1, argv);
+}
+
+extern "C" int wolf3d_legacy_check_parameters_default_status(void)
+{
+    char arg0[] = "Chocolate-Wolfenstein-3D";
+    char *argv[] = { arg0, NULL };
+    return wolf3d_legacy_check_parameters_status(1, argv);
 }
 
 extern "C" int wolf3d_legacy_check_for_episodes(void)

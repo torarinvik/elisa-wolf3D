@@ -392,6 +392,30 @@ def measure_prop_string(text: u8&, width: mutable u16&, height: mutable u16&, fo
 
     return 0
 
+def checked_measure_prop_string_safe(text: u8&?, width: mutable u16&?, height: mutable u16&?, font_height: i32, font_width: u8&?) -> i32 error[VideoTextMeasureError] can[Video.Text]:
+    if text == null:
+        raise VideoTextMeasureError.NullPointer
+    if width == null:
+        raise VideoTextMeasureError.NullPointer
+    if height == null:
+        raise VideoTextMeasureError.NullPointer
+
+    if font_width == null:
+        raise VideoTextMeasureError.NullPointer
+    if font_height < 0:
+        raise VideoTextMeasureError.InvalidFontHeight
+
+    can Video.Text:
+        signal Video.Text
+        width[0] <- measure_prop_string_width(text, font_width).u16()
+        height[0] <- font_height.u16()
+
+    return 0
+
+def measure_prop_string_safe(text: u8&?, width: mutable u16&?, height: mutable u16&?, font_height: i32, font_width: u8&?) -> i32 can[Video.Text]:
+    can Video.Text:
+        return try checked_measure_prop_string_safe(text, width, height, font_height, font_width) else -1
+
 def checked_inclusive_span_length(start: i32, end: i32) -> i32 error[VideoCoordinateError] can[Video.Geometry]:
     if end < start.i32():
         raise VideoCoordinateError.OutOfBounds
@@ -738,6 +762,7 @@ export func wolf3d_fade_scale_6bit_color_component(component: i32) -> i32 = fade
 export func wolf3d_fade_interpolated_channel(origin: i32, target: i32, frame: i32, steps: i32) -> i32 = fade_interpolated_channel
 export func wolf3d_measure_prop_string_width(text: u8&, font_width: u8&) -> i32 = measure_prop_string_width
 export func wolf3d_measure_prop_string(text: u8&, width: mutable u16&, height: mutable u16&, font_height: i32, font_width: u8&) -> i32 = measure_prop_string
+export func wolf3d_measure_prop_string_safe(text: u8&?, width: mutable u16&?, height: mutable u16&?, font_height: i32, font_width: u8&?) -> i32 = measure_prop_string_safe
 export func wolf3d_inclusive_span_length(start: i32, end: i32) -> i32 = inclusive_span_length
 export func wolf3d_convert_palette_6bit_rgb_to_sdl_colors(src: u8&, dst: mutable u8&, count: i32) -> i32 = convert_palette_6bit_rgb_to_sdl_colors
 export func wolf3d_fill_sdl_palette_rgb(dst: mutable u8&, red: i32, green: i32, blue: i32, count: i32) -> i32 = fill_sdl_palette_rgb
@@ -1410,6 +1435,28 @@ def measure_prop_string_writes_width_and_height() -> void can[Abort.Panic, Video
             panic("negative font height should fail")
 
 @test
+def measure_prop_string_safe_reports_input_failures() -> void can[Abort.Panic, Video.Text]:
+    can Video.Text, Abort.Panic:
+        font_width: mutable u8[256] = zeroed
+        text: mutable u8[3] = zeroed
+        width: mutable u16[1] = zeroed
+        height: mutable u16[1] = zeroed
+
+        font_width[65] <- 4.u8()
+        font_width[66] <- 6.u8()
+        text[0] <- 65.u8()
+        text[1] <- 66.u8()
+
+        if measure_prop_string_safe(text[0].ref[u8&], width[0].ref[mutable u16&], height[0].ref[mutable u16&], 9, font_width[0].ref[u8&]) != 0:
+            panic("safe measure string should still succeed for valid inputs")
+
+        if measure_prop_string_safe(text[0].ref[u8&], width[0].ref[mutable u16&], height[0].ref[mutable u16&], 9, null) != -1:
+            panic("null font width should be rejected")
+
+        if measure_prop_string_safe(text[0].ref[u8&], width[0].ref[mutable u16&], height[0].ref[mutable u16&], -1, font_width[0].ref[u8&]) != -1:
+            panic("invalid font height should be rejected")
+
+@test
 def inclusive_span_length_rejects_reversed_ranges() -> void can[Abort.Panic, Video.Geometry]:
     can Video.Geometry, Abort.Panic:
         if inclusive_span_length(2, 6) != 5:
@@ -1420,3 +1467,7 @@ def inclusive_span_length_rejects_reversed_ranges() -> void can[Abort.Panic, Vid
 
         if inclusive_span_length(6, 2) != -1:
             panic("reversed span should be rejected")
+
+error VideoTextMeasureError:
+    NullPointer
+    InvalidFontHeight
