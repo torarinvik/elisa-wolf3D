@@ -85,8 +85,7 @@ void VL_MungePic (byte *source, unsigned width, unsigned height)
 void VWL_MeasureString (const char *string, word *width, word *height, fontstruct *font)
 {
     *height = font->height;
-    for (*width = 0;*string;string++)
-        *width += font->width[*((byte *)string)];   // proportional width
+    *width = (word) wolf3d_measure_prop_string_width((uint8_t *) string, (uint8_t *) font->width);
 }
 
 void VW_MeasurePropString (const char *string, word *width, word *height)

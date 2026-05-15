@@ -25,6 +25,7 @@ int32_t wolf3d_validate_pixel_bounds(int32_t dest_x, int32_t dest_y, int32_t scr
 int32_t wolf3d_validate_fizzle_work_area(int32_t dest_x, int32_t dest_y, int32_t width, int32_t height, int32_t source_width, int32_t source_height, int32_t screen_width, int32_t screen_height);
 int32_t wolf3d_fade_scale_6bit_color_component(int32_t component);
 int32_t wolf3d_fade_interpolated_channel(int32_t origin, int32_t target, int32_t frame, int32_t steps);
+int32_t wolf3d_measure_prop_string_width(const uint8_t *text, const uint8_t *font_width);
 
 #ifdef __cplusplus
 }

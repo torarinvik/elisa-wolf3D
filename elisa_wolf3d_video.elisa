@@ -3,6 +3,7 @@ permission Video:
     Geometry
     Picture
     Palette
+    Text
 
 def log2_ceil_impl(value: u32) -> i32 can[Video.Geometry]:
     can Video.Geometry:
@@ -80,6 +81,23 @@ def munge_pic_from_temp(source: mutable u8&, temp: u8&, width: u32, height: u32)
                     dest_index <- dest_index + 1
 
     return 0
+
+def checked_measure_prop_string_width(text: u8&, font_width: u8&) -> i32 can[Video.Text]:
+    width: mutable i32 = 0
+    index: mutable usize = 0
+
+    can Video.Text:
+        signal Video.Text
+
+        while text[index] != 0.u8():
+            width <- width + font_width[text[index].usize()].i32()
+            index <- index + 1
+
+    return width
+
+def measure_prop_string_width(text: u8&, font_width: u8&) -> i32 can[Video.Text]:
+    can Video.Text:
+        return checked_measure_prop_string_width(text, font_width)
 
 def checked_fizzle_frames(frames: u32) -> i32 error[VideoFadeError] can[Video.Fizzle]:
     if frames == 0.u32():
@@ -278,6 +296,7 @@ export func wolf3d_validate_pixel_bounds(dest_x: i32, dest_y: i32, screen_width:
 export func wolf3d_validate_fizzle_work_area(dest_x: i32, dest_y: i32, width: i32, height: i32, source_width: i32, source_height: i32, screen_width: i32, screen_height: i32) -> i32 = validate_fizzle_work_area
 export func wolf3d_fade_scale_6bit_color_component(component: i32) -> i32 = fade_scale_6bit_color_component
 export func wolf3d_fade_interpolated_channel(origin: i32, target: i32, frame: i32, steps: i32) -> i32 = fade_interpolated_channel
+export func wolf3d_measure_prop_string_width(text: u8&, font_width: u8&) -> i32 = measure_prop_string_width
 
 @test
 def log2_ceil_rounds_up_to_the_next_power_of_two() -> void can[Abort.Panic, Video.Geometry]:
@@ -545,3 +564,23 @@ def validate_fizzle_work_area_rejects_oob_inputs() -> void can[Abort.Panic, Vide
 
             if validate_fizzle_work_area(10, 10, 1, 1, 320, 200, 10, 10) != -1:
                 panic("screen overflow should fail")
+
+@test
+def measure_prop_string_width_matches_font_glyph_widths() -> void can[Abort.Panic, Video.Text]:
+    can Video.Text:
+        can Abort.Panic:
+            font_width: mutable u8[256] = zeroed
+            text: mutable u8[4] = zeroed
+
+            font_width[65] <- 5.u8()
+            font_width[66] <- 7.u8()
+            text[0] <- 65.u8()
+            text[1] <- 66.u8()
+            text[2] <- 0.u8()
+
+            if measure_prop_string_width(text[0].ref[u8&], font_width[0].ref[u8&]) != 12:
+                panic("prop string width should be sum of glyph widths")
+
+            text[0] <- 0.u8()
+            if measure_prop_string_width(text[0].ref[u8&], font_width[0].ref[u8&]) != 0:
+                panic("empty strings should measure as zero width")
