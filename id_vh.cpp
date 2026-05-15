@@ -99,10 +99,10 @@ void VWB_DrawTile8M (int x, int y, int tile)
 
 void VWB_DrawPic (int x, int y, int chunknum)
 {
-    int picnum = chunknum - STARTPICS;
+    int picnum = wolf3d_pic_index_for_chunk(chunknum, STARTPICS);
     unsigned width,height;
 
-    x &= ~7;
+    x = wolf3d_align_picture_x(x);
 
     width = pictable[picnum].width;
     height = pictable[picnum].height;
@@ -112,7 +112,7 @@ void VWB_DrawPic (int x, int y, int chunknum)
 
 void VWB_DrawPicScaledCoord (int scx, int scy, int chunknum)
 {
-    int picnum = chunknum - STARTPICS;
+    int picnum = wolf3d_pic_index_for_chunk(chunknum, STARTPICS);
     unsigned width,height;
 
     width = pictable[picnum].width;
@@ -129,7 +129,7 @@ void VWB_Bar (int x, int y, int width, int height, int color)
 
 void VWB_Plot (int x, int y, int color)
 {
-    if(scaleFactor == 1)
+    if(!wolf3d_draw_block_for_plot(scaleFactor))
         VW_Plot(x,y,color);
     else
         VW_Bar(x, y, 1, 1, color);
@@ -180,12 +180,12 @@ void VWB_Vlin (int y1, int y2, int x, int color)
 
 void LatchDrawPic (unsigned x, unsigned y, unsigned picnum)
 {
-    VL_LatchToScreen (latchpics[2+picnum-LATCHPICS_LUMP_START], x*8, y);
+    VL_LatchToScreen (latchpics[wolf3d_latchpic_index(picnum, LATCHPICS_LUMP_START)], x*8, y);
 }
 
 void LatchDrawPicScaledCoord (unsigned scx, unsigned scy, unsigned picnum)
 {
-    VL_LatchToScreenScaledCoord (latchpics[2+picnum-LATCHPICS_LUMP_START], scx*8, scy);
+    VL_LatchToScreenScaledCoord (latchpics[wolf3d_latchpic_index(picnum, LATCHPICS_LUMP_START)], scx*8, scy);
 }
 
 
@@ -209,7 +209,7 @@ void LoadLatchMem (void)
 // tile 8s
 //
     
-    surf = SDL_CreateIndexedSurface(8*8, ((NUMTILE8 + 7) / 8) * 8);
+    surf = SDL_CreateIndexedSurface(8*8, wolf3d_latch_tile_surface_height(NUMTILE8));
     if(surf == NULL)
     {
         Quit("Unable to create surface for tiles!");
@@ -222,7 +222,7 @@ void LoadLatchMem (void)
 
     for (i=0;i<NUMTILE8;i++)
     {
-        VL_MemToLatch (src, 8, 8, surf, (i & 7) * 8, (i >> 3) * 8);
+        VL_MemToLatch (src, 8, 8, surf, wolf3d_latch_tile_dest_x(i), wolf3d_latch_tile_dest_y(i));
         src += 64;
     }
     UNCACHEGRCHUNK (STARTTILE8);
@@ -244,7 +244,7 @@ void LoadLatchMem (void)
         }
         SDL_SetGamePalette(surf, gamepal, 0, 256);
 
-        latchpics[2+i-start] = surf;
+        latchpics[wolf3d_latchpic_index(i, start)] = surf;
         CA_CacheGrChunk (i);
         VL_MemToLatch (grsegs[i], width, height, surf, 0, 0);
         UNCACHEGRCHUNK(i);
@@ -275,9 +275,7 @@ extern SDL_Color curpal[256];
 
 void VH_Startup()
 {
-    int rndbits = wolf3d_fizzle_bits_for_dimensions((uint32_t)screenWidth, (uint32_t)screenHeight);
-    rndbits_y = wolf3d_log2_ceil((uint32_t)screenHeight);
-    rndmask = wolf3d_fizzle_mask_for_dimensions((uint32_t)screenWidth, (uint32_t)screenHeight);
+    wolf3d_configure_fizzle_state((uint32_t)screenWidth, (uint32_t)screenHeight, &rndbits_y, &rndmask);
 }
 
 boolean FizzleFade (SDL_Surface *source, int x1, int y1,
@@ -294,7 +292,7 @@ boolean FizzleFade (SDL_Surface *source, int x1, int y1,
 
     if (wolf3d_validate_fizzle_frames(frames) != 0)
         Quit ("FizzleFade: frames must be greater than zero!");
-    pixperframe = width * height / frames;
+    pixperframe = wolf3d_fizzle_pixels_per_frame(width, height, frames);
 
     IN_StartAck ();
 
@@ -337,7 +335,7 @@ boolean FizzleFade (SDL_Surface *source, int x1, int y1,
         }
 
         // If there is no double buffering, we always use the "first frame" case
-        if(usedoublebuffering) first = 0;
+        first = wolf3d_next_fizzle_first(usedoublebuffering, first);
 
         VL_UnlockSurface(screen_copy);
         SDL_BlitSurface(screen_copy, NULL, screenBuffer, NULL);
