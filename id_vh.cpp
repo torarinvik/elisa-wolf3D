@@ -285,24 +285,11 @@ static unsigned int rndmask;
 
 extern SDL_Color curpal[256];
 
-// Returns the number of bits needed to represent the given value
-static int log2_ceil(uint32_t x)
-{
-    return wolf3d_log2_ceil(x);
-}
-
 void VH_Startup()
 {
-    int rndbits_x = log2_ceil(screenWidth);
-    rndbits_y = log2_ceil(screenHeight);
-
-    int rndbits = rndbits_x + rndbits_y;
-    if(rndbits < 17)
-        rndbits = 17;       // no problem, just a bit slower
-    else if(rndbits > 25)
-        rndbits = 25;       // fizzle fade will not fill whole screen
-
-    rndmask = wolf3d_fizzle_mask_for_bits(rndbits);
+    int rndbits = wolf3d_fizzle_bits_for_dimensions((uint32_t)screenWidth, (uint32_t)screenHeight);
+    rndbits_y = wolf3d_log2_ceil((uint32_t)screenHeight);
+    rndmask = wolf3d_fizzle_mask_for_dimensions((uint32_t)screenWidth, (uint32_t)screenHeight);
 }
 
 boolean FizzleFade (SDL_Surface *source, int x1, int y1,
