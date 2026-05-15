@@ -139,10 +139,9 @@ def configure_fizzle_state(width: u32, height: u32, rndbits_y: mutable u32&, rnd
     can Video.Geometry:
         rndbits_y[0] <- log2_ceil_impl(height).u32()
 
-    can Video.Fizzle:
-        can Video.Geometry:
-            rndmask[0] <- fizzle_mask_for_dimensions(width, height)
-            return fizzle_bits_for_dimensions(width, height)
+    can Video.Fizzle, Video.Geometry:
+        rndmask[0] <- fizzle_mask_for_dimensions(width, height)
+        return fizzle_bits_for_dimensions(width, height)
 
 def next_fizzle_first(usedoublebuffering: i32, current_first: i32) -> i32 can[Video.Fizzle]:
     can Video.Fizzle:
@@ -679,9 +678,11 @@ def fizzle_bits_for_dimensions(width: u32, height: u32) -> i32 can[Video.Fizzle,
     can Video.Geometry:
         signal Video.Geometry
 
-    bits_x: i32 = log2_ceil_impl(width)
-    bits_y: i32 = log2_ceil_impl(height)
-    bits: i32 = bits_x + bits_y
+    bits: mutable i32 = 0
+    can Video.Fizzle, Video.Geometry:
+        bits_x: i32 = log2_ceil_impl(width)
+        bits_y: i32 = log2_ceil_impl(height)
+        bits <- bits_x + bits_y
 
     if bits < 17:
         return 17
@@ -695,7 +696,8 @@ def fizzle_mask_for_dimensions(width: u32, height: u32) -> u32 can[Video.Fizzle,
     can Video.Geometry:
         signal Video.Geometry
 
-    return fizzle_mask_for_bits(fizzle_bits_for_dimensions(width, height))
+    can Video.Fizzle, Video.Geometry:
+        return fizzle_mask_for_bits(fizzle_bits_for_dimensions(width, height))
 
 export func wolf3d_log2_ceil(value: u32) -> i32 = log2_ceil_impl
 export func wolf3d_fizzle_mask_for_bits(bits: i32) -> u32 = fizzle_mask_for_bits
@@ -745,720 +747,676 @@ export func wolf3d_build_palette_shift_table(base_palette: u8&, dst: mutable u8&
 
 @test
 def log2_ceil_rounds_up_to_the_next_power_of_two() -> void can[Abort.Panic, Video.Geometry]:
-    can Video.Geometry:
-        can Abort.Panic:
-            if log2_ceil_impl(1.u32()) != 0:
-                panic("log2 ceil should return zero for one")
+    can Video.Geometry, Abort.Panic:
+        if log2_ceil_impl(1.u32()) != 0:
+            panic("log2 ceil should return zero for one")
 
-            if log2_ceil_impl(2.u32()) != 1:
-                panic("log2 ceil should return one for two")
+        if log2_ceil_impl(2.u32()) != 1:
+            panic("log2 ceil should return one for two")
 
-            if log2_ceil_impl(3.u32()) != 2:
-                panic("log2 ceil should round three up to two bits")
+        if log2_ceil_impl(3.u32()) != 2:
+            panic("log2 ceil should round three up to two bits")
 
 @test
 def fizzle_mask_chooses_expected_lfsr_masks() -> void can[Abort.Panic, Video.Fizzle]:
-    can Video.Fizzle:
-        can Abort.Panic:
-            if fizzle_mask_for_bits(17) != 0x00012000:
-                panic("unexpected mask for 17 bits")
+    can Video.Fizzle, Abort.Panic:
+        if fizzle_mask_for_bits(17) != 0x00012000:
+            panic("unexpected mask for 17 bits")
 
-            if fizzle_mask_for_bits(18) != 0x00020400:
-                panic("unexpected mask for 18 bits")
+        if fizzle_mask_for_bits(18) != 0x00020400:
+            panic("unexpected mask for 18 bits")
 
 @test
 def validate_munge_pic_width_rejects_non_divisible_widths() -> void can[Abort.Panic, Video.Picture]:
-    can Video.Picture:
-        can Abort.Panic:
-            if validate_munge_pic_width(8) != 0:
-                panic("aligned picture widths should pass validation")
+    can Video.Picture, Abort.Panic:
+        if validate_munge_pic_width(8) != 0:
+            panic("aligned picture widths should pass validation")
 
-            if validate_munge_pic_width(6) != -1:
-                panic("unaligned picture widths should fail validation")
+        if validate_munge_pic_width(6) != -1:
+            panic("unaligned picture widths should fail validation")
 
 @test
 def munge_pic_from_temp_reorders_planes() -> void can[Abort.Panic, Video.Picture]:
-    can Video.Picture:
-        can Abort.Panic:
-            source: mutable u8[8] = zeroed
-            temp: mutable u8[8] = zeroed
+    can Video.Picture, Abort.Panic:
+        source: mutable u8[8] = zeroed
+        temp: mutable u8[8] = zeroed
 
-            temp[0] <- 0.u8()
-            temp[1] <- 1.u8()
-            temp[2] <- 2.u8()
-            temp[3] <- 3.u8()
-            temp[4] <- 4.u8()
-            temp[5] <- 5.u8()
-            temp[6] <- 6.u8()
-            temp[7] <- 7.u8()
+        temp[0] <- 0.u8()
+        temp[1] <- 1.u8()
+        temp[2] <- 2.u8()
+        temp[3] <- 3.u8()
+        temp[4] <- 4.u8()
+        temp[5] <- 5.u8()
+        temp[6] <- 6.u8()
+        temp[7] <- 7.u8()
 
-            if munge_pic_from_temp(source[0].ref[mutable u8&], temp[0].ref[u8&], 4.u32(), 2.u32()) != 0:
-                panic("munge_pic_from_temp should succeed for valid input")
+        if munge_pic_from_temp(source[0].ref[mutable u8&], temp[0].ref[u8&], 4.u32(), 2.u32()) != 0:
+            panic("munge_pic_from_temp should succeed for valid input")
 
-            if source[0] != 0.u8() or source[1] != 4.u8() or source[2] != 1.u8() or source[3] != 5.u8():
-                panic("first row was not rearranged as expected")
+        if source[0] != 0.u8() or source[1] != 4.u8() or source[2] != 1.u8() or source[3] != 5.u8():
+            panic("first row was not rearranged as expected")
 
-            if source[4] != 2.u8() or source[5] != 6.u8() or source[6] != 3.u8() or source[7] != 7.u8():
-                panic("second row was not rearranged as expected")
+        if source[4] != 2.u8() or source[5] != 6.u8() or source[6] != 3.u8() or source[7] != 7.u8():
+            panic("second row was not rearranged as expected")
 
 @test
 def vh_picture_helpers_match_legacy_index_math() -> void can[Abort.Panic, Video.Geometry, Video.Picture]:
-    can Video.Geometry:
-        can Video.Picture:
-            can Abort.Panic:
-                if align_picture_x(15) != 8:
-                    panic("picture x should align down to 8-pixel boundary")
+    can Video.Geometry, Video.Picture, Abort.Panic:
+        if align_picture_x(15) != 8:
+            panic("picture x should align down to 8-pixel boundary")
 
-                if pic_index_for_chunk(100, 80) != 20:
-                    panic("picture index should be relative to STARTPICS")
+        if pic_index_for_chunk(100, 80) != 20:
+            panic("picture index should be relative to STARTPICS")
 
-                if latchpic_index(92, 90) != 4:
-                    panic("latch pic index should preserve legacy +2 offset")
+        if latchpic_index(92, 90) != 4:
+            panic("latch pic index should preserve legacy +2 offset")
 
-                if latch_tile_surface_height(1) != 8 or latch_tile_surface_height(9) != 16:
-                    panic("tile surface height should round tiles up to rows of eight")
+        if latch_tile_surface_height(1) != 8 or latch_tile_surface_height(9) != 16:
+            panic("tile surface height should round tiles up to rows of eight")
 
-                if latch_tile_dest_x(10) != 16 or latch_tile_dest_y(10) != 8:
-                    panic("tile destination should unpack column and row")
+        if latch_tile_dest_x(10) != 16 or latch_tile_dest_y(10) != 8:
+            panic("tile destination should unpack column and row")
 
 @test
 def vh_fizzle_frame_helpers_match_legacy_state_updates() -> void can[Abort.Panic, Video.Fizzle, Video.Geometry, Video.Picture]:
-    can Video.Fizzle:
-        can Video.Geometry:
-            can Video.Picture:
-                can Abort.Panic:
-                    if fizzle_pixels_per_frame(320.u32(), 200.u32(), 70.u32()) != 914.u32():
-                        panic("fizzle pixels per frame should use integer division")
+    can Video.Fizzle, Video.Geometry, Video.Picture, Abort.Panic:
+        if fizzle_pixels_per_frame(320.u32(), 200.u32(), 70.u32()) != 914.u32():
+            panic("fizzle pixels per frame should use integer division")
 
-                    if fizzle_pixels_per_frame(320.u32(), 200.u32(), 0.u32()) != 0.u32():
-                        panic("zero frames should return wrapper-safe zero")
+        if fizzle_pixels_per_frame(320.u32(), 200.u32(), 0.u32()) != 0.u32():
+            panic("zero frames should return wrapper-safe zero")
 
-                    rndbits_y: mutable u32[1] = zeroed
-                    rndmask: mutable u32[1] = zeroed
-                    if configure_fizzle_state(320.u32(), 200.u32(), rndbits_y[0].ref[mutable u32&], rndmask[0].ref[mutable u32&]) != 17:
-                        panic("fizzle state should return computed bit count")
+        rndbits_y: mutable u32[1] = zeroed
+        rndmask: mutable u32[1] = zeroed
+        if configure_fizzle_state(320.u32(), 200.u32(), rndbits_y[0].ref[mutable u32&], rndmask[0].ref[mutable u32&]) != 17:
+            panic("fizzle state should return computed bit count")
 
-                    if rndbits_y[0] != 8.u32() or rndmask[0] != 0x00012000:
-                        panic("fizzle state should write y bits and mask")
+        if rndbits_y[0] != 8.u32() or rndmask[0] != 0x00012000:
+            panic("fizzle state should write y bits and mask")
 
-                    if next_fizzle_first(1, 1) != 0:
-                        panic("double buffering should clear first-frame state")
+        if next_fizzle_first(1, 1) != 0:
+            panic("double buffering should clear first-frame state")
 
-                    if next_fizzle_first(0, 1) != 1:
-                        panic("single buffering should preserve first-frame state")
+        if next_fizzle_first(0, 1) != 1:
+            panic("single buffering should preserve first-frame state")
 
-                    if draw_block_for_plot(1) != 0 or draw_block_for_plot(2) != 1:
-                        panic("plot helper should distinguish scaled draw mode")
+        if draw_block_for_plot(1) != 0 or draw_block_for_plot(2) != 1:
+            panic("plot helper should distinguish scaled draw mode")
 
 @test
 def copy_planar_to_linear_expands_planes_into_rows() -> void can[Abort.Panic, Video.Picture]:
-    can Video.Picture:
-        can Abort.Panic:
-            source: mutable u8[8] = zeroed
-            dest: mutable u8[10] = zeroed
+    can Video.Picture, Abort.Panic:
+        source: mutable u8[8] = zeroed
+        dest: mutable u8[10] = zeroed
 
-            source[0] <- 0.u8()
-            source[1] <- 4.u8()
-            source[2] <- 1.u8()
-            source[3] <- 5.u8()
-            source[4] <- 2.u8()
-            source[5] <- 6.u8()
-            source[6] <- 3.u8()
-            source[7] <- 7.u8()
+        source[0] <- 0.u8()
+        source[1] <- 4.u8()
+        source[2] <- 1.u8()
+        source[3] <- 5.u8()
+        source[4] <- 2.u8()
+        source[5] <- 6.u8()
+        source[6] <- 3.u8()
+        source[7] <- 7.u8()
 
-            if copy_planar_to_linear(source[0].ref[u8&], dest[0].ref[mutable u8&], 4, 2, 5) != 0:
-                panic("planar copy should succeed")
+        if copy_planar_to_linear(source[0].ref[u8&], dest[0].ref[mutable u8&], 4, 2, 5) != 0:
+            panic("planar copy should succeed")
 
-            if dest[0] != 0.u8() or dest[1] != 1.u8() or dest[2] != 2.u8() or dest[3] != 3.u8():
-                panic("first destination row was not linearized")
+        if dest[0] != 0.u8() or dest[1] != 1.u8() or dest[2] != 2.u8() or dest[3] != 3.u8():
+            panic("first destination row was not linearized")
 
-            if dest[5] != 4.u8() or dest[6] != 5.u8() or dest[7] != 6.u8() or dest[8] != 7.u8():
-                panic("second destination row was not linearized")
+        if dest[5] != 4.u8() or dest[6] != 5.u8() or dest[7] != 6.u8() or dest[8] != 7.u8():
+            panic("second destination row was not linearized")
 
 @test
 def draw_planar_scaled_to_linear_scales_each_pixel() -> void can[Abort.Panic, Video.Picture]:
-    can Video.Picture:
-        can Abort.Panic:
-            source: mutable u8[4] = zeroed
-            dest: mutable u8[30] = zeroed
+    can Video.Picture, Abort.Panic:
+        source: mutable u8[4] = zeroed
+        dest: mutable u8[30] = zeroed
 
-            source[0] <- 1.u8()
-            source[1] <- 2.u8()
-            source[2] <- 3.u8()
-            source[3] <- 4.u8()
+        source[0] <- 1.u8()
+        source[1] <- 2.u8()
+        source[2] <- 3.u8()
+        source[3] <- 4.u8()
 
-            if draw_planar_scaled_to_linear(source[0].ref[u8&], dest[0].ref[mutable u8&], 4, 1, 1, 1, 2, 10) != 0:
-                panic("scaled planar draw should succeed")
+        if draw_planar_scaled_to_linear(source[0].ref[u8&], dest[0].ref[mutable u8&], 4, 1, 1, 1, 2, 10) != 0:
+            panic("scaled planar draw should succeed")
 
-            if dest[11] != 1.u8() or dest[12] != 1.u8() or dest[21] != 1.u8() or dest[22] != 1.u8():
-                panic("first pixel was not scaled to a 2x2 block")
+        if dest[11] != 1.u8() or dest[12] != 1.u8() or dest[21] != 1.u8() or dest[22] != 1.u8():
+            panic("first pixel was not scaled to a 2x2 block")
 
-            if dest[17] != 4.u8() or dest[18] != 4.u8() or dest[27] != 4.u8() or dest[28] != 4.u8():
-                panic("last pixel was not scaled to a 2x2 block")
+        if dest[17] != 4.u8() or dest[18] != 4.u8() or dest[27] != 4.u8() or dest[28] != 4.u8():
+            panic("last pixel was not scaled to a 2x2 block")
 
-            if draw_planar_scaled_to_linear(source[0].ref[u8&], dest[0].ref[mutable u8&], 4, 1, 0, 0, 0, 10) != -1:
-                panic("non-positive scale should be rejected")
+        if draw_planar_scaled_to_linear(source[0].ref[u8&], dest[0].ref[mutable u8&], 4, 1, 0, 0, 0, 10) != -1:
+            panic("non-positive scale should be rejected")
 
 @test
 def draw_planar_region_scaled_to_linear_copies_selected_region() -> void can[Abort.Panic, Video.Picture]:
-    can Video.Picture:
-        can Abort.Panic:
-            source: mutable u8[8] = zeroed
-            dest: mutable u8[4] = zeroed
+    can Video.Picture, Abort.Panic:
+        source: mutable u8[8] = zeroed
+        dest: mutable u8[4] = zeroed
 
-            source[0] <- 0.u8()
-            source[1] <- 4.u8()
-            source[2] <- 1.u8()
-            source[3] <- 5.u8()
-            source[4] <- 2.u8()
-            source[5] <- 6.u8()
-            source[6] <- 3.u8()
-            source[7] <- 7.u8()
+        source[0] <- 0.u8()
+        source[1] <- 4.u8()
+        source[2] <- 1.u8()
+        source[3] <- 5.u8()
+        source[4] <- 2.u8()
+        source[5] <- 6.u8()
+        source[6] <- 3.u8()
+        source[7] <- 7.u8()
 
-            if draw_planar_region_scaled_to_linear(source[0].ref[u8&], dest[0].ref[mutable u8&], 4, 2, 1, 1, 0, 0, 2, 1, 1, 4) != 0:
-                panic("region scaled planar draw should succeed")
+        if draw_planar_region_scaled_to_linear(source[0].ref[u8&], dest[0].ref[mutable u8&], 4, 2, 1, 1, 0, 0, 2, 1, 1, 4) != 0:
+            panic("region scaled planar draw should succeed")
 
-            if dest[0] != 5.u8() or dest[1] != 6.u8():
-                panic("selected planar region was not copied")
+        if dest[0] != 5.u8() or dest[1] != 6.u8():
+            panic("selected planar region was not copied")
 
 @test
 def copy_linear_scaled_to_linear_scales_surface_region() -> void can[Abort.Panic, Video.Picture]:
-    can Video.Picture:
-        can Abort.Panic:
-            source: mutable u8[8] = zeroed
-            dest: mutable u8[32] = zeroed
+    can Video.Picture, Abort.Panic:
+        source: mutable u8[8] = zeroed
+        dest: mutable u8[32] = zeroed
 
-            source[0] <- 1.u8()
-            source[1] <- 2.u8()
-            source[2] <- 3.u8()
-            source[3] <- 4.u8()
-            source[4] <- 5.u8()
-            source[5] <- 6.u8()
-            source[6] <- 7.u8()
-            source[7] <- 8.u8()
+        source[0] <- 1.u8()
+        source[1] <- 2.u8()
+        source[2] <- 3.u8()
+        source[3] <- 4.u8()
+        source[4] <- 5.u8()
+        source[5] <- 6.u8()
+        source[6] <- 7.u8()
+        source[7] <- 8.u8()
 
-            if copy_linear_scaled_to_linear(source[0].ref[u8&], dest[0].ref[mutable u8&], 1, 0, 2, 2, 0, 0, 2, 4, 8) != 0:
-                panic("linear scaled copy should succeed")
+        if copy_linear_scaled_to_linear(source[0].ref[u8&], dest[0].ref[mutable u8&], 1, 0, 2, 2, 0, 0, 2, 4, 8) != 0:
+            panic("linear scaled copy should succeed")
 
-            if dest[0] != 2.u8() or dest[1] != 2.u8() or dest[8] != 2.u8() or dest[9] != 2.u8():
-                panic("top-left copied pixel was not scaled")
+        if dest[0] != 2.u8() or dest[1] != 2.u8() or dest[8] != 2.u8() or dest[9] != 2.u8():
+            panic("top-left copied pixel was not scaled")
 
-            if dest[18] != 7.u8() or dest[19] != 7.u8() or dest[26] != 7.u8() or dest[27] != 7.u8():
-                panic("bottom-right copied pixel was not scaled")
+        if dest[18] != 7.u8() or dest[19] != 7.u8() or dest[26] != 7.u8() or dest[27] != 7.u8():
+            panic("bottom-right copied pixel was not scaled")
 
 
 @test
 def fill_linear_span_writes_requested_width() -> void can[Abort.Panic, Video.Picture]:
-    can Video.Picture:
-        can Abort.Panic:
-            dest: mutable u8[5] = zeroed
+    can Video.Picture, Abort.Panic:
+        dest: mutable u8[5] = zeroed
 
-            if fill_linear_span(dest[0].ref[mutable u8&], 3, 9) != 0:
-                panic("span fill should succeed")
+        if fill_linear_span(dest[0].ref[mutable u8&], 3, 9) != 0:
+            panic("span fill should succeed")
 
-            if dest[0] != 9.u8() or dest[1] != 9.u8() or dest[2] != 9.u8() or dest[3] != 0.u8():
-                panic("span fill touched the wrong bytes")
+        if dest[0] != 9.u8() or dest[1] != 9.u8() or dest[2] != 9.u8() or dest[3] != 0.u8():
+            panic("span fill touched the wrong bytes")
 
-            if fill_linear_span(dest[0].ref[mutable u8&], -1, 9) != -1:
-                panic("negative span width should be rejected")
+        if fill_linear_span(dest[0].ref[mutable u8&], -1, 9) != -1:
+            panic("negative span width should be rejected")
 
 @test
 def fill_linear_vline_uses_pitch() -> void can[Abort.Panic, Video.Picture]:
-    can Video.Picture:
-        can Abort.Panic:
-            dest: mutable u8[12] = zeroed
+    can Video.Picture, Abort.Panic:
+        dest: mutable u8[12] = zeroed
 
-            if fill_linear_vline(dest[1].ref[mutable u8&], 3, 4, 7) != 0:
-                panic("vertical line fill should succeed")
+        if fill_linear_vline(dest[1].ref[mutable u8&], 3, 4, 7) != 0:
+            panic("vertical line fill should succeed")
 
-            if dest[1] != 7.u8() or dest[5] != 7.u8() or dest[9] != 7.u8():
-                panic("vertical line fill did not use pitch")
+        if dest[1] != 7.u8() or dest[5] != 7.u8() or dest[9] != 7.u8():
+            panic("vertical line fill did not use pitch")
 
-            if dest[0] != 0.u8() or dest[2] != 0.u8() or dest[6] != 0.u8():
-                panic("vertical line fill touched neighboring pixels")
+        if dest[0] != 0.u8() or dest[2] != 0.u8() or dest[6] != 0.u8():
+            panic("vertical line fill touched neighboring pixels")
 
 @test
 def fill_linear_rect_writes_each_row() -> void can[Abort.Panic, Video.Picture]:
-    can Video.Picture:
-        can Abort.Panic:
-            dest: mutable u8[12] = zeroed
+    can Video.Picture, Abort.Panic:
+        dest: mutable u8[12] = zeroed
 
-            if fill_linear_rect(dest[1].ref[mutable u8&], 2, 3, 4, 5) != 0:
-                panic("rect fill should succeed")
+        if fill_linear_rect(dest[1].ref[mutable u8&], 2, 3, 4, 5) != 0:
+            panic("rect fill should succeed")
 
-            if dest[1] != 5.u8() or dest[2] != 5.u8() or dest[5] != 5.u8() or dest[6] != 5.u8() or dest[9] != 5.u8() or dest[10] != 5.u8():
-                panic("rect fill did not write the expected area")
+        if dest[1] != 5.u8() or dest[2] != 5.u8() or dest[5] != 5.u8() or dest[6] != 5.u8() or dest[9] != 5.u8() or dest[10] != 5.u8():
+            panic("rect fill did not write the expected area")
 
-            if dest[0] != 0.u8() or dest[3] != 0.u8() or dest[4] != 0.u8() or dest[7] != 0.u8():
-                panic("rect fill touched outside the expected area")
+        if dest[0] != 0.u8() or dest[3] != 0.u8() or dest[4] != 0.u8() or dest[7] != 0.u8():
+            panic("rect fill touched outside the expected area")
 
 @test
 def draw_prop_string_scaled_renders_glyph_columns() -> void can[Abort.Panic, Video.Text, Video.Picture]:
-    can Video.Text:
-        can Video.Picture:
-            can Abort.Panic:
-                text: mutable u8[2] = zeroed
-                font_base: mutable u8[6] = zeroed
-                font_locations: mutable i16[256] = zeroed
-                font_width: mutable u8[256] = zeroed
-                dest: mutable u8[24] = zeroed
+    can Video.Text, Video.Picture, Abort.Panic:
+        text: mutable u8[2] = zeroed
+        font_base: mutable u8[6] = zeroed
+        font_locations: mutable i16[256] = zeroed
+        font_width: mutable u8[256] = zeroed
+        dest: mutable u8[24] = zeroed
 
-                text[0] <- 65.u8()
-                font_width[65] <- 2.u8()
-                font_locations[65] <- 0.i16()
+        text[0] <- 65.u8()
+        font_width[65] <- 2.u8()
+        font_locations[65] <- 0.i16()
 
-                font_base[0] <- 1.u8()
-                font_base[3] <- 1.u8()
+        font_base[0] <- 1.u8()
+        font_base[3] <- 1.u8()
 
-                if draw_prop_string_scaled(text[0].ref[u8&], font_base[0].ref[u8&], font_locations[0].ref[i16&], font_width[0].ref[u8&], dest[0].ref[mutable u8&], 3, 2, 8, 12) != 2:
-                    panic("drawn width should match glyph width")
+        if draw_prop_string_scaled(text[0].ref[u8&], font_base[0].ref[u8&], font_locations[0].ref[i16&], font_width[0].ref[u8&], dest[0].ref[mutable u8&], 3, 2, 8, 12) != 2:
+            panic("drawn width should match glyph width")
 
-                if dest[0] != 12.u8() or dest[1] != 12.u8() or dest[8] != 12.u8() or dest[9] != 12.u8():
-                    panic("top glyph pixel was not scaled")
+        if dest[0] != 12.u8() or dest[1] != 12.u8() or dest[8] != 12.u8() or dest[9] != 12.u8():
+            panic("top glyph pixel was not scaled")
 
-                if dest[18] != 12.u8() or dest[19] != 12.u8():
-                    panic("bottom glyph pixel was not scaled")
+        if dest[18] != 12.u8() or dest[19] != 12.u8():
+            panic("bottom glyph pixel was not scaled")
 
-                if dest[2] != 0.u8() or dest[16] != 0.u8():
-                    panic("blank glyph pixels should remain untouched")
+        if dest[2] != 0.u8() or dest[16] != 0.u8():
+            panic("blank glyph pixels should remain untouched")
 
 @test
 def apply_fizzle_pixels_copies_lfsr_selected_pixels() -> void can[Abort.Panic, Video.Fizzle, Video.Picture]:
-    can Video.Fizzle:
-        can Video.Picture:
-            can Abort.Panic:
-                source: mutable u8[8] = zeroed
-                dest: mutable u8[8] = zeroed
+    can Video.Fizzle, Video.Picture, Abort.Panic:
+        source: mutable u8[8] = zeroed
+        dest: mutable u8[8] = zeroed
 
-                source[2] <- 11.u8()
+        source[2] <- 11.u8()
 
-                next: u32 = apply_fizzle_pixels(source[0].ref[u8&], dest[0].ref[mutable u8&], 0, 0, 4, 1, 4, 4, 0, 0.u32(), 1.u32(), 2.u32())
+        next: u32 = apply_fizzle_pixels(source[0].ref[u8&], dest[0].ref[mutable u8&], 0, 0, 4, 1, 4, 4, 0, 0.u32(), 1.u32(), 2.u32())
 
-                if next != 1.u32():
-                    panic("fizzle helper returned the wrong next random value")
+        if next != 1.u32():
+            panic("fizzle helper returned the wrong next random value")
 
-                if dest[2] != 11.u8() or dest[0] != 0.u8() or dest[1] != 0.u8():
-                    panic("fizzle helper copied the wrong pixel")
+        if dest[2] != 11.u8() or dest[0] != 0.u8() or dest[1] != 0.u8():
+            panic("fizzle helper copied the wrong pixel")
 
 @test
 def apply_fizzle_pixels_skips_out_of_bounds_positions() -> void can[Abort.Panic, Video.Fizzle, Video.Picture]:
-    can Video.Fizzle:
-        can Video.Picture:
-            can Abort.Panic:
-                source: mutable u8[4] = zeroed
-                dest: mutable u8[4] = zeroed
+    can Video.Fizzle, Video.Picture, Abort.Panic:
+        source: mutable u8[4] = zeroed
+        dest: mutable u8[4] = zeroed
 
-                source[0] <- 9.u8()
+        source[0] <- 9.u8()
 
-                next: u32 = apply_fizzle_pixels(source[0].ref[u8&], dest[0].ref[mutable u8&], 0, 0, 1, 1, 1, 1, 0, 0.u32(), 1.u32(), 2.u32())
+        next: u32 = apply_fizzle_pixels(source[0].ref[u8&], dest[0].ref[mutable u8&], 0, 0, 1, 1, 1, 1, 0, 0.u32(), 1.u32(), 2.u32())
 
-                if next != 0.u32():
-                    panic("fizzle helper should stop when the sequence is complete")
+        if next != 0.u32():
+            panic("fizzle helper should stop when the sequence is complete")
 
-                if dest[0] != 0.u8():
-                    panic("out-of-bounds fizzle positions should not copy")
+        if dest[0] != 0.u8():
+            panic("out-of-bounds fizzle positions should not copy")
 
 @test
 def validate_fizzle_frames_rejects_zero() -> void can[Abort.Panic, Video.Fizzle]:
-    can Video.Fizzle:
-        can Abort.Panic:
-            if validate_fizzle_frames(1.u32()) != 0:
-                panic("non-zero frame counts should pass validation")
+    can Video.Fizzle, Abort.Panic:
+        if validate_fizzle_frames(1.u32()) != 0:
+            panic("non-zero frame counts should pass validation")
 
-            if validate_fizzle_frames(0.u32()) != -1:
-                panic("zero frame counts should fail validation")
-
-@test
-def fizzle_dimensions_clamps_to_expected_bit_range() -> void can[Abort.Panic, Video.Fizzle]:
-    can Video.Fizzle:
-        can Abort.Panic:
-            if fizzle_bits_for_dimensions(1.u32(), 1.u32()) != 17:
-                panic("very small dimensions should clamp to 17 bits")
-
-            if fizzle_bits_for_dimensions(320.u32(), 200.u32()) != 17:
-                panic("320x200 should remain 17 bits")
-
-            if fizzle_bits_for_dimensions(1024.u32(), 1.u32()) != 17:
-                panic("disproportionate dimensions should not dip below 17 bits")
-
-            if fizzle_bits_for_dimensions(640.u32(), 480.u32()) != 19:
-                panic("640x480 should resolve to 19 bits")
-
-            if fizzle_bits_for_dimensions(1048576.u32(), 1048576.u32()) != 25:
-                panic("very large dimensions should clamp to 25 bits")
+        if validate_fizzle_frames(0.u32()) != -1:
+            panic("zero frame counts should fail validation")
 
 @test
-def fizzle_mask_matches_bits_for_dimensions() -> void can[Abort.Panic, Video.Fizzle]:
-    can Video.Fizzle:
-        can Abort.Panic:
-            if fizzle_mask_for_dimensions(320.u32(), 200.u32()) != fizzle_mask_for_bits(17):
-                panic("320x200 should use a 17-bit mask")
+def fizzle_dimensions_clamps_to_expected_bit_range() -> void can[Abort.Panic, Video.Fizzle, Video.Geometry]:
+    can Video.Fizzle, Video.Geometry, Abort.Panic:
+        if fizzle_bits_for_dimensions(1.u32(), 1.u32()) != 17:
+            panic("very small dimensions should clamp to 17 bits")
 
-            if fizzle_mask_for_dimensions(640.u32(), 480.u32()) != fizzle_mask_for_bits(19):
-                panic("640x480 should use a 19-bit mask")
+        if fizzle_bits_for_dimensions(320.u32(), 200.u32()) != 17:
+            panic("320x200 should remain 17 bits")
+
+        if fizzle_bits_for_dimensions(1024.u32(), 1.u32()) != 17:
+            panic("disproportionate dimensions should not dip below 17 bits")
+
+        if fizzle_bits_for_dimensions(640.u32(), 480.u32()) != 19:
+            panic("640x480 should resolve to 19 bits")
+
+        if fizzle_bits_for_dimensions(1048576.u32(), 1048576.u32()) != 25:
+            panic("very large dimensions should clamp to 25 bits")
+
+@test
+def fizzle_mask_matches_bits_for_dimensions() -> void can[Abort.Panic, Video.Fizzle, Video.Geometry]:
+    can Video.Fizzle, Video.Geometry, Abort.Panic:
+        if fizzle_mask_for_dimensions(320.u32(), 200.u32()) != fizzle_mask_for_bits(17):
+            panic("320x200 should use a 17-bit mask")
+
+        if fizzle_mask_for_dimensions(640.u32(), 480.u32()) != fizzle_mask_for_bits(19):
+            panic("640x480 should use a 19-bit mask")
 
 @test
 def validate_fade_steps_rejects_non_positive() -> void can[Abort.Panic, Video.Palette]:
-    can Video.Palette:
-        can Abort.Panic:
-            if validate_fade_steps(1) != 0:
-                panic("positive fade steps should pass validation")
+    can Video.Palette, Abort.Panic:
+        if validate_fade_steps(1) != 0:
+            panic("positive fade steps should pass validation")
 
-            if validate_fade_steps(0) != -1:
-                panic("zero fade steps should fail validation")
+        if validate_fade_steps(0) != -1:
+            panic("zero fade steps should fail validation")
 
-            if validate_fade_steps(-1) != -1:
-                panic("negative fade steps should fail validation")
+        if validate_fade_steps(-1) != -1:
+            panic("negative fade steps should fail validation")
 
 @test
 def fade_scale_6bit_to_8bit_matches_previous_behavior() -> void can[Abort.Panic, Video.Palette]:
-    can Video.Palette:
-        can Abort.Panic:
-            if fade_scale_6bit_color_component(0) != 0:
-                panic("zero should scale to zero")
+    can Video.Palette, Abort.Panic:
+        if fade_scale_6bit_color_component(0) != 0:
+            panic("zero should scale to zero")
 
-            if fade_scale_6bit_color_component(63) != 255:
-                panic("max 6-bit color should scale to 255")
+        if fade_scale_6bit_color_component(63) != 255:
+            panic("max 6-bit color should scale to 255")
 
-            if fade_scale_6bit_color_component(32) != 129:
-                panic("midpoint should retain existing integer rounding behavior")
+        if fade_scale_6bit_color_component(32) != 129:
+            panic("midpoint should retain existing integer rounding behavior")
 
 @test
 def fade_interpolated_channel_matches_linear_math() -> void can[Abort.Panic, Video.Palette]:
-    can Video.Palette:
-        can Abort.Panic:
-            if fade_interpolated_channel(10, 20, 0, 2) != 10:
-                panic("frame zero should keep origin")
+    can Video.Palette, Abort.Panic:
+        if fade_interpolated_channel(10, 20, 0, 2) != 10:
+            panic("frame zero should keep origin")
 
-            if fade_interpolated_channel(10, 20, 1, 2) != 15:
-                panic("halfway should split delta correctly")
+        if fade_interpolated_channel(10, 20, 1, 2) != 15:
+            panic("halfway should split delta correctly")
 
-            if fade_interpolated_channel(10, 20, 2, 2) != 20:
-                panic("final step should reach target")
+        if fade_interpolated_channel(10, 20, 2, 2) != 20:
+            panic("final step should reach target")
 
 @test
 def convert_palette_6bit_rgb_to_sdl_colors_writes_color_slots() -> void can[Abort.Panic, Video.Palette]:
-    can Video.Palette:
-        can Abort.Panic:
-            src: mutable u8[6] = zeroed
-            dst: mutable u8[8] = zeroed
+    can Video.Palette, Abort.Panic:
+        src: mutable u8[6] = zeroed
+        dst: mutable u8[8] = zeroed
 
-            src[0] <- 0.u8()
-            src[1] <- 63.u8()
-            src[2] <- 31.u8()
-            src[3] <- 63.u8()
-            src[4] <- 0.u8()
-            src[5] <- 63.u8()
-            dst[3] <- 99.u8()
-            dst[7] <- 77.u8()
+        src[0] <- 0.u8()
+        src[1] <- 63.u8()
+        src[2] <- 31.u8()
+        src[3] <- 63.u8()
+        src[4] <- 0.u8()
+        src[5] <- 63.u8()
+        dst[3] <- 99.u8()
+        dst[7] <- 77.u8()
 
-            if convert_palette_6bit_rgb_to_sdl_colors(src[0].ref[u8&], dst[0].ref[mutable u8&], 2) != 2:
-                panic("palette conversion should return converted color count")
+        if convert_palette_6bit_rgb_to_sdl_colors(src[0].ref[u8&], dst[0].ref[mutable u8&], 2) != 2:
+            panic("palette conversion should return converted color count")
 
-            if dst[0] != 0.u8() or dst[1] != 255.u8() or dst[2] != 125.u8():
-                panic("first SDL color slot was not scaled correctly")
+        if dst[0] != 0.u8() or dst[1] != 255.u8() or dst[2] != 125.u8():
+            panic("first SDL color slot was not scaled correctly")
 
-            if dst[4] != 255.u8() or dst[5] != 0.u8() or dst[6] != 255.u8():
-                panic("second SDL color slot was not scaled correctly")
+        if dst[4] != 255.u8() or dst[5] != 0.u8() or dst[6] != 255.u8():
+            panic("second SDL color slot was not scaled correctly")
 
-            if dst[3] != 99.u8() or dst[7] != 77.u8():
-                panic("palette conversion should preserve alpha bytes")
+        if dst[3] != 99.u8() or dst[7] != 77.u8():
+            panic("palette conversion should preserve alpha bytes")
 
 @test
 def fill_sdl_palette_rgb_writes_full_rgb_range() -> void can[Abort.Panic, Video.Palette]:
-    can Video.Palette:
-        can Abort.Panic:
-            dst: mutable u8[8] = zeroed
-            dst[3] <- 12.u8()
-            dst[7] <- 34.u8()
+    can Video.Palette, Abort.Panic:
+        dst: mutable u8[8] = zeroed
+        dst[3] <- 12.u8()
+        dst[7] <- 34.u8()
 
-            if fill_sdl_palette_rgb(dst[0].ref[mutable u8&], 10, 20, 30, 2) != 2:
-                panic("fill should return filled color count")
+        if fill_sdl_palette_rgb(dst[0].ref[mutable u8&], 10, 20, 30, 2) != 2:
+            panic("fill should return filled color count")
 
-            if dst[0] != 10.u8() or dst[1] != 20.u8() or dst[2] != 30.u8():
-                panic("first SDL color was not filled")
+        if dst[0] != 10.u8() or dst[1] != 20.u8() or dst[2] != 30.u8():
+            panic("first SDL color was not filled")
 
-            if dst[4] != 10.u8() or dst[5] != 20.u8() or dst[6] != 30.u8():
-                panic("second SDL color was not filled")
+        if dst[4] != 10.u8() or dst[5] != 20.u8() or dst[6] != 30.u8():
+            panic("second SDL color was not filled")
 
-            if dst[3] != 12.u8() or dst[7] != 34.u8():
-                panic("fill should preserve alpha bytes")
+        if dst[3] != 12.u8() or dst[7] != 34.u8():
+            panic("fill should preserve alpha bytes")
 
 @test
 def build_fade_out_sdl_palette_constructs_whole_frame() -> void can[Abort.Panic, Video.Palette]:
-    can Video.Palette:
-        can Abort.Panic:
-            origin: mutable u8[8] = zeroed
-            dst: mutable u8[8] = zeroed
+    can Video.Palette, Abort.Panic:
+        origin: mutable u8[8] = zeroed
+        dst: mutable u8[8] = zeroed
 
-            origin[0] <- 10.u8()
-            origin[1] <- 20.u8()
-            origin[2] <- 30.u8()
-            origin[3] <- 44.u8()
-            origin[4] <- 100.u8()
-            origin[5] <- 110.u8()
-            origin[6] <- 120.u8()
-            origin[7] <- 55.u8()
+        origin[0] <- 10.u8()
+        origin[1] <- 20.u8()
+        origin[2] <- 30.u8()
+        origin[3] <- 44.u8()
+        origin[4] <- 100.u8()
+        origin[5] <- 110.u8()
+        origin[6] <- 120.u8()
+        origin[7] <- 55.u8()
 
-            if build_fade_out_sdl_palette(origin[0].ref[u8&], dst[0].ref[mutable u8&], 0, 0, 63, 63, 63, 1, 2, 2) != 0:
-                panic("fade out frame should build for valid range")
+        if build_fade_out_sdl_palette(origin[0].ref[u8&], dst[0].ref[mutable u8&], 0, 0, 63, 63, 63, 1, 2, 2) != 0:
+            panic("fade out frame should build for valid range")
 
-            if dst[0] != 132.u8() or dst[1] != 137.u8() or dst[2] != 142.u8():
-                panic("fade out should interpolate selected color toward scaled target")
+        if dst[0] != 132.u8() or dst[1] != 137.u8() or dst[2] != 142.u8():
+            panic("fade out should interpolate selected color toward scaled target")
 
-            if dst[4] != 100.u8() or dst[5] != 110.u8() or dst[6] != 120.u8():
-                panic("fade out should copy colors outside selected range")
+        if dst[4] != 100.u8() or dst[5] != 110.u8() or dst[6] != 120.u8():
+            panic("fade out should copy colors outside selected range")
 
-            if dst[3] != 44.u8() or dst[7] != 55.u8():
-                panic("fade out should copy alpha bytes")
+        if dst[3] != 44.u8() or dst[7] != 55.u8():
+            panic("fade out should copy alpha bytes")
 
-            if build_fade_out_sdl_palette(origin[0].ref[u8&], dst[0].ref[mutable u8&], 1, 0, 63, 63, 63, 1, 2, 2) != -1:
-                panic("fade out should reject invalid ranges")
+        if build_fade_out_sdl_palette(origin[0].ref[u8&], dst[0].ref[mutable u8&], 1, 0, 63, 63, 63, 1, 2, 2) != -1:
+            panic("fade out should reject invalid ranges")
 
 @test
 def build_fade_in_sdl_palette_constructs_whole_frame() -> void can[Abort.Panic, Video.Palette]:
-    can Video.Palette:
-        can Abort.Panic:
-            origin: mutable u8[8] = zeroed
-            target: mutable u8[8] = zeroed
-            dst: mutable u8[8] = zeroed
+    can Video.Palette, Abort.Panic:
+        origin: mutable u8[8] = zeroed
+        target: mutable u8[8] = zeroed
+        dst: mutable u8[8] = zeroed
 
-            origin[0] <- 10.u8()
-            origin[1] <- 20.u8()
-            origin[2] <- 30.u8()
-            origin[3] <- 44.u8()
-            origin[4] <- 100.u8()
-            origin[5] <- 110.u8()
-            origin[6] <- 120.u8()
-            origin[7] <- 55.u8()
+        origin[0] <- 10.u8()
+        origin[1] <- 20.u8()
+        origin[2] <- 30.u8()
+        origin[3] <- 44.u8()
+        origin[4] <- 100.u8()
+        origin[5] <- 110.u8()
+        origin[6] <- 120.u8()
+        origin[7] <- 55.u8()
 
-            target[0] <- 20.u8()
-            target[1] <- 40.u8()
-            target[2] <- 60.u8()
+        target[0] <- 20.u8()
+        target[1] <- 40.u8()
+        target[2] <- 60.u8()
 
-            if build_fade_in_sdl_palette(origin[0].ref[u8&], target[0].ref[u8&], dst[0].ref[mutable u8&], 0, 0, 1, 2, 2) != 0:
-                panic("fade in frame should build for valid range")
+        if build_fade_in_sdl_palette(origin[0].ref[u8&], target[0].ref[u8&], dst[0].ref[mutable u8&], 0, 0, 1, 2, 2) != 0:
+            panic("fade in frame should build for valid range")
 
-            if dst[0] != 15.u8() or dst[1] != 30.u8() or dst[2] != 45.u8():
-                panic("fade in should interpolate selected color toward target")
+        if dst[0] != 15.u8() or dst[1] != 30.u8() or dst[2] != 45.u8():
+            panic("fade in should interpolate selected color toward target")
 
-            if dst[4] != 100.u8() or dst[5] != 110.u8() or dst[6] != 120.u8():
-                panic("fade in should copy colors outside selected range")
+        if dst[4] != 100.u8() or dst[5] != 110.u8() or dst[6] != 120.u8():
+            panic("fade in should copy colors outside selected range")
 
 @test
 def build_palette_shift_table_interpolates_frames() -> void can[Abort.Panic, Video.Palette]:
-    can Video.Palette:
-        can Abort.Panic:
-            base: mutable u8[8] = zeroed
-            dst: mutable u8[16] = zeroed
+    can Video.Palette, Abort.Panic:
+        base: mutable u8[8] = zeroed
+        dst: mutable u8[16] = zeroed
 
-            base[0] <- 10.u8()
-            base[1] <- 20.u8()
-            base[2] <- 30.u8()
-            base[3] <- 99.u8()
-            base[4] <- 100.u8()
-            base[5] <- 120.u8()
-            base[6] <- 140.u8()
-            base[7] <- 88.u8()
+        base[0] <- 10.u8()
+        base[1] <- 20.u8()
+        base[2] <- 30.u8()
+        base[3] <- 99.u8()
+        base[4] <- 100.u8()
+        base[5] <- 120.u8()
+        base[6] <- 140.u8()
+        base[7] <- 88.u8()
 
-            if build_palette_shift_table(base[0].ref[u8&], dst[0].ref[mutable u8&], 2, 4, 20, 0, 10, 2) != 0:
-                panic("palette shift table should build")
+        if build_palette_shift_table(base[0].ref[u8&], dst[0].ref[mutable u8&], 2, 4, 20, 0, 10, 2) != 0:
+            panic("palette shift table should build")
 
-            if dst[0] != 12.u8() or dst[1] != 15.u8() or dst[2] != 25.u8():
-                panic("first shift frame was wrong")
+        if dst[0] != 12.u8() or dst[1] != 15.u8() or dst[2] != 25.u8():
+            panic("first shift frame was wrong")
 
-            if dst[8] != 15.u8() or dst[9] != 10.u8() or dst[10] != 20.u8():
-                panic("second shift frame was wrong")
+        if dst[8] != 15.u8() or dst[9] != 10.u8() or dst[10] != 20.u8():
+            panic("second shift frame was wrong")
 
-            if dst[3] != 0.u8() or dst[7] != 0.u8():
-                panic("palette shift should leave alpha bytes untouched")
+        if dst[3] != 0.u8() or dst[7] != 0.u8():
+            panic("palette shift should leave alpha bytes untouched")
 
-            if build_palette_shift_table(base[0].ref[u8&], dst[0].ref[mutable u8&], 1, 0, 0, 0, 0, 2) != -1:
-                panic("zero steps should fail")
+        if build_palette_shift_table(base[0].ref[u8&], dst[0].ref[mutable u8&], 1, 0, 0, 0, 0, 2) != -1:
+            panic("zero steps should fail")
 
 @test
 def validate_palette_index_rejects_bad_indices() -> void can[Abort.Panic, Video.Palette]:
-    can Video.Palette:
-        can Abort.Panic:
-            if validate_palette_index(0) != 0:
-                panic("palette index zero should pass validation")
+    can Video.Palette, Abort.Panic:
+        if validate_palette_index(0) != 0:
+            panic("palette index zero should pass validation")
 
-            if validate_palette_index(255) != 0:
-                panic("palette index 255 should pass validation")
+        if validate_palette_index(255) != 0:
+            panic("palette index 255 should pass validation")
 
-            if validate_palette_index(-1) != -1:
-                panic("negative palette indices should fail validation")
+        if validate_palette_index(-1) != -1:
+            panic("negative palette indices should fail validation")
 
-            if validate_palette_index(256) != -1:
-                panic("palette index above 255 should fail validation")
+        if validate_palette_index(256) != -1:
+            panic("palette index above 255 should fail validation")
 
 @test
 def validate_scaled_draw_bounds_rejects_invalid_geometry() -> void can[Abort.Panic, Video.Picture]:
-    can Video.Picture:
-        can Abort.Panic:
-            if validate_scaled_draw_bounds(0, 0, 10, 10, 2, 640, 480) != 0:
-                panic("in-bounds scaled geometry should pass validation")
+    can Video.Picture, Abort.Panic:
+        if validate_scaled_draw_bounds(0, 0, 10, 10, 2, 640, 480) != 0:
+            panic("in-bounds scaled geometry should pass validation")
 
-            if validate_scaled_draw_bounds(630, 0, 10, 1, 1, 640, 480) != 0:
-                panic("rect at right edge should pass validation")
+        if validate_scaled_draw_bounds(630, 0, 10, 1, 1, 640, 480) != 0:
+            panic("rect at right edge should pass validation")
 
-            if validate_scaled_draw_bounds(0, 0, 320, 1, 2, 640, 480) != 0:
-                panic("scaled geometry should be validated with scale factor")
+        if validate_scaled_draw_bounds(0, 0, 320, 1, 2, 640, 480) != 0:
+            panic("scaled geometry should be validated with scale factor")
 
-            if validate_scaled_draw_bounds(-1, 0, 10, 10, 2, 640, 480) != -1:
-                panic("negative destination x should fail validation")
+        if validate_scaled_draw_bounds(-1, 0, 10, 10, 2, 640, 480) != -1:
+            panic("negative destination x should fail validation")
 
-            if validate_scaled_draw_bounds(0, 0, 10, 10, 0, 640, 480) != -1:
-                panic("non-positive scale should fail validation")
+        if validate_scaled_draw_bounds(0, 0, 10, 10, 0, 640, 480) != -1:
+            panic("non-positive scale should fail validation")
 
-            if validate_scaled_draw_bounds(640, 0, 1, 1, 1, 640, 480) != -1:
-                panic("rect overflowing right edge should fail validation")
+        if validate_scaled_draw_bounds(640, 0, 1, 1, 1, 640, 480) != -1:
+            panic("rect overflowing right edge should fail validation")
 
 @test
 def validate_hline_bounds_rejects_out_of_range_values() -> void can[Abort.Panic, Video.Picture]:
-    can Video.Picture:
-        can Abort.Panic:
-            if validate_hline_bounds(0, 0, 10, 640, 480) != 0:
-                panic("valid hline should pass validation")
+    can Video.Picture, Abort.Panic:
+        if validate_hline_bounds(0, 0, 10, 640, 480) != 0:
+            panic("valid hline should pass validation")
 
-            if validate_hline_bounds(630, 0, 11, 640, 480) != -1:
-                panic("hline exceeding right edge should fail validation")
+        if validate_hline_bounds(630, 0, 11, 640, 480) != -1:
+            panic("hline exceeding right edge should fail validation")
 
-            if validate_hline_bounds(-1, 0, 10, 640, 480) != -1:
-                panic("negative x should fail validation")
+        if validate_hline_bounds(-1, 0, 10, 640, 480) != -1:
+            panic("negative x should fail validation")
 
-            if validate_hline_bounds(0, 480, 1, 640, 480) != -1:
-                panic("hline at bottom row should fail validation")
+        if validate_hline_bounds(0, 480, 1, 640, 480) != -1:
+            panic("hline at bottom row should fail validation")
 
 @test
 def validate_vline_bounds_rejects_invalid_sizes() -> void can[Abort.Panic, Video.Picture]:
-    can Video.Picture:
-        can Abort.Panic:
-            if validate_vline_bounds(0, 0, 10, 640, 480) != 0:
-                panic("valid vline should pass validation")
+    can Video.Picture, Abort.Panic:
+        if validate_vline_bounds(0, 0, 10, 640, 480) != 0:
+            panic("valid vline should pass validation")
 
-            if validate_vline_bounds(0, 479, 1, 640, 480) != 0:
-                panic("vline touching bottom edge should pass validation")
+        if validate_vline_bounds(0, 479, 1, 640, 480) != 0:
+            panic("vline touching bottom edge should pass validation")
 
-            if validate_vline_bounds(-1, 0, 1, 640, 480) != -1:
-                panic("negative x should fail validation")
+        if validate_vline_bounds(-1, 0, 1, 640, 480) != -1:
+            panic("negative x should fail validation")
 
-            if validate_vline_bounds(0, 0, 1000, 640, 480) != -1:
-                panic("height beyond screen should fail validation")
+        if validate_vline_bounds(0, 0, 1000, 640, 480) != -1:
+            panic("height beyond screen should fail validation")
 
 @test
 def validate_bar_bounds_rejects_oob_rectangles() -> void can[Abort.Panic, Video.Picture]:
-    can Video.Picture:
-        can Abort.Panic:
-            if validate_bar_bounds(0, 0, 10, 10, 640, 480) != 0:
-                panic("valid bar should pass validation")
+    can Video.Picture, Abort.Panic:
+        if validate_bar_bounds(0, 0, 10, 10, 640, 480) != 0:
+            panic("valid bar should pass validation")
 
-            if validate_bar_bounds(0, 479, 10, 2, 640, 480) != -1:
-                panic("bottom overflow should fail validation")
+        if validate_bar_bounds(0, 479, 10, 2, 640, 480) != -1:
+            panic("bottom overflow should fail validation")
 
-            if validate_bar_bounds(-1, 0, 10, 10, 640, 480) != -1:
-                panic("negative x should fail validation")
+        if validate_bar_bounds(-1, 0, 10, 10, 640, 480) != -1:
+            panic("negative x should fail validation")
 
-            if validate_bar_bounds(0, 0, 0, 10, 640, 480) != 0:
-                panic("zero width should pass validation")
+        if validate_bar_bounds(0, 0, 0, 10, 640, 480) != 0:
+            panic("zero width should pass validation")
 
 @test
 def validate_mem_to_latch_bounds_checks_surface() -> void can[Abort.Panic, Video.Picture]:
-    can Video.Picture:
-        can Abort.Panic:
-            if validate_mem_to_latch_bounds(0, 0, 10, 10, 320, 200) != 0:
-                panic("valid latch copy should pass validation")
+    can Video.Picture, Abort.Panic:
+        if validate_mem_to_latch_bounds(0, 0, 10, 10, 320, 200) != 0:
+            panic("valid latch copy should pass validation")
 
-            if validate_mem_to_latch_bounds(315, 0, 10, 10, 320, 200) != -1:
-                panic("copy exceeding surface bounds should fail validation")
+        if validate_mem_to_latch_bounds(315, 0, 10, 10, 320, 200) != -1:
+            panic("copy exceeding surface bounds should fail validation")
 
 @test
 def validate_pixel_bounds_enforces_single_pixel_geometry() -> void can[Abort.Panic, Video.Picture]:
-    can Video.Picture:
-        can Abort.Panic:
-            if validate_pixel_bounds(10, 10, 640, 480) != 0:
-                panic("valid pixel should pass validation")
+    can Video.Picture, Abort.Panic:
+        if validate_pixel_bounds(10, 10, 640, 480) != 0:
+            panic("valid pixel should pass validation")
 
-            if validate_pixel_bounds(-1, 10, 640, 480) != -1:
-                panic("negative x should fail validation")
+        if validate_pixel_bounds(-1, 10, 640, 480) != -1:
+            panic("negative x should fail validation")
 
-            if validate_pixel_bounds(640, 10, 640, 480) != -1:
-                panic("x on or beyond width should fail validation")
+        if validate_pixel_bounds(640, 10, 640, 480) != -1:
+            panic("x on or beyond width should fail validation")
 
-            if validate_pixel_bounds(10, 480, 640, 480) != -1:
-                panic("y on or beyond height should fail validation")
+        if validate_pixel_bounds(10, 480, 640, 480) != -1:
+            panic("y on or beyond height should fail validation")
 
 @test
 def validate_fizzle_work_area_rejects_oob_inputs() -> void can[Abort.Panic, Video.Picture]:
-    can Video.Picture:
-        can Abort.Panic:
-            if validate_fizzle_work_area(0, 0, 320, 200, 320, 200, 640, 480) != 0:
-                panic("valid rectangle inside both source and screen should pass")
+    can Video.Picture, Abort.Panic:
+        if validate_fizzle_work_area(0, 0, 320, 200, 320, 200, 640, 480) != 0:
+            panic("valid rectangle inside both source and screen should pass")
 
-            if validate_fizzle_work_area(-1, 0, 1, 1, 320, 200, 640, 480) != -1:
-                panic("negative x should fail")
+        if validate_fizzle_work_area(-1, 0, 1, 1, 320, 200, 640, 480) != -1:
+            panic("negative x should fail")
 
-            if validate_fizzle_work_area(0, 0, 0, 1, 320, 200, 640, 480) != -1:
-                panic("zero width should fail")
+        if validate_fizzle_work_area(0, 0, 0, 1, 320, 200, 640, 480) != -1:
+            panic("zero width should fail")
 
-            if validate_fizzle_work_area(319, 0, 2, 1, 320, 200, 640, 480) != -1:
-                panic("source overflow should fail")
+        if validate_fizzle_work_area(319, 0, 2, 1, 320, 200, 640, 480) != -1:
+            panic("source overflow should fail")
 
-            if validate_fizzle_work_area(10, 10, 1, 1, 320, 200, 10, 10) != -1:
-                panic("screen overflow should fail")
+        if validate_fizzle_work_area(10, 10, 1, 1, 320, 200, 10, 10) != -1:
+            panic("screen overflow should fail")
 
 @test
 def measure_prop_string_width_matches_font_glyph_widths() -> void can[Abort.Panic, Video.Text]:
-    can Video.Text:
-        can Abort.Panic:
-            font_width: mutable u8[256] = zeroed
-            text: mutable u8[4] = zeroed
+    can Video.Text, Abort.Panic:
+        font_width: mutable u8[256] = zeroed
+        text: mutable u8[4] = zeroed
 
-            font_width[65] <- 5.u8()
-            font_width[66] <- 7.u8()
-            text[0] <- 65.u8()
-            text[1] <- 66.u8()
-            text[2] <- 0.u8()
+        font_width[65] <- 5.u8()
+        font_width[66] <- 7.u8()
+        text[0] <- 65.u8()
+        text[1] <- 66.u8()
+        text[2] <- 0.u8()
 
-            if measure_prop_string_width(text[0].ref[u8&], font_width[0].ref[u8&]) != 12:
-                panic("prop string width should be sum of glyph widths")
+        if measure_prop_string_width(text[0].ref[u8&], font_width[0].ref[u8&]) != 12:
+            panic("prop string width should be sum of glyph widths")
 
-            text[0] <- 0.u8()
-            if measure_prop_string_width(text[0].ref[u8&], font_width[0].ref[u8&]) != 0:
-                panic("empty strings should measure as zero width")
+        text[0] <- 0.u8()
+        if measure_prop_string_width(text[0].ref[u8&], font_width[0].ref[u8&]) != 0:
+            panic("empty strings should measure as zero width")
 
 @test
 def measure_prop_string_writes_width_and_height() -> void can[Abort.Panic, Video.Text]:
-    can Video.Text:
-        can Abort.Panic:
-            font_width: mutable u8[256] = zeroed
-            text: mutable u8[3] = zeroed
-            width: mutable u16[1] = zeroed
-            height: mutable u16[1] = zeroed
+    can Video.Text, Abort.Panic:
+        font_width: mutable u8[256] = zeroed
+        text: mutable u8[3] = zeroed
+        width: mutable u16[1] = zeroed
+        height: mutable u16[1] = zeroed
 
-            font_width[65] <- 4.u8()
-            font_width[66] <- 6.u8()
-            text[0] <- 65.u8()
-            text[1] <- 66.u8()
+        font_width[65] <- 4.u8()
+        font_width[66] <- 6.u8()
+        text[0] <- 65.u8()
+        text[1] <- 66.u8()
 
-            if measure_prop_string(text[0].ref[u8&], width[0].ref[mutable u16&], height[0].ref[mutable u16&], 9, font_width[0].ref[u8&]) != 0:
-                panic("measure string should succeed")
+        if measure_prop_string(text[0].ref[u8&], width[0].ref[mutable u16&], height[0].ref[mutable u16&], 9, font_width[0].ref[u8&]) != 0:
+            panic("measure string should succeed")
 
-            if width[0] != 10.u16() or height[0] != 9.u16():
-                panic("measure string did not write width and height")
+        if width[0] != 10.u16() or height[0] != 9.u16():
+            panic("measure string did not write width and height")
 
-            if measure_prop_string(text[0].ref[u8&], width[0].ref[mutable u16&], height[0].ref[mutable u16&], -1, font_width[0].ref[u8&]) != -1:
-                panic("negative font height should fail")
+        if measure_prop_string(text[0].ref[u8&], width[0].ref[mutable u16&], height[0].ref[mutable u16&], -1, font_width[0].ref[u8&]) != -1:
+            panic("negative font height should fail")
 
 @test
 def inclusive_span_length_rejects_reversed_ranges() -> void can[Abort.Panic, Video.Geometry]:
-    can Video.Geometry:
-        can Abort.Panic:
-            if inclusive_span_length(2, 6) != 5:
-                panic("inclusive span should include both endpoints")
+    can Video.Geometry, Abort.Panic:
+        if inclusive_span_length(2, 6) != 5:
+            panic("inclusive span should include both endpoints")
 
-            if inclusive_span_length(7, 7) != 1:
-                panic("single-point span should be one unit")
+        if inclusive_span_length(7, 7) != 1:
+            panic("single-point span should be one unit")
 
-            if inclusive_span_length(6, 2) != -1:
-                panic("reversed span should be rejected")
+        if inclusive_span_length(6, 2) != -1:
+            panic("reversed span should be rejected")
