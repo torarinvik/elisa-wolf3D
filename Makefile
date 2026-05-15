@@ -3,6 +3,8 @@ CONFIG ?= config.default
 
 
 BINARY    ?= Chocolate-Wolfenstein-3D
+BUILD_DIR ?= build
+TARGET    := $(BUILD_DIR)/$(BINARY)
 PREFIX    ?= /usr/local
 MANPREFIX ?= $(PREFIX)
 UNAME := $(shell uname -s)
@@ -69,19 +71,21 @@ SRCS += wl_state.cpp
 SRCS += wl_text.cpp
 SRCS += crt.cpp
 
-DEPS = $(filter %.d, $(SRCS:.c=.d) $(SRCS:.cpp=.d))
-OBJS = $(filter %.o, $(SRCS:.c=.o) $(SRCS:.cpp=.o))
+DEPS = $(addprefix $(BUILD_DIR)/,$(filter %.d, $(SRCS:.c=.d) $(SRCS:.cpp=.d)))
+OBJS = $(addprefix $(BUILD_DIR)/,$(filter %.o, $(SRCS:.c=.o) $(SRCS:.cpp=.o)))
 ELISA_SRCS := elisa_wolf3d_effects.elisa elisa_wolf3d_palette.elisa elisa_wolf3d_audio.elisa elisa_wolf3d_save.elisa elisa_wolf3d_ui.elisa elisa_wolf3d_video.elisa elisa_wolf3d_pagefile.elisa elisa_wolf3d_input.elisa
-ELISA_OBJS := $(ELISA_SRCS:.elisa=.o)
+ELISA_OBJS := $(addprefix $(BUILD_DIR)/,$(ELISA_SRCS:.elisa=.o))
 OBJS += $(ELISA_OBJS)
 ELISA_TEST_SRCS := elisa_wolf3d_palette.elisa elisa_wolf3d_audio.elisa elisa_wolf3d_pagefile.elisa elisa_wolf3d_input.elisa elisa_wolf3d_video.elisa
+LEGACY_OBJS := $(filter %.o, $(SRCS:.c=.o) $(SRCS:.cpp=.o)) $(ELISA_SRCS:.elisa=.o)
+LEGACY_DEPS := $(filter %.d, $(SRCS:.c=.d) $(SRCS:.cpp=.d))
 
 .SUFFIXES:
 .SUFFIXES: .c .cpp .d .o
 
 Q ?= @
 
-all: $(BINARY)
+all: $(TARGET)
 
 ifndef NO_DEPS
 depend: $(DEPS)
@@ -91,41 +95,47 @@ ifeq ($(findstring $(MAKECMDGOALS), clean depend Data),)
 endif
 endif
 
-$(BINARY): $(OBJS)
+$(TARGET): $(OBJS)
 	@echo '===> LD $@'
+	$(Q)mkdir -p $(dir $@)
 	$(Q)$(CXX) $(CFLAGS) $(OBJS) $(LDFLAGS) -o $@
 
-id_pm.o: elisa_wolf3d_effects.h elisa_wolf3d_pagefile.h
-id_sd.o: elisa_wolf3d_audio.h elisa_wolf3d_effects.h
-id_in.o: elisa_wolf3d_effects.h elisa_wolf3d_input.h
-id_us_1.o: elisa_wolf3d_ui.h
-id_vh.o: elisa_wolf3d_video.h
-id_vl.o: elisa_wolf3d_palette.h elisa_wolf3d_effects.h
-wl_main.o: elisa_wolf3d_save.h
+$(BUILD_DIR)/id_pm.o: elisa_wolf3d_effects.h elisa_wolf3d_pagefile.h
+$(BUILD_DIR)/id_sd.o: elisa_wolf3d_audio.h elisa_wolf3d_effects.h
+$(BUILD_DIR)/id_in.o: elisa_wolf3d_effects.h elisa_wolf3d_input.h
+$(BUILD_DIR)/id_us_1.o: elisa_wolf3d_ui.h
+$(BUILD_DIR)/id_vh.o: elisa_wolf3d_video.h
+$(BUILD_DIR)/id_vl.o: elisa_wolf3d_palette.h elisa_wolf3d_effects.h
+$(BUILD_DIR)/wl_main.o: elisa_wolf3d_save.h
 
-%.o: %.elisa
+$(BUILD_DIR)/%.o: %.elisa
 	@echo '===> ELISA-O $@'
+	$(Q)mkdir -p $(dir $@)
 	$(Q)cd $(ELISA_COMPILER_DIR) && go run ./src -emit obj -o "$(abspath $@)" "$(abspath $<)"
 
-.c.o:
+$(BUILD_DIR)/%.o: %.c
 	@echo '===> CC $<'
+	$(Q)mkdir -p $(dir $@)
 	$(Q)$(CC) $(CCFLAGS) -c $< -o $@
 
-.cpp.o:
+$(BUILD_DIR)/%.o: %.cpp
 	@echo '===> CXX $<'
+	$(Q)mkdir -p $(dir $@)
 	$(Q)$(CXX) $(CXXFLAGS) -c $< -o $@
 
-.c.d:
+$(BUILD_DIR)/%.d: %.c
 	@echo '===> DEP $<'
-	$(Q)$(CC) $(CCFLAGS) -MM $< | sed 's#^$(@F:%.d=%.o):#$@ $(@:%.d=%.o):#' > $@
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CC) $(CCFLAGS) -MM -MT "$(@:.d=.o) $@" $< > $@
 
-.cpp.d:
+$(BUILD_DIR)/%.d: %.cpp
 	@echo '===> DEP $<'
-	$(Q)$(CXX) $(CXXFLAGS) -MM $< | sed 's#^$(@F:%.d=%.o):#$@ $(@:%.d=%.o):#' > $@
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CXX) $(CXXFLAGS) -MM -MT "$(@:.d=.o) $@" $< > $@
 
 clean distclean:
 	@echo '===> CLEAN'
-	$(Q)rm -fr $(DEPS) $(OBJS) $(BINARY)
+	$(Q)rm -fr $(BUILD_DIR) $(LEGACY_OBJS) $(LEGACY_DEPS) $(BINARY)
 
 elisa-tests:
 	@set -e; \
@@ -134,7 +144,7 @@ elisa-tests:
 		cd $(ELISA_COMPILER_DIR) && go run ./src -emit test "$(abspath $$src)"; \
 	done
 
-install: $(BINARY)
+install: $(TARGET)
 	@echo '===> INSTALL'
 	$(Q)$(INSTALL) -d $(PREFIX)/bin
-	$(Q)$(INSTALL_PROGRAM) $(BINARY) $(PREFIX)/bin
+	$(Q)$(INSTALL_PROGRAM) $(TARGET) $(PREFIX)/bin
