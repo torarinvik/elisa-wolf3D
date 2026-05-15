@@ -601,14 +601,7 @@ void VL_MemToLatch(byte *source, int width, int height,
     VL_LockSurface(destSurface);
     int pitch = destSurface->pitch;
     byte *dest = (byte *) destSurface->pixels + y * pitch + x;
-    for(int ysrc = 0; ysrc < height; ysrc++)
-    {
-        for(int xsrc = 0; xsrc < width; xsrc++)
-        {
-            dest[ysrc * pitch + xsrc] = source[(ysrc * (width >> 2) + (xsrc >> 2))
-                + (xsrc & 3) * (width >> 2) * height];
-        }
-    }
+    wolf3d_copy_planar_to_linear(source, dest, width, height, pitch);
     VL_UnlockSurface(destSurface);
 }
 
@@ -632,20 +625,7 @@ void VL_MemToScreenScaledCoord (byte *source, int width, int height, int destx, 
 
     VL_LockSurface(curSurface);
     byte *vbuf = (byte *) curSurface->pixels;
-    for(int j=0,scj=0; j<height; j++, scj+=scaleFactor)
-    {
-        for(int i=0,sci=0; i<width; i++, sci+=scaleFactor)
-        {
-            byte col = source[(j*(width>>2)+(i>>2))+(i&3)*(width>>2)*height];
-            for(unsigned m=0; m<scaleFactor; m++)
-            {
-                for(unsigned n=0; n<scaleFactor; n++)
-                {
-                    vbuf[(scj+m+desty)*curPitch+sci+n+destx] = col;
-                }
-            }
-        }
-    }
+    wolf3d_draw_planar_scaled_to_linear(source, vbuf, width, height, destx, desty, scaleFactor, curPitch);
     VL_UnlockSurface(curSurface);
 }
 
@@ -670,20 +650,8 @@ void VL_MemToScreenScaledCoord (byte *source, int origwidth, int origheight, int
 
     VL_LockSurface(curSurface);
     byte *vbuf = (byte *) curSurface->pixels;
-    for(int j=0,scj=0; j<height; j++, scj+=scaleFactor)
-    {
-        for(int i=0,sci=0; i<width; i++, sci+=scaleFactor)
-        {
-            byte col = source[((j+srcy)*(origwidth>>2)+((i+srcx)>>2))+((i+srcx)&3)*(origwidth>>2)*origheight];
-            for(unsigned m=0; m<scaleFactor; m++)
-            {
-                for(unsigned n=0; n<scaleFactor; n++)
-                {
-                    vbuf[(scj+m+desty)*curPitch+sci+n+destx] = col;
-                }
-            }
-        }
-    }
+    wolf3d_draw_planar_region_scaled_to_linear(source, vbuf, origwidth, origheight, srcx, srcy,
+        destx, desty, width, height, scaleFactor, curPitch);
     VL_UnlockSurface(curSurface);
 }
 
@@ -703,41 +671,11 @@ void VL_LatchToScreenScaledCoord(SDL_Surface *source, int xsrc, int ysrc,
     if (wolf3d_validate_scaled_draw_bounds(scxdest, scydest, width, height, scaleFactor, screenWidth, screenHeight) != 0)
         Quit ("VL_LatchToScreenScaledCoord: Destination rectangle out of bounds!");
 
-    if(scaleFactor == 1)
+    if(scaleFactor == 1 && screenBits == 8)
     {
-        // HACK: If screenBits is not 8 and the screen is faded out, the
-        //       result will be black when using SDL_BlitSurface. The reason
-        //       is that the logical palette needed for the transformation
-        //       to the screen color depth is not equal to the logical
-        //       palette of the latch (the latch is not faded). Therefore,
-        //       SDL tries to map the colors...
-        //       The result: All colors are mapped to black.
-        //       So, we do the blit on our own...
-        if(screenBits != 8)
-        {
-            VL_LockSurface(source);
-            byte *src = (byte *) source->pixels;
-            unsigned srcPitch = source->pitch;
-
-            VL_LockSurface(curSurface);
-            byte *vbuf = (byte *) curSurface->pixels;
-            for(int j=0,scj=0; j<height; j++, scj++)
-            {
-                for(int i=0,sci=0; i<width; i++, sci++)
-                {
-                    byte col = src[(ysrc + j)*srcPitch + xsrc + i];
-                    vbuf[(scydest+scj)*curPitch+scxdest+sci] = col;
-                }
-            }
-            VL_UnlockSurface(curSurface);
-            VL_UnlockSurface(source);
-        }
-        else
-        {
-            SDL_Rect srcrect = { xsrc, ysrc, width, height };
-            SDL_Rect destrect = { scxdest, scydest, 0, 0 }; // width and height are ignored
-            SDL_BlitSurface(source, &srcrect, curSurface, &destrect);
-        }
+        SDL_Rect srcrect = { xsrc, ysrc, width, height };
+        SDL_Rect destrect = { scxdest, scydest, 0, 0 }; // width and height are ignored
+        SDL_BlitSurface(source, &srcrect, curSurface, &destrect);
     }
     else
     {
@@ -747,20 +685,8 @@ void VL_LatchToScreenScaledCoord(SDL_Surface *source, int xsrc, int ysrc,
 
         VL_LockSurface(curSurface);
         byte *vbuf = (byte *) curSurface->pixels;
-        for(int j=0,scj=0; j<height; j++, scj+=scaleFactor)
-        {
-            for(int i=0,sci=0; i<width; i++, sci+=scaleFactor)
-            {
-                byte col = src[(ysrc + j)*srcPitch + xsrc + i];
-                for(unsigned m=0; m<scaleFactor; m++)
-                {
-                    for(unsigned n=0; n<scaleFactor; n++)
-                    {
-                        vbuf[(scydest+scj+m)*curPitch+scxdest+sci+n] = col;
-                    }
-                }
-            }
-        }
+        wolf3d_copy_linear_scaled_to_linear(src, vbuf, xsrc, ysrc, width, height,
+            scxdest, scydest, scaleFactor, srcPitch, curPitch);
         VL_UnlockSurface(curSurface);
         VL_UnlockSurface(source);
     }

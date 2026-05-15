@@ -82,6 +82,93 @@ def munge_pic_from_temp(source: mutable u8&, temp: u8&, width: u32, height: u32)
 
     return 0
 
+def planar_source_index(width: i32, height: i32, x: usize, y: usize) -> usize can[Video.Picture]:
+    pwidth: usize = (width / 4).usize()
+
+    can Video.Picture:
+        signal Video.Picture
+
+    plane: usize = x - (x / 4) * 4
+    return y * pwidth + (x / 4) + plane * pwidth * height.usize()
+
+def copy_planar_to_linear(source: u8&, dest: mutable u8&, width: i32, height: i32, dest_pitch: i32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        signal Video.Picture
+
+        for y in 0..<height.usize():
+            for x in 0..<width.usize():
+                dest[y * dest_pitch.usize() + x] <- source[planar_source_index(width, height, x, y)]
+
+    return 0
+
+def draw_planar_scaled_to_linear(source: u8&, dest: mutable u8&, width: i32, height: i32, dest_x: i32, dest_y: i32, scale: i32, dest_pitch: i32) -> i32 can[Video.Picture]:
+    if scale <= 0:
+        return -1
+
+    can Video.Picture:
+        scale_usize: usize = scale.usize()
+        dest_x_usize: usize = dest_x.usize()
+        dest_y_usize: usize = dest_y.usize()
+        pitch: usize = dest_pitch.usize()
+
+        for y in 0..<height.usize():
+            scaled_y: usize = y * scale_usize
+            for x in 0..<width.usize():
+                scaled_x: usize = x * scale_usize
+                col: u8 = source[planar_source_index(width, height, x, y)]
+                for sy in 0..<scale_usize:
+                    for sx in 0..<scale_usize:
+                        dest[(dest_y_usize + scaled_y + sy) * pitch + dest_x_usize + scaled_x + sx] <- col
+
+    return 0
+
+def draw_planar_region_scaled_to_linear(source: u8&, dest: mutable u8&, orig_width: i32, orig_height: i32, src_x: i32, src_y: i32, dest_x: i32, dest_y: i32, width: i32, height: i32, scale: i32, dest_pitch: i32) -> i32 can[Video.Picture]:
+    if scale <= 0:
+        return -1
+
+    can Video.Picture:
+        scale_usize: usize = scale.usize()
+        src_x_usize: usize = src_x.usize()
+        src_y_usize: usize = src_y.usize()
+        dest_x_usize: usize = dest_x.usize()
+        dest_y_usize: usize = dest_y.usize()
+        pitch: usize = dest_pitch.usize()
+
+        for y in 0..<height.usize():
+            scaled_y: usize = y * scale_usize
+            for x in 0..<width.usize():
+                scaled_x: usize = x * scale_usize
+                col: u8 = source[planar_source_index(orig_width, orig_height, src_x_usize + x, src_y_usize + y)]
+                for sy in 0..<scale_usize:
+                    for sx in 0..<scale_usize:
+                        dest[(dest_y_usize + scaled_y + sy) * pitch + dest_x_usize + scaled_x + sx] <- col
+
+    return 0
+
+def copy_linear_scaled_to_linear(source: u8&, dest: mutable u8&, src_x: i32, src_y: i32, width: i32, height: i32, dest_x: i32, dest_y: i32, scale: i32, source_pitch: i32, dest_pitch: i32) -> i32 can[Video.Picture]:
+    if scale <= 0:
+        return -1
+
+    can Video.Picture:
+        scale_usize: usize = scale.usize()
+        src_x_usize: usize = src_x.usize()
+        src_y_usize: usize = src_y.usize()
+        dest_x_usize: usize = dest_x.usize()
+        dest_y_usize: usize = dest_y.usize()
+        source_pitch_usize: usize = source_pitch.usize()
+        dest_pitch_usize: usize = dest_pitch.usize()
+
+        for y in 0..<height.usize():
+            scaled_y: usize = y * scale_usize
+            for x in 0..<width.usize():
+                scaled_x: usize = x * scale_usize
+                col: u8 = source[(src_y_usize + y) * source_pitch_usize + src_x_usize + x]
+                for sy in 0..<scale_usize:
+                    for sx in 0..<scale_usize:
+                        dest[(dest_y_usize + scaled_y + sy) * dest_pitch_usize + dest_x_usize + scaled_x + sx] <- col
+
+    return 0
+
 def checked_measure_prop_string_width(text: u8&, font_width: u8&) -> i32 can[Video.Text]:
     width: mutable i32 = 0
     index: mutable usize = 0
@@ -383,6 +470,10 @@ export func wolf3d_log2_ceil(value: u32) -> i32 = log2_ceil_impl
 export func wolf3d_fizzle_mask_for_bits(bits: i32) -> u32 = fizzle_mask_for_bits
 export func wolf3d_validate_munge_pic_width(width: u32) -> i32 = validate_munge_pic_width
 export func wolf3d_munge_pic_from_temp(source: mutable u8&, temp: u8&, width: u32, height: u32) -> i32 = munge_pic_from_temp
+export func wolf3d_copy_planar_to_linear(source: u8&, dest: mutable u8&, width: i32, height: i32, dest_pitch: i32) -> i32 = copy_planar_to_linear
+export func wolf3d_draw_planar_scaled_to_linear(source: u8&, dest: mutable u8&, width: i32, height: i32, dest_x: i32, dest_y: i32, scale: i32, dest_pitch: i32) -> i32 = draw_planar_scaled_to_linear
+export func wolf3d_draw_planar_region_scaled_to_linear(source: u8&, dest: mutable u8&, orig_width: i32, orig_height: i32, src_x: i32, src_y: i32, dest_x: i32, dest_y: i32, width: i32, height: i32, scale: i32, dest_pitch: i32) -> i32 = draw_planar_region_scaled_to_linear
+export func wolf3d_copy_linear_scaled_to_linear(source: u8&, dest: mutable u8&, src_x: i32, src_y: i32, width: i32, height: i32, dest_x: i32, dest_y: i32, scale: i32, source_pitch: i32, dest_pitch: i32) -> i32 = copy_linear_scaled_to_linear
 export func wolf3d_validate_fizzle_frames(frames: u32) -> i32 = validate_fizzle_frames
 export func wolf3d_fizzle_bits_for_dimensions(width: u32, height: u32) -> i32 = fizzle_bits_for_dimensions
 export func wolf3d_fizzle_mask_for_dimensions(width: u32, height: u32) -> u32 = fizzle_mask_for_dimensions
@@ -461,6 +552,102 @@ def munge_pic_from_temp_reorders_planes() -> void can[Abort.Panic, Video.Picture
 
             if source[4] != 2.u8() or source[5] != 6.u8() or source[6] != 3.u8() or source[7] != 7.u8():
                 panic("second row was not rearranged as expected")
+
+@test
+def copy_planar_to_linear_expands_planes_into_rows() -> void can[Abort.Panic, Video.Picture]:
+    can Video.Picture:
+        can Abort.Panic:
+            source: mutable u8[8] = zeroed
+            dest: mutable u8[10] = zeroed
+
+            source[0] <- 0.u8()
+            source[1] <- 4.u8()
+            source[2] <- 1.u8()
+            source[3] <- 5.u8()
+            source[4] <- 2.u8()
+            source[5] <- 6.u8()
+            source[6] <- 3.u8()
+            source[7] <- 7.u8()
+
+            if copy_planar_to_linear(source[0].ref[u8&], dest[0].ref[mutable u8&], 4, 2, 5) != 0:
+                panic("planar copy should succeed")
+
+            if dest[0] != 0.u8() or dest[1] != 1.u8() or dest[2] != 2.u8() or dest[3] != 3.u8():
+                panic("first destination row was not linearized")
+
+            if dest[5] != 4.u8() or dest[6] != 5.u8() or dest[7] != 6.u8() or dest[8] != 7.u8():
+                panic("second destination row was not linearized")
+
+@test
+def draw_planar_scaled_to_linear_scales_each_pixel() -> void can[Abort.Panic, Video.Picture]:
+    can Video.Picture:
+        can Abort.Panic:
+            source: mutable u8[4] = zeroed
+            dest: mutable u8[30] = zeroed
+
+            source[0] <- 1.u8()
+            source[1] <- 2.u8()
+            source[2] <- 3.u8()
+            source[3] <- 4.u8()
+
+            if draw_planar_scaled_to_linear(source[0].ref[u8&], dest[0].ref[mutable u8&], 4, 1, 1, 1, 2, 10) != 0:
+                panic("scaled planar draw should succeed")
+
+            if dest[11] != 1.u8() or dest[12] != 1.u8() or dest[21] != 1.u8() or dest[22] != 1.u8():
+                panic("first pixel was not scaled to a 2x2 block")
+
+            if dest[17] != 4.u8() or dest[18] != 4.u8() or dest[27] != 4.u8() or dest[28] != 4.u8():
+                panic("last pixel was not scaled to a 2x2 block")
+
+            if draw_planar_scaled_to_linear(source[0].ref[u8&], dest[0].ref[mutable u8&], 4, 1, 0, 0, 0, 10) != -1:
+                panic("non-positive scale should be rejected")
+
+@test
+def draw_planar_region_scaled_to_linear_copies_selected_region() -> void can[Abort.Panic, Video.Picture]:
+    can Video.Picture:
+        can Abort.Panic:
+            source: mutable u8[8] = zeroed
+            dest: mutable u8[4] = zeroed
+
+            source[0] <- 0.u8()
+            source[1] <- 4.u8()
+            source[2] <- 1.u8()
+            source[3] <- 5.u8()
+            source[4] <- 2.u8()
+            source[5] <- 6.u8()
+            source[6] <- 3.u8()
+            source[7] <- 7.u8()
+
+            if draw_planar_region_scaled_to_linear(source[0].ref[u8&], dest[0].ref[mutable u8&], 4, 2, 1, 1, 0, 0, 2, 1, 1, 4) != 0:
+                panic("region scaled planar draw should succeed")
+
+            if dest[0] != 5.u8() or dest[1] != 6.u8():
+                panic("selected planar region was not copied")
+
+@test
+def copy_linear_scaled_to_linear_scales_surface_region() -> void can[Abort.Panic, Video.Picture]:
+    can Video.Picture:
+        can Abort.Panic:
+            source: mutable u8[8] = zeroed
+            dest: mutable u8[32] = zeroed
+
+            source[0] <- 1.u8()
+            source[1] <- 2.u8()
+            source[2] <- 3.u8()
+            source[3] <- 4.u8()
+            source[4] <- 5.u8()
+            source[5] <- 6.u8()
+            source[6] <- 7.u8()
+            source[7] <- 8.u8()
+
+            if copy_linear_scaled_to_linear(source[0].ref[u8&], dest[0].ref[mutable u8&], 1, 0, 2, 2, 0, 0, 2, 4, 8) != 0:
+                panic("linear scaled copy should succeed")
+
+            if dest[0] != 2.u8() or dest[1] != 2.u8() or dest[8] != 2.u8() or dest[9] != 2.u8():
+                panic("top-left copied pixel was not scaled")
+
+            if dest[18] != 7.u8() or dest[19] != 7.u8() or dest[26] != 7.u8() or dest[27] != 7.u8():
+                panic("bottom-right copied pixel was not scaled")
 
 @test
 def validate_fizzle_frames_rejects_zero() -> void can[Abort.Panic, Video.Fizzle]:
