@@ -17,7 +17,12 @@ extern wolf3d_legacy_startup_subsystems() -> i32 effects[Game.Run, Unsafe.RawExt
 extern wolf3d_legacy_check_memory_floor() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_load_config_and_intro() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_prepare_startup_assets() -> i32 effects[Game.Run, Unsafe.RawExtern]
-extern wolf3d_legacy_demo_loop() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_run_ted_launch_if_requested() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_prepare_demo_loop() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_should_run_attract_loop() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_run_attract_cycle(last_demo: i32) -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_run_control_panel_cycle() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_run_pending_game_cycle() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_unreachable_demo_loop_exit() -> i32 effects[Game.Run, Unsafe.RawExtern]
 
 def select_wolf3d_data_files() -> i32 can[Game.Run, FileSystem.Read, FileSystem.Write, Unsafe.RawExtern]:
@@ -56,6 +61,32 @@ def initialize_game() -> i32 can[Game.Run, Unsafe.RawExtern]:
             return 1
         return 0
 
+def run_demo_loop() -> i32 can[Game.Run, Unsafe.RawExtern]:
+    can Game.Run, Unsafe.RawExtern:
+        if wolf3d_legacy_run_ted_launch_if_requested() != 0:
+            return 1
+        if wolf3d_legacy_prepare_demo_loop() != 0:
+            return 1
+
+        last_demo: mutable i32 = 0
+
+        while true:
+            in_attract_loop: mutable bool = wolf3d_legacy_should_run_attract_loop() != 0
+            while in_attract_loop:
+                next_demo: i32 = wolf3d_legacy_run_attract_cycle(last_demo)
+                if next_demo < 0:
+                    in_attract_loop <- false
+                else:
+                    last_demo <- next_demo
+                    in_attract_loop <- wolf3d_legacy_should_run_attract_loop() != 0
+
+            if wolf3d_legacy_run_control_panel_cycle() != 0:
+                return 1
+            if wolf3d_legacy_run_pending_game_cycle() != 0:
+                return 1
+
+        return 0
+
 def run_game() -> i32 can[Game.Run, FileSystem.Read, FileSystem.Write, Unsafe.RawExtern]:
     can Game.Run:
         signal Game.Run
@@ -71,7 +102,7 @@ def run_game() -> i32 can[Game.Run, FileSystem.Read, FileSystem.Write, Unsafe.Ra
     can Game.Run, Unsafe.RawExtern:
         if initialize_game() != 0:
             return 1
-        if wolf3d_legacy_demo_loop() != 0:
+        if run_demo_loop() != 0:
             return 1
         return wolf3d_legacy_unreachable_demo_loop_exit()
 

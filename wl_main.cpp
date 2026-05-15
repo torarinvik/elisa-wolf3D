@@ -1513,31 +1513,32 @@ void Quit (const char *errorStr, ...)
 */
 
 
-static void DemoLoop()
+extern "C" int wolf3d_legacy_run_ted_launch_if_requested(void)
 {
-    int LastDemo = 0;
-
 //
 // check for launch from ted
 //
-    if (param_tedlevel != -1)
-    {
-        param_nowait = true;
-        EnableEndGameMenuItem();
-        NewGame(param_difficulty,0);
+    if (param_tedlevel == -1)
+        return 0;
+
+    param_nowait = true;
+    EnableEndGameMenuItem();
+    NewGame(param_difficulty,0);
 
 #ifndef SPEAR
-        gamestate.episode = param_tedlevel/10;
-        gamestate.mapon = param_tedlevel%10;
+    gamestate.episode = param_tedlevel/10;
+    gamestate.mapon = param_tedlevel%10;
 #else
-        gamestate.episode = 0;
-        gamestate.mapon = param_tedlevel;
+    gamestate.episode = 0;
+    gamestate.mapon = param_tedlevel;
 #endif
-        GameLoop();
-        Quit (NULL);
-    }
+    GameLoop();
+    Quit (NULL);
+    return 0;
+}
 
-
+extern "C" int wolf3d_legacy_prepare_demo_loop(void)
+{
 //
 // main game cycle
 //
@@ -1572,97 +1573,132 @@ static void DemoLoop()
 #endif
 
 #endif
+    return 0;
+}
 
-    while (1)
-    {
-        while (!param_nowait)
-        {
+extern "C" int wolf3d_legacy_should_run_attract_loop(void)
+{
+    return !param_nowait;
+}
+
+extern "C" int wolf3d_legacy_run_attract_cycle(int lastDemo)
+{
 //
 // title page
 //
 #ifndef DEMOTEST
 
 #ifdef SPEAR
-            SDL_Color pal[256];
-            CA_CacheGrChunk (TITLEPALETTE);
-            VL_ConvertPalette(grsegs[TITLEPALETTE], pal, 256);
+    SDL_Color pal[256];
+    CA_CacheGrChunk (TITLEPALETTE);
+    VL_ConvertPalette(grsegs[TITLEPALETTE], pal, 256);
 
-            CA_CacheGrChunk (TITLE1PIC);
-            VWB_DrawPic (0,0,TITLE1PIC);
-            UNCACHEGRCHUNK (TITLE1PIC);
+    CA_CacheGrChunk (TITLE1PIC);
+    VWB_DrawPic (0,0,TITLE1PIC);
+    UNCACHEGRCHUNK (TITLE1PIC);
 
-            CA_CacheGrChunk (TITLE2PIC);
-            VWB_DrawPic (0,80,TITLE2PIC);
-            UNCACHEGRCHUNK (TITLE2PIC);
-            VW_UpdateScreen ();
-            VL_FadeIn(0,255,pal,30);
+    CA_CacheGrChunk (TITLE2PIC);
+    VWB_DrawPic (0,80,TITLE2PIC);
+    UNCACHEGRCHUNK (TITLE2PIC);
+    VW_UpdateScreen ();
+    VL_FadeIn(0,255,pal,30);
 
-            UNCACHEGRCHUNK (TITLEPALETTE);
+    UNCACHEGRCHUNK (TITLEPALETTE);
 #else
-            CA_CacheScreen (TITLEPIC);
-            VW_UpdateScreen ();
-            VW_FadeIn();
+    CA_CacheScreen (TITLEPIC);
+    VW_UpdateScreen ();
+    VW_FadeIn();
 #endif
-            if (IN_UserInput(TickBase*15))
-                break;
-            VW_FadeOut();
+    if (IN_UserInput(TickBase*15))
+        return -1;
+    VW_FadeOut();
 //
 // credits page
 //
-            CA_CacheScreen (CREDITSPIC);
-            VW_UpdateScreen();
-            VW_FadeIn ();
-            if (IN_UserInput(TickBase*10))
-                break;
-            VW_FadeOut ();
+    CA_CacheScreen (CREDITSPIC);
+    VW_UpdateScreen();
+    VW_FadeIn ();
+    if (IN_UserInput(TickBase*10))
+        return -1;
+    VW_FadeOut ();
 //
 // high scores
 //
-            DrawHighScores ();
-            VW_UpdateScreen ();
-            VW_FadeIn ();
+    DrawHighScores ();
+    VW_UpdateScreen ();
+    VW_FadeIn ();
 
-            if (IN_UserInput(TickBase*10))
-                break;
+    if (IN_UserInput(TickBase*10))
+        return -1;
 #endif
 //
 // demo
 //
 
-            #ifndef SPEARDEMO
-            PlayDemo (LastDemo++%4);
-            #else
-            PlayDemo (0);
-            #endif
-
-            if (playstate == ex_abort)
-                break;
-            VW_FadeOut();
-            if(screenHeight % 200 != 0)
-                VL_ClearScreen(0);
-            StartCPMusic(INTROSONG);
-        }
-
-        VW_FadeOut ();
-
-#ifdef DEBUGKEYS
-        if (Keyboard[sc_Tab] && param_debugmode)
-            RecordDemo ();
-        else
-            US_ControlPanel (sc_None);
+#ifndef SPEARDEMO
+    PlayDemo (lastDemo%4);
+    lastDemo++;
 #else
-        US_ControlPanel (0);
+    PlayDemo (0);
 #endif
 
-        if (startgame || loadedgame)
+    if (playstate == ex_abort)
+        return -1;
+    VW_FadeOut();
+    if(screenHeight % 200 != 0)
+        VL_ClearScreen(0);
+    StartCPMusic(INTROSONG);
+    return lastDemo;
+}
+
+extern "C" int wolf3d_legacy_run_control_panel_cycle(void)
+{
+    VW_FadeOut ();
+
+#ifdef DEBUGKEYS
+    if (Keyboard[sc_Tab] && param_debugmode)
+        RecordDemo ();
+    else
+        US_ControlPanel (sc_None);
+#else
+    US_ControlPanel (0);
+#endif
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_run_pending_game_cycle(void)
+{
+    if (startgame || loadedgame)
+    {
+        GameLoop ();
+        if(!param_nowait)
         {
-            GameLoop ();
-            if(!param_nowait)
-            {
-                VW_FadeOut();
-                StartCPMusic(INTROSONG);
-            }
+            VW_FadeOut();
+            StartCPMusic(INTROSONG);
         }
+    }
+    return 0;
+}
+
+static void DemoLoop()
+{
+    int LastDemo = 0;
+
+    wolf3d_legacy_run_ted_launch_if_requested();
+    wolf3d_legacy_prepare_demo_loop();
+
+    while (1)
+    {
+        while (wolf3d_legacy_should_run_attract_loop())
+        {
+            int nextDemo = wolf3d_legacy_run_attract_cycle(LastDemo);
+            if (nextDemo < 0)
+                break;
+            LastDemo = nextDemo;
+        }
+
+        wolf3d_legacy_run_control_panel_cycle();
+        wolf3d_legacy_run_pending_game_cycle();
     }
 }
 
