@@ -1355,7 +1355,6 @@ extern "C" int wolf3d_legacy_prepare_startup_assets(void)
 extern "C" int wolf3d_legacy_prepare_hosted_session_state(void)
 {
     EnableEndGameMenuItem();
-    param_nowait = true;
     return 0;
 }
 
