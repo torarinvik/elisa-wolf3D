@@ -169,6 +169,49 @@ def copy_linear_scaled_to_linear(source: u8&, dest: mutable u8&, src_x: i32, src
 
     return 0
 
+def fill_linear_span(dest: mutable u8&, width: i32, color: i32) -> i32 can[Video.Picture]:
+    if width < 0:
+        return -1
+
+    can Video.Picture:
+        signal Video.Picture
+
+        value: u8 = color.u8()
+        for x in 0..<width.usize():
+            dest[x] <- value
+
+    return 0
+
+def fill_linear_vline(dest: mutable u8&, height: i32, pitch: i32, color: i32) -> i32 can[Video.Picture]:
+    if height < 0:
+        return -1
+
+    can Video.Picture:
+        signal Video.Picture
+
+        value: u8 = color.u8()
+        pitch_usize: usize = pitch.usize()
+        for y in 0..<height.usize():
+            dest[y * pitch_usize] <- value
+
+    return 0
+
+def fill_linear_rect(dest: mutable u8&, width: i32, height: i32, pitch: i32, color: i32) -> i32 can[Video.Picture]:
+    if width < 0 or height < 0:
+        return -1
+
+    can Video.Picture:
+        signal Video.Picture
+
+        value: u8 = color.u8()
+        pitch_usize: usize = pitch.usize()
+        for y in 0..<height.usize():
+            row: usize = y * pitch_usize
+            for x in 0..<width.usize():
+                dest[row + x] <- value
+
+    return 0
+
 def checked_measure_prop_string_width(text: u8&, font_width: u8&) -> i32 can[Video.Text]:
     width: mutable i32 = 0
     index: mutable usize = 0
@@ -474,6 +517,9 @@ export func wolf3d_copy_planar_to_linear(source: u8&, dest: mutable u8&, width: 
 export func wolf3d_draw_planar_scaled_to_linear(source: u8&, dest: mutable u8&, width: i32, height: i32, dest_x: i32, dest_y: i32, scale: i32, dest_pitch: i32) -> i32 = draw_planar_scaled_to_linear
 export func wolf3d_draw_planar_region_scaled_to_linear(source: u8&, dest: mutable u8&, orig_width: i32, orig_height: i32, src_x: i32, src_y: i32, dest_x: i32, dest_y: i32, width: i32, height: i32, scale: i32, dest_pitch: i32) -> i32 = draw_planar_region_scaled_to_linear
 export func wolf3d_copy_linear_scaled_to_linear(source: u8&, dest: mutable u8&, src_x: i32, src_y: i32, width: i32, height: i32, dest_x: i32, dest_y: i32, scale: i32, source_pitch: i32, dest_pitch: i32) -> i32 = copy_linear_scaled_to_linear
+export func wolf3d_fill_linear_span(dest: mutable u8&, width: i32, color: i32) -> i32 = fill_linear_span
+export func wolf3d_fill_linear_vline(dest: mutable u8&, height: i32, pitch: i32, color: i32) -> i32 = fill_linear_vline
+export func wolf3d_fill_linear_rect(dest: mutable u8&, width: i32, height: i32, pitch: i32, color: i32) -> i32 = fill_linear_rect
 export func wolf3d_validate_fizzle_frames(frames: u32) -> i32 = validate_fizzle_frames
 export func wolf3d_fizzle_bits_for_dimensions(width: u32, height: u32) -> i32 = fizzle_bits_for_dimensions
 export func wolf3d_fizzle_mask_for_dimensions(width: u32, height: u32) -> u32 = fizzle_mask_for_dimensions
@@ -648,6 +694,51 @@ def copy_linear_scaled_to_linear_scales_surface_region() -> void can[Abort.Panic
 
             if dest[18] != 7.u8() or dest[19] != 7.u8() or dest[26] != 7.u8() or dest[27] != 7.u8():
                 panic("bottom-right copied pixel was not scaled")
+
+@test
+def fill_linear_span_writes_requested_width() -> void can[Abort.Panic, Video.Picture]:
+    can Video.Picture:
+        can Abort.Panic:
+            dest: mutable u8[5] = zeroed
+
+            if fill_linear_span(dest[0].ref[mutable u8&], 3, 9) != 0:
+                panic("span fill should succeed")
+
+            if dest[0] != 9.u8() or dest[1] != 9.u8() or dest[2] != 9.u8() or dest[3] != 0.u8():
+                panic("span fill touched the wrong bytes")
+
+            if fill_linear_span(dest[0].ref[mutable u8&], -1, 9) != -1:
+                panic("negative span width should be rejected")
+
+@test
+def fill_linear_vline_uses_pitch() -> void can[Abort.Panic, Video.Picture]:
+    can Video.Picture:
+        can Abort.Panic:
+            dest: mutable u8[12] = zeroed
+
+            if fill_linear_vline(dest[1].ref[mutable u8&], 3, 4, 7) != 0:
+                panic("vertical line fill should succeed")
+
+            if dest[1] != 7.u8() or dest[5] != 7.u8() or dest[9] != 7.u8():
+                panic("vertical line fill did not use pitch")
+
+            if dest[0] != 0.u8() or dest[2] != 0.u8() or dest[6] != 0.u8():
+                panic("vertical line fill touched neighboring pixels")
+
+@test
+def fill_linear_rect_writes_each_row() -> void can[Abort.Panic, Video.Picture]:
+    can Video.Picture:
+        can Abort.Panic:
+            dest: mutable u8[12] = zeroed
+
+            if fill_linear_rect(dest[1].ref[mutable u8&], 2, 3, 4, 5) != 0:
+                panic("rect fill should succeed")
+
+            if dest[1] != 5.u8() or dest[2] != 5.u8() or dest[5] != 5.u8() or dest[6] != 5.u8() or dest[9] != 5.u8() or dest[10] != 5.u8():
+                panic("rect fill did not write the expected area")
+
+            if dest[0] != 0.u8() or dest[3] != 0.u8() or dest[4] != 0.u8() or dest[7] != 0.u8():
+                panic("rect fill touched outside the expected area")
 
 @test
 def validate_fizzle_frames_rejects_zero() -> void can[Abort.Panic, Video.Fizzle]:

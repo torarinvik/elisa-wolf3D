@@ -522,7 +522,7 @@ void VL_Hlin (unsigned x, unsigned y, unsigned width, int color)
 
     VL_LockSurface(curSurface);
     Uint8 *dest = ((byte *) curSurface->pixels) + y * curPitch + x;
-    memset(dest, color, width);
+    wolf3d_fill_linear_span(dest, width, color);
     VL_UnlockSurface(curSurface);
 }
 
@@ -542,12 +542,7 @@ void VL_Vlin (int x, int y, int height, int color)
 
     VL_LockSurface(curSurface);
     Uint8 *dest = ((byte *) curSurface->pixels) + y * curPitch + x;
-
-    while (height--)
-    {
-        *dest = color;
-        dest += curPitch;
-    }
+    wolf3d_fill_linear_vline(dest, height, curPitch, color);
     VL_UnlockSurface(curSurface);
 }
 
@@ -567,12 +562,7 @@ void VL_BarScaledCoord (int scx, int scy, int scwidth, int scheight, int color)
 
     VL_LockSurface(curSurface);
     Uint8 *dest = ((byte *) curSurface->pixels) + scy * curPitch + scx;
-
-    while (scheight--)
-    {
-        memset(dest, color, scwidth);
-        dest += curPitch;
-    }
+    wolf3d_fill_linear_rect(dest, scwidth, scheight, curPitch, color);
     VL_UnlockSurface(curSurface);
 }
 
