@@ -312,6 +312,17 @@ def measure_prop_string_width(text: u8&, font_width: u8&) -> i32 can[Video.Text]
     can Video.Text:
         return checked_measure_prop_string_width(text, font_width)
 
+def measure_prop_string(text: u8&, width: mutable u16&, height: mutable u16&, font_height: i32, font_width: u8&) -> i32 can[Video.Text]:
+    if font_height < 0:
+        return -1
+
+    can Video.Text:
+        signal Video.Text
+        width[0] <- measure_prop_string_width(text, font_width).u16()
+        height[0] <- font_height.u16()
+
+    return 0
+
 def checked_inclusive_span_length(start: i32, end: i32) -> i32 error[VideoCoordinateError] can[Video.Geometry]:
     if end < start.i32():
         raise VideoCoordinateError.OutOfBounds
@@ -620,6 +631,7 @@ export func wolf3d_validate_fizzle_work_area(dest_x: i32, dest_y: i32, width: i3
 export func wolf3d_fade_scale_6bit_color_component(component: i32) -> i32 = fade_scale_6bit_color_component
 export func wolf3d_fade_interpolated_channel(origin: i32, target: i32, frame: i32, steps: i32) -> i32 = fade_interpolated_channel
 export func wolf3d_measure_prop_string_width(text: u8&, font_width: u8&) -> i32 = measure_prop_string_width
+export func wolf3d_measure_prop_string(text: u8&, width: mutable u16&, height: mutable u16&, font_height: i32, font_width: u8&) -> i32 = measure_prop_string
 export func wolf3d_inclusive_span_length(start: i32, end: i32) -> i32 = inclusive_span_length
 export func wolf3d_convert_palette_6bit_rgb_to_sdl_colors(src: u8&, dst: mutable u8&, count: i32) -> i32 = convert_palette_6bit_rgb_to_sdl_colors
 export func wolf3d_fill_sdl_palette_rgb(dst: mutable u8&, red: i32, green: i32, blue: i32, count: i32) -> i32 = fill_sdl_palette_rgb
@@ -779,6 +791,7 @@ def copy_linear_scaled_to_linear_scales_surface_region() -> void can[Abort.Panic
 
             if dest[18] != 7.u8() or dest[19] != 7.u8() or dest[26] != 7.u8() or dest[27] != 7.u8():
                 panic("bottom-right copied pixel was not scaled")
+
 
 @test
 def fill_linear_span_writes_requested_width() -> void can[Abort.Panic, Video.Picture]:
@@ -1228,6 +1241,29 @@ def measure_prop_string_width_matches_font_glyph_widths() -> void can[Abort.Pani
             text[0] <- 0.u8()
             if measure_prop_string_width(text[0].ref[u8&], font_width[0].ref[u8&]) != 0:
                 panic("empty strings should measure as zero width")
+
+@test
+def measure_prop_string_writes_width_and_height() -> void can[Abort.Panic, Video.Text]:
+    can Video.Text:
+        can Abort.Panic:
+            font_width: mutable u8[256] = zeroed
+            text: mutable u8[3] = zeroed
+            width: mutable u16[1] = zeroed
+            height: mutable u16[1] = zeroed
+
+            font_width[65] <- 4.u8()
+            font_width[66] <- 6.u8()
+            text[0] <- 65.u8()
+            text[1] <- 66.u8()
+
+            if measure_prop_string(text[0].ref[u8&], width[0].ref[mutable u16&], height[0].ref[mutable u16&], 9, font_width[0].ref[u8&]) != 0:
+                panic("measure string should succeed")
+
+            if width[0] != 10.u16() or height[0] != 9.u16():
+                panic("measure string did not write width and height")
+
+            if measure_prop_string(text[0].ref[u8&], width[0].ref[mutable u16&], height[0].ref[mutable u16&], -1, font_width[0].ref[u8&]) != -1:
+                panic("negative font height should fail")
 
 @test
 def inclusive_span_length_rejects_reversed_ranges() -> void can[Abort.Panic, Video.Geometry]:

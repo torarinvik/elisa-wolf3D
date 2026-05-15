@@ -35,6 +35,7 @@ int32_t wolf3d_validate_fizzle_work_area(int32_t dest_x, int32_t dest_y, int32_t
 int32_t wolf3d_fade_scale_6bit_color_component(int32_t component);
 int32_t wolf3d_fade_interpolated_channel(int32_t origin, int32_t target, int32_t frame, int32_t steps);
 int32_t wolf3d_measure_prop_string_width(const uint8_t *text, const uint8_t *font_width);
+int32_t wolf3d_measure_prop_string(const uint8_t *text, uint16_t *width, uint16_t *height, int32_t font_height, const uint8_t *font_width);
 int32_t wolf3d_inclusive_span_length(int32_t start, int32_t end);
 int32_t wolf3d_convert_palette_6bit_rgb_to_sdl_colors(const uint8_t *src, uint8_t *dst, int32_t count);
 int32_t wolf3d_fill_sdl_palette_rgb(uint8_t *dst, int32_t red, int32_t green, int32_t blue, int32_t count);

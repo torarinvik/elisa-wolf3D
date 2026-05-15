@@ -62,8 +62,9 @@ void VL_MungePic (byte *source, unsigned width, unsigned height)
 
 void VWL_MeasureString (const char *string, word *width, word *height, fontstruct *font)
 {
-    *height = font->height;
-    *width = (word) wolf3d_measure_prop_string_width((uint8_t *) string, (uint8_t *) font->width);
+    if (wolf3d_measure_prop_string((const uint8_t *) string, width, height,
+        font->height, (const uint8_t *) font->width) != 0)
+        Quit ("VWL_MeasureString: Invalid font height!");
 }
 
 void VW_MeasurePropString (const char *string, word *width, word *height)
