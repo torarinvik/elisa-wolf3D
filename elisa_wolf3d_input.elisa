@@ -40,39 +40,36 @@ export func wolf3d_translate_mouse_buttons(buttons: i32, middle_pressed: i32, ri
 
 @test
 def clamp_joy_axis_limits_extremes() -> void can[Abort.Panic, Input.Poll]:
-    can Input.Poll:
-        can Abort.Panic:
-            if clamp_joy_axis(-999) != -128:
-                panic("clamp should bound low values to -128")
+    can Input.Poll, Abort.Panic:
+        if clamp_joy_axis(-999) != -128:
+            panic("clamp should bound low values to -128")
 
-            if clamp_joy_axis(999) != 127:
-                panic("clamp should bound high values to 127")
+        if clamp_joy_axis(999) != 127:
+            panic("clamp should bound high values to 127")
 
-            if clamp_joy_axis(12) != 12:
-                panic("clamp should keep in-range values unchanged")
+        if clamp_joy_axis(12) != 12:
+            panic("clamp should keep in-range values unchanged")
 
 @test
 def apply_joy_hat_axis_prefers_positive_then_negative() -> void can[Abort.Panic, Input.Poll]:
-    can Input.Poll:
-        can Abort.Panic:
-            if apply_joy_hat_axis(0, 0, 1) != 127:
-                panic("positive hat input should translate to the positive extreme")
+    can Input.Poll, Abort.Panic:
+        if apply_joy_hat_axis(0, 0, 1) != 127:
+            panic("positive hat input should translate to the positive extreme")
 
-            if apply_joy_hat_axis(0, 1, 0) != -127:
-                panic("negative hat input should translate to the negative extreme")
+        if apply_joy_hat_axis(0, 1, 0) != -127:
+            panic("negative hat input should translate to the negative extreme")
 
-            if apply_joy_hat_axis(120, 0, 1) != 127:
-                panic("positive hat input should clamp after adjustment")
+        if apply_joy_hat_axis(120, 0, 1) != 127:
+            panic("positive hat input should clamp after adjustment")
 
 @test
 def translate_mouse_buttons_maps_middle_and_right() -> void can[Abort.Panic, Input.Poll]:
-    can Input.Poll:
-        can Abort.Panic:
-            if translate_mouse_buttons(1, 1, 0) != 5:
-                panic("middle button should add the middle mouse bit")
+    can Input.Poll, Abort.Panic:
+        if translate_mouse_buttons(1, 1, 0) != 5:
+            panic("middle button should add the middle mouse bit")
 
-            if translate_mouse_buttons(1, 0, 1) != 3:
-                panic("right button should add the right mouse bit")
+        if translate_mouse_buttons(1, 0, 1) != 3:
+            panic("right button should add the right mouse bit")
 
-            if translate_mouse_buttons(1, 1, 1) != 7:
-                panic("combined mouse buttons should map all bits")
+        if translate_mouse_buttons(1, 1, 1) != 7:
+            panic("combined mouse buttons should map all bits")
