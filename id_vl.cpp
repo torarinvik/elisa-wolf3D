@@ -5,6 +5,7 @@
 #include "crt.h"
 #include "elisa_wolf3d_effects.h"
 #include "elisa_wolf3d_palette.h"
+#include "elisa_wolf3d_video.h"
 #pragma hdrstop
 
 // Uncomment the following line, if you get destination out of bounds
@@ -403,12 +404,15 @@ void VL_GetPalette (SDL_Color *palette)
 
 void VL_FadeOut (int start, int end, int red, int green, int blue, int steps)
 {
-    int         i,j,orig,delta;
+    int         i,j,orig;
     SDL_Color   *origptr, *newptr;
 
-    red = red * 255 / 63;
-    green = green * 255 / 63;
-    blue = blue * 255 / 63;
+    if (wolf3d_validate_fade_steps(steps) != 0)
+        Quit ("VL_FadeOut: steps must be greater than zero!");
+
+    red = wolf3d_fade_scale_6bit_color_component(red);
+    green = wolf3d_fade_scale_6bit_color_component(green);
+    blue = wolf3d_fade_scale_6bit_color_component(blue);
 
     VL_WaitVBL(1);
     VL_GetPalette(palette1);
@@ -424,14 +428,11 @@ void VL_FadeOut (int start, int end, int red, int green, int blue, int steps)
         for (j=start;j<=end;j++)
         {
             orig = origptr->r;
-            delta = red-orig;
-            newptr->r = orig + delta * i / steps;
+            newptr->r = wolf3d_fade_interpolated_channel(orig, red, i, steps);
             orig = origptr->g;
-            delta = green-orig;
-            newptr->g = orig + delta * i / steps;
+            newptr->g = wolf3d_fade_interpolated_channel(orig, green, i, steps);
             orig = origptr->b;
-            delta = blue-orig;
-            newptr->b = orig + delta * i / steps;
+            newptr->b = wolf3d_fade_interpolated_channel(orig, blue, i, steps);
             origptr++;
             newptr++;
         }
@@ -459,7 +460,10 @@ void VL_FadeOut (int start, int end, int red, int green, int blue, int steps)
 
 void VL_FadeIn (int start, int end, SDL_Color *palette, int steps)
 {
-    int i,j,delta;
+    int i,j;
+
+    if (wolf3d_validate_fade_steps(steps) != 0)
+        Quit ("VL_FadeIn: steps must be greater than zero!");
 
     VL_WaitVBL(1);
     VL_GetPalette(palette1);
@@ -472,12 +476,9 @@ void VL_FadeIn (int start, int end, SDL_Color *palette, int steps)
     {
         for (j=start;j<=end;j++)
         {
-            delta = palette[j].r-palette1[j].r;
-            palette2[j].r = palette1[j].r + delta * i / steps;
-            delta = palette[j].g-palette1[j].g;
-            palette2[j].g = palette1[j].g + delta * i / steps;
-            delta = palette[j].b-palette1[j].b;
-            palette2[j].b = palette1[j].b + delta * i / steps;
+            palette2[j].r = wolf3d_fade_interpolated_channel(palette1[j].r, palette[j].r, i, steps);
+            palette2[j].g = wolf3d_fade_interpolated_channel(palette1[j].g, palette[j].g, i, steps);
+            palette2[j].b = wolf3d_fade_interpolated_channel(palette1[j].b, palette[j].b, i, steps);
         }
 
         if(!usedoublebuffering || screenBits == 8) VL_WaitVBL(1);

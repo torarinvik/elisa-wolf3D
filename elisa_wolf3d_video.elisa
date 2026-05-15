@@ -2,6 +2,7 @@ permission Video:
     Fizzle
     Geometry
     Picture
+    Palette
 
 def log2_ceil_impl(value: u32) -> i32 can[Video.Geometry]:
     can Video.Geometry:
@@ -43,6 +44,7 @@ error VideoPictureError:
 
 error VideoFadeError:
     ZeroFrames
+    ZeroSteps
 
 def checked_munge_pic_width(width: u32) -> i32 error[VideoPictureError] can[Video.Picture]:
     if width & 3 != 0.u32():
@@ -85,9 +87,33 @@ def validate_fizzle_frames(frames: u32) -> i32 can[Video.Fizzle]:
     can Video.Fizzle:
         return try checked_fizzle_frames(frames) else -1
 
-def fizzle_bits_for_dimensions(width: u32, height: u32) -> i32 can[Video.Fizzle]:
+def checked_fade_steps(steps: i32) -> i32 error[VideoFadeError] can[Video.Palette]:
+    if steps <= 0.i32():
+        raise VideoFadeError.ZeroSteps
+
+    can Video.Palette:
+        signal Video.Palette
+    return 0
+
+def validate_fade_steps(steps: i32) -> i32 can[Video.Palette]:
+    can Video.Palette:
+        return try checked_fade_steps(steps) else -1
+
+def fade_scale_6bit_color_component(component: i32) -> i32 can[Video.Palette]:
+    can Video.Palette:
+        signal Video.Palette
+    return component * 255 / 63
+
+def fade_interpolated_channel(origin: i32, target: i32, frame: i32, steps: i32) -> i32 can[Video.Palette]:
+    can Video.Palette:
+        signal Video.Palette
+    return origin + (target - origin) * frame / steps
+
+def fizzle_bits_for_dimensions(width: u32, height: u32) -> i32 can[Video.Fizzle, Video.Geometry]:
     can Video.Fizzle:
         signal Video.Fizzle
+    can Video.Geometry:
+        signal Video.Geometry
 
     bits_x: i32 = log2_ceil_impl(width)
     bits_y: i32 = log2_ceil_impl(height)
@@ -99,9 +125,11 @@ def fizzle_bits_for_dimensions(width: u32, height: u32) -> i32 can[Video.Fizzle]
         return 25
     return bits
 
-def fizzle_mask_for_dimensions(width: u32, height: u32) -> u32 can[Video.Fizzle]:
+def fizzle_mask_for_dimensions(width: u32, height: u32) -> u32 can[Video.Fizzle, Video.Geometry]:
     can Video.Fizzle:
         signal Video.Fizzle
+    can Video.Geometry:
+        signal Video.Geometry
 
     return fizzle_mask_for_bits(fizzle_bits_for_dimensions(width, height))
 
@@ -112,6 +140,9 @@ export func wolf3d_munge_pic_from_temp(source: mutable u8&, temp: u8&, width: u3
 export func wolf3d_validate_fizzle_frames(frames: u32) -> i32 = validate_fizzle_frames
 export func wolf3d_fizzle_bits_for_dimensions(width: u32, height: u32) -> i32 = fizzle_bits_for_dimensions
 export func wolf3d_fizzle_mask_for_dimensions(width: u32, height: u32) -> u32 = fizzle_mask_for_dimensions
+export func wolf3d_validate_fade_steps(steps: i32) -> i32 = validate_fade_steps
+export func wolf3d_fade_scale_6bit_color_component(component: i32) -> i32 = fade_scale_6bit_color_component
+export func wolf3d_fade_interpolated_channel(origin: i32, target: i32, frame: i32, steps: i32) -> i32 = fade_interpolated_channel
 
 @test
 def log2_ceil_rounds_up_to_the_next_power_of_two() -> void can[Abort.Panic, Video.Geometry]:
@@ -185,27 +216,66 @@ def validate_fizzle_frames_rejects_zero() -> void can[Abort.Panic, Video.Fizzle]
 def fizzle_dimensions_clamps_to_expected_bit_range() -> void can[Abort.Panic, Video.Fizzle]:
     can Video.Fizzle:
         can Abort.Panic:
-            if wolf3d_fizzle_bits_for_dimensions(1.u32(), 1.u32()) != 17:
+            if fizzle_bits_for_dimensions(1.u32(), 1.u32()) != 17:
                 panic("very small dimensions should clamp to 17 bits")
 
-            if wolf3d_fizzle_bits_for_dimensions(320.u32(), 200.u32()) != 17:
+            if fizzle_bits_for_dimensions(320.u32(), 200.u32()) != 17:
                 panic("320x200 should remain 17 bits")
 
-            if wolf3d_fizzle_bits_for_dimensions(1024.u32(), 1.u32()) != 17:
+            if fizzle_bits_for_dimensions(1024.u32(), 1.u32()) != 17:
                 panic("disproportionate dimensions should not dip below 17 bits")
 
-            if wolf3d_fizzle_bits_for_dimensions(640.u32(), 480.u32()) != 19:
+            if fizzle_bits_for_dimensions(640.u32(), 480.u32()) != 19:
                 panic("640x480 should resolve to 19 bits")
 
-            if wolf3d_fizzle_bits_for_dimensions(1048576.u32(), 1048576.u32()) != 25:
+            if fizzle_bits_for_dimensions(1048576.u32(), 1048576.u32()) != 25:
                 panic("very large dimensions should clamp to 25 bits")
 
 @test
 def fizzle_mask_matches_bits_for_dimensions() -> void can[Abort.Panic, Video.Fizzle]:
     can Video.Fizzle:
         can Abort.Panic:
-            if wolf3d_fizzle_mask_for_dimensions(320.u32(), 200.u32()) != wolf3d_fizzle_mask_for_bits(17):
+            if fizzle_mask_for_dimensions(320.u32(), 200.u32()) != fizzle_mask_for_bits(17):
                 panic("320x200 should use a 17-bit mask")
 
-            if wolf3d_fizzle_mask_for_dimensions(640.u32(), 480.u32()) != wolf3d_fizzle_mask_for_bits(19):
+            if fizzle_mask_for_dimensions(640.u32(), 480.u32()) != fizzle_mask_for_bits(19):
                 panic("640x480 should use a 19-bit mask")
+
+@test
+def validate_fade_steps_rejects_non_positive() -> void can[Abort.Panic, Video.Palette]:
+    can Video.Palette:
+        can Abort.Panic:
+            if validate_fade_steps(1) != 0:
+                panic("positive fade steps should pass validation")
+
+            if validate_fade_steps(0) != -1:
+                panic("zero fade steps should fail validation")
+
+            if validate_fade_steps(-1) != -1:
+                panic("negative fade steps should fail validation")
+
+@test
+def fade_scale_6bit_to_8bit_matches_previous_behavior() -> void can[Abort.Panic, Video.Palette]:
+    can Video.Palette:
+        can Abort.Panic:
+            if fade_scale_6bit_color_component(0) != 0:
+                panic("zero should scale to zero")
+
+            if fade_scale_6bit_color_component(63) != 255:
+                panic("max 6-bit color should scale to 255")
+
+            if fade_scale_6bit_color_component(32) != 129:
+                panic("midpoint should retain existing integer rounding behavior")
+
+@test
+def fade_interpolated_channel_matches_linear_math() -> void can[Abort.Panic, Video.Palette]:
+    can Video.Palette:
+        can Abort.Panic:
+            if fade_interpolated_channel(10, 20, 0, 2) != 10:
+                panic("frame zero should keep origin")
+
+            if fade_interpolated_channel(10, 20, 1, 2) != 15:
+                panic("halfway should split delta correctly")
+
+            if fade_interpolated_channel(10, 20, 2, 2) != 20:
+                panic("final step should reach target")
