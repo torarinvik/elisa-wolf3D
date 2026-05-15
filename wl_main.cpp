@@ -1924,11 +1924,54 @@ extern "C" int wolf3d_legacy_run(int argc, char *argv[])
     return 1;
 }
 
-extern "C" int wolf3d_legacy_run_default(void)
+extern "C" int wolf3d_legacy_check_parameters(int argc, char *argv[])
+{
+    CheckParameters(argc, argv);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_check_parameters_default(void)
 {
     char arg0[] = "Chocolate-Wolfenstein-3D";
     char *argv[] = { arg0, NULL };
-    return wolf3d_legacy_run(1, argv);
+    return wolf3d_legacy_check_parameters(1, argv);
+}
+
+extern "C" int wolf3d_legacy_check_for_episodes(void)
+{
+    CheckForEpisodes();
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_init_game(void)
+{
+    InitGame();
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_demo_loop(void)
+{
+    DemoLoop();
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_unreachable_demo_loop_exit(void)
+{
+    Quit("Demo loop exited???");
+    return 1;
+}
+
+extern "C" int wolf3d_legacy_run_default(void)
+{
+    if (wolf3d_legacy_check_parameters_default() != 0)
+        return 1;
+    if (wolf3d_legacy_check_for_episodes() != 0)
+        return 1;
+    if (wolf3d_legacy_init_game() != 0)
+        return 1;
+    if (wolf3d_legacy_demo_loop() != 0)
+        return 1;
+    return wolf3d_legacy_unreachable_demo_loop_exit();
 }
 
 #ifndef ELISA_HOSTED

@@ -1,13 +1,25 @@
 permission Game:
     Run
 
-extern wolf3d_legacy_run_default() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_check_parameters_default() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_check_for_episodes() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_init_game() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_demo_loop() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_unreachable_demo_loop_exit() -> i32 effects[Game.Run, Unsafe.RawExtern]
 
 def run_game() -> i32 can[Game.Run, Unsafe.RawExtern]:
     can Game.Run:
         signal Game.Run
 
     can Game.Run, Unsafe.RawExtern:
-        return wolf3d_legacy_run_default()
+        if wolf3d_legacy_check_parameters_default() != 0:
+            return 1
+        if wolf3d_legacy_check_for_episodes() != 0:
+            return 1
+        if wolf3d_legacy_init_game() != 0:
+            return 1
+        if wolf3d_legacy_demo_loop() != 0:
+            return 1
+        return wolf3d_legacy_unreachable_demo_loop_exit()
 
 export func main() -> i32 = run_game
