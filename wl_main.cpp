@@ -1175,12 +1175,12 @@ void DoJukebox(void)
 ==========================
 */
 
-static void InitGame()
-{
 #ifndef SPEARDEMO
-    boolean didjukebox=false;
+static boolean didjukebox=false;
 #endif
 
+extern "C" int wolf3d_legacy_init_platform_and_signon(void)
+{
     // initialize SDL
 #if defined _WIN32
     putenv("SDL_VIDEODRIVER=directx");
@@ -1220,13 +1220,22 @@ static void InitGame()
     }
 #endif
 
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_startup_subsystems(void)
+{
     VH_Startup ();
     IN_Startup ();
     PM_Startup ();
     SD_Startup ();
     CA_Startup ();
     US_Startup ();
+    return 0;
+}
 
+extern "C" int wolf3d_legacy_check_memory_floor(void)
+{
     // TODO: Will any memory checking be needed someday??
 #ifdef NOTYET
 #ifndef SPEAR
@@ -1245,11 +1254,14 @@ static void InitGame()
         exit(1);
     }
 #endif
+    return 0;
+}
 
-
-//
-// build some tables
-//
+extern "C" int wolf3d_legacy_load_config_and_intro(void)
+{
+    //
+    // build some tables
+    //
     InitDigiMap ();
 
     ReadConfig ();
@@ -1260,6 +1272,7 @@ static void InitGame()
 // HOLDING DOWN 'M' KEY?
 //
 #ifndef SPEARDEMO
+    didjukebox=false;
     if (Keyboard[sc_M])
     {
         DoJukebox();
@@ -1272,11 +1285,14 @@ static void InitGame()
 // draw intro screen stuff
 //
     IntroScreen ();
+    return 0;
+}
 
-
-//
-// load in and lock down some basic chunks
-//
+extern "C" int wolf3d_legacy_prepare_startup_assets(void)
+{
+    //
+    // load in and lock down some basic chunks
+    //
 
     CA_CacheGrChunk(STARTFONT);
     CA_CacheGrChunk(STATUSBARPIC);
@@ -1300,6 +1316,21 @@ static void InitGame()
     vdisp = (byte *) (0xa0000+PAGE1START);
     vbuf = (byte *) (0xa0000+PAGE2START);
 #endif
+    return 0;
+}
+
+static void InitGame()
+{
+    if (wolf3d_legacy_init_platform_and_signon() != 0)
+        exit(1);
+    if (wolf3d_legacy_startup_subsystems() != 0)
+        exit(1);
+    if (wolf3d_legacy_check_memory_floor() != 0)
+        exit(1);
+    if (wolf3d_legacy_load_config_and_intro() != 0)
+        exit(1);
+    if (wolf3d_legacy_prepare_startup_assets() != 0)
+        exit(1);
 }
 
 //===========================================================================

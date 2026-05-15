@@ -12,7 +12,11 @@ extern wolf3d_legacy_prepare_config_dir() -> i32 effects[Game.Run, FileSystem.Wr
 extern wolf3d_legacy_file_exists(path: u8&) -> i32 effects[FileSystem.Read, Unsafe.RawExtern]
 extern wolf3d_legacy_apply_wolf3d_data_extension(extension: u8&, missing_episodes: i32) -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_no_wolf3d_data_files() -> i32 effects[Game.Run, Unsafe.RawExtern]
-extern wolf3d_legacy_init_game() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_init_platform_and_signon() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_startup_subsystems() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_check_memory_floor() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_load_config_and_intro() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_prepare_startup_assets() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_demo_loop() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_unreachable_demo_loop_exit() -> i32 effects[Game.Run, Unsafe.RawExtern]
 
@@ -38,6 +42,20 @@ def select_wolf3d_data_files() -> i32 can[Game.Run, FileSystem.Read, FileSystem.
     can Game.Run, Unsafe.RawExtern:
         return wolf3d_legacy_no_wolf3d_data_files()
 
+def initialize_game() -> i32 can[Game.Run, Unsafe.RawExtern]:
+    can Game.Run, Unsafe.RawExtern:
+        if wolf3d_legacy_init_platform_and_signon() != 0:
+            return 1
+        if wolf3d_legacy_startup_subsystems() != 0:
+            return 1
+        if wolf3d_legacy_check_memory_floor() != 0:
+            return 1
+        if wolf3d_legacy_load_config_and_intro() != 0:
+            return 1
+        if wolf3d_legacy_prepare_startup_assets() != 0:
+            return 1
+        return 0
+
 def run_game() -> i32 can[Game.Run, FileSystem.Read, FileSystem.Write, Unsafe.RawExtern]:
     can Game.Run:
         signal Game.Run
@@ -51,7 +69,7 @@ def run_game() -> i32 can[Game.Run, FileSystem.Read, FileSystem.Write, Unsafe.Ra
             return 1
 
     can Game.Run, Unsafe.RawExtern:
-        if wolf3d_legacy_init_game() != 0:
+        if initialize_game() != 0:
             return 1
         if wolf3d_legacy_demo_loop() != 0:
             return 1
