@@ -51,6 +51,7 @@ int32_t wolf3d_convert_palette_6bit_rgb_to_sdl_colors(const uint8_t *src, uint8_
 int32_t wolf3d_fill_sdl_palette_rgb(uint8_t *dst, int32_t red, int32_t green, int32_t blue, int32_t count);
 int32_t wolf3d_build_fade_out_sdl_palette(const uint8_t *origin, uint8_t *dst, int32_t start, int32_t end, int32_t red, int32_t green, int32_t blue, int32_t frame, int32_t steps, int32_t count);
 int32_t wolf3d_build_fade_in_sdl_palette(const uint8_t *origin, const uint8_t *target, uint8_t *dst, int32_t start, int32_t end, int32_t frame, int32_t steps, int32_t count);
+int32_t wolf3d_build_palette_shift_table(const uint8_t *base_palette, uint8_t *dst, int32_t frames, int32_t steps, int32_t target_red, int32_t target_green, int32_t target_blue, int32_t count);
 
 #ifdef __cplusplus
 }

@@ -649,6 +649,30 @@ def build_fade_in_sdl_palette(origin: u8&, target: u8&, dst: mutable u8&, start:
 
     return 0
 
+def build_palette_shift_table(base_palette: u8&, dst: mutable u8&, frames: i32, steps: i32, target_red: i32, target_green: i32, target_blue: i32, count: i32) -> i32 can[Video.Palette]:
+    if frames < 0 or steps <= 0 or count < 0:
+        return -1
+
+    can Video.Palette:
+        signal Video.Palette
+
+        for frame in 1..<(frames + 1).usize():
+            frame_i32: i32 = frame.i32()
+            frame_base: usize = (frame - 1) * count.usize() * 4
+
+            for color in 0..<count.usize():
+                base: usize = color * 4
+                out: usize = frame_base + base
+                red: i32 = base_palette[base].i32()
+                green: i32 = base_palette[base + 1].i32()
+                blue: i32 = base_palette[base + 2].i32()
+
+                dst[out] <- (red + (target_red - red) * frame_i32 / steps).u8()
+                dst[out + 1] <- (green + (target_green - green) * frame_i32 / steps).u8()
+                dst[out + 2] <- (blue + (target_blue - blue) * frame_i32 / steps).u8()
+
+    return 0
+
 def fizzle_bits_for_dimensions(width: u32, height: u32) -> i32 can[Video.Fizzle, Video.Geometry]:
     can Video.Fizzle:
         signal Video.Fizzle
@@ -717,6 +741,7 @@ export func wolf3d_convert_palette_6bit_rgb_to_sdl_colors(src: u8&, dst: mutable
 export func wolf3d_fill_sdl_palette_rgb(dst: mutable u8&, red: i32, green: i32, blue: i32, count: i32) -> i32 = fill_sdl_palette_rgb
 export func wolf3d_build_fade_out_sdl_palette(origin: u8&, dst: mutable u8&, start: i32, end: i32, red: i32, green: i32, blue: i32, frame: i32, steps: i32, count: i32) -> i32 = build_fade_out_sdl_palette
 export func wolf3d_build_fade_in_sdl_palette(origin: u8&, target: u8&, dst: mutable u8&, start: i32, end: i32, frame: i32, steps: i32, count: i32) -> i32 = build_fade_in_sdl_palette
+export func wolf3d_build_palette_shift_table(base_palette: u8&, dst: mutable u8&, frames: i32, steps: i32, target_red: i32, target_green: i32, target_blue: i32, count: i32) -> i32 = build_palette_shift_table
 
 @test
 def log2_ceil_rounds_up_to_the_next_power_of_two() -> void can[Abort.Panic, Video.Geometry]:
@@ -1219,6 +1244,37 @@ def build_fade_in_sdl_palette_constructs_whole_frame() -> void can[Abort.Panic, 
 
             if dst[4] != 100.u8() or dst[5] != 110.u8() or dst[6] != 120.u8():
                 panic("fade in should copy colors outside selected range")
+
+@test
+def build_palette_shift_table_interpolates_frames() -> void can[Abort.Panic, Video.Palette]:
+    can Video.Palette:
+        can Abort.Panic:
+            base: mutable u8[8] = zeroed
+            dst: mutable u8[16] = zeroed
+
+            base[0] <- 10.u8()
+            base[1] <- 20.u8()
+            base[2] <- 30.u8()
+            base[3] <- 99.u8()
+            base[4] <- 100.u8()
+            base[5] <- 120.u8()
+            base[6] <- 140.u8()
+            base[7] <- 88.u8()
+
+            if build_palette_shift_table(base[0].ref[u8&], dst[0].ref[mutable u8&], 2, 4, 20, 0, 10, 2) != 0:
+                panic("palette shift table should build")
+
+            if dst[0] != 12.u8() or dst[1] != 15.u8() or dst[2] != 25.u8():
+                panic("first shift frame was wrong")
+
+            if dst[8] != 15.u8() or dst[9] != 10.u8() or dst[10] != 20.u8():
+                panic("second shift frame was wrong")
+
+            if dst[3] != 0.u8() or dst[7] != 0.u8():
+                panic("palette shift should leave alpha bytes untouched")
+
+            if build_palette_shift_table(base[0].ref[u8&], dst[0].ref[mutable u8&], 1, 0, 0, 0, 0, 2) != -1:
+                panic("zero steps should fail")
 
 @test
 def validate_palette_index_rejects_bad_indices() -> void can[Abort.Panic, Video.Palette]:
