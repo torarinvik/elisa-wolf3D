@@ -58,3 +58,23 @@ def interpolate_u8_sample_to_s16(csample: f32, samples: u8&, size: i32) -> i16 c
 export func wolf3d_playback_pan_for_position(pos: i32) -> i32 = playback_pan_for_position
 export func wolf3d_validate_playback_position(leftpos: i32, rightpos: i32) -> i32 = validate_playback_position
 export func wolf3d_interpolate_u8_sample_to_s16(csample: f32, samples: u8&, size: i32) -> i16 = interpolate_u8_sample_to_s16
+
+@test
+def playback_pan_for_position_maps_edges() -> void can[Abort.Panic, Audio.Playback]:
+    can Audio.Playback:
+        can Abort.Panic:
+            if playback_pan_for_position(0) != 255:
+                panic("leftmost position should map to full right pan value")
+
+            if playback_pan_for_position(15) != 15:
+                panic("rightmost position should map to the lowest valid pan value")
+
+@test
+def validate_playback_position_detects_invalid_center() -> void can[Abort.Panic, Audio.Playback]:
+    can Audio.Playback:
+        can Abort.Panic:
+            if validate_playback_position(3, 4) != 0:
+                panic("valid playback positions should pass validation")
+
+            if validate_playback_position(15, 15) != -1:
+                panic("dual-center playback position should be rejected")

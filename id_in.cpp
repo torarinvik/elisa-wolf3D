@@ -19,6 +19,7 @@
 
 #include "wl_def.h"
 #include "elisa_wolf3d_effects.h"
+#include "elisa_wolf3d_input.h"
 
 
 /*
@@ -132,10 +133,8 @@ INL_GetMouseButtons(void)
     int middlePressed = buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE);
     int rightPressed = buttons & SDL_BUTTON(SDL_BUTTON_RIGHT);
     buttons &= ~(SDL_BUTTON(SDL_BUTTON_MIDDLE) | SDL_BUTTON(SDL_BUTTON_RIGHT));
-    if(middlePressed) buttons |= 1 << 2;
-    if(rightPressed) buttons |= 1 << 1;
 
-    return buttons;
+    return wolf3d_translate_mouse_buttons(buttons, middlePressed, rightPressed);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -161,20 +160,8 @@ void IN_GetJoyDelta(int *dx,int *dy)
     if(param_joystickhat != -1)
     {
         uint8_t hatState = SDL_JoystickGetHat(Joystick, param_joystickhat);
-        if(hatState & SDL_HAT_RIGHT)
-            x += 127;
-        else if(hatState & SDL_HAT_LEFT)
-            x -= 127;
-        if(hatState & SDL_HAT_DOWN)
-            y += 127;
-        else if(hatState & SDL_HAT_UP)
-            y -= 127;
-
-        if(x < -128) x = -128;
-        else if(x > 127) x = 127;
-
-        if(y < -128) y = -128;
-        else if(y > 127) y = 127;
+        x = wolf3d_apply_joy_hat_axis(x, hatState & SDL_HAT_LEFT, hatState & SDL_HAT_RIGHT);
+        y = wolf3d_apply_joy_hat_axis(y, hatState & SDL_HAT_UP, hatState & SDL_HAT_DOWN);
     }
 
     *dx = x;
@@ -201,11 +188,8 @@ void IN_GetJoyFineDelta(int *dx, int *dy)
     int x = SDL_JoystickGetAxis(Joystick, 0);
     int y = SDL_JoystickGetAxis(Joystick, 1);
 
-    if(x < -128) x = -128;
-    else if(x > 127) x = 127;
-
-    if(y < -128) y = -128;
-    else if(y > 127) y = 127;
+    x = wolf3d_clamp_joy_axis(x);
+    y = wolf3d_clamp_joy_axis(y);
 
     *dx = x;
     *dy = y;

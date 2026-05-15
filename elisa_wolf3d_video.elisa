@@ -1,5 +1,7 @@
 permission Video:
+    Fizzle
     Geometry
+    Picture
 
 def log2_ceil_impl(value: u32) -> i32 can[Video.Geometry]:
     can Video.Geometry:
@@ -14,4 +16,145 @@ def log2_ceil_impl(value: u32) -> i32 can[Video.Geometry]:
 
     return n
 
+def fizzle_mask_for_bits(bits: i32) -> u32 can[Video.Fizzle]:
+    can Video.Fizzle:
+        signal Video.Fizzle
+
+    if bits <= 17:
+        return 0x00012000
+    if bits == 18:
+        return 0x00020400
+    if bits == 19:
+        return 0x00040023
+    if bits == 20:
+        return 0x00090000
+    if bits == 21:
+        return 0x00140000
+    if bits == 22:
+        return 0x00300000
+    if bits == 23:
+        return 0x00420000
+    if bits == 24:
+        return 0x00e10000
+    return 0x01200000
+
+error VideoPictureError:
+    WidthNotDivisibleBy4
+
+error VideoFadeError:
+    ZeroFrames
+
+def checked_munge_pic_width(width: u32) -> i32 error[VideoPictureError] can[Video.Picture]:
+    if width & 3 != 0.u32():
+        raise VideoPictureError.WidthNotDivisibleBy4
+
+    can Video.Picture:
+        signal Video.Picture
+    return 0
+
+def validate_munge_pic_width(width: u32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        return try checked_munge_pic_width(width) else -1
+
+def munge_pic_from_temp(source: mutable u8&, temp: u8&, width: u32, height: u32) -> i32 can[Video.Picture]:
+    pwidth: usize = (width / 4).usize()
+    dest_index: mutable usize = 0
+
+    can Video.Picture:
+        signal Video.Picture
+
+        for plane in 0..<4.usize():
+            for y in 0..<height.usize():
+                base: usize = y * width.usize()
+                for x in 0..<pwidth:
+                    source[dest_index] <- temp[base + x * 4 + plane]
+                    dest_index <- dest_index + 1
+
+    return 0
+
+def checked_fizzle_frames(frames: u32) -> i32 error[VideoFadeError] can[Video.Fizzle]:
+    if frames == 0.u32():
+        raise VideoFadeError.ZeroFrames
+
+    can Video.Fizzle:
+        signal Video.Fizzle
+
+    return 0
+
+def validate_fizzle_frames(frames: u32) -> i32 can[Video.Fizzle]:
+    can Video.Fizzle:
+        return try checked_fizzle_frames(frames) else -1
+
 export func wolf3d_log2_ceil(value: u32) -> i32 = log2_ceil_impl
+export func wolf3d_fizzle_mask_for_bits(bits: i32) -> u32 = fizzle_mask_for_bits
+export func wolf3d_validate_munge_pic_width(width: u32) -> i32 = validate_munge_pic_width
+export func wolf3d_munge_pic_from_temp(source: mutable u8&, temp: u8&, width: u32, height: u32) -> i32 = munge_pic_from_temp
+export func wolf3d_validate_fizzle_frames(frames: u32) -> i32 = validate_fizzle_frames
+
+@test
+def log2_ceil_rounds_up_to_the_next_power_of_two() -> void can[Abort.Panic, Video.Geometry]:
+    can Video.Geometry:
+        can Abort.Panic:
+            if log2_ceil_impl(1.u32()) != 0:
+                panic("log2 ceil should return zero for one")
+
+            if log2_ceil_impl(2.u32()) != 1:
+                panic("log2 ceil should return one for two")
+
+            if log2_ceil_impl(3.u32()) != 2:
+                panic("log2 ceil should round three up to two bits")
+
+@test
+def fizzle_mask_chooses_expected_lfsr_masks() -> void can[Abort.Panic, Video.Fizzle]:
+    can Video.Fizzle:
+        can Abort.Panic:
+            if fizzle_mask_for_bits(17) != 0x00012000:
+                panic("unexpected mask for 17 bits")
+
+            if fizzle_mask_for_bits(18) != 0x00020400:
+                panic("unexpected mask for 18 bits")
+
+@test
+def validate_munge_pic_width_rejects_non_divisible_widths() -> void can[Abort.Panic, Video.Picture]:
+    can Video.Picture:
+        can Abort.Panic:
+            if validate_munge_pic_width(8) != 0:
+                panic("aligned picture widths should pass validation")
+
+            if validate_munge_pic_width(6) != -1:
+                panic("unaligned picture widths should fail validation")
+
+@test
+def munge_pic_from_temp_reorders_planes() -> void can[Abort.Panic, Video.Picture]:
+    can Video.Picture:
+        can Abort.Panic:
+            source: mutable u8[8] = zeroed
+            temp: mutable u8[8] = zeroed
+
+            temp[0] <- 0.u8()
+            temp[1] <- 1.u8()
+            temp[2] <- 2.u8()
+            temp[3] <- 3.u8()
+            temp[4] <- 4.u8()
+            temp[5] <- 5.u8()
+            temp[6] <- 6.u8()
+            temp[7] <- 7.u8()
+
+            if munge_pic_from_temp(source[0].ref[mutable u8&], temp[0].ref[u8&], 4.u32(), 2.u32()) != 0:
+                panic("munge_pic_from_temp should succeed for valid input")
+
+            if source[0] != 0.u8() or source[1] != 4.u8() or source[2] != 1.u8() or source[3] != 5.u8():
+                panic("first row was not rearranged as expected")
+
+            if source[4] != 2.u8() or source[5] != 6.u8() or source[6] != 3.u8() or source[7] != 7.u8():
+                panic("second row was not rearranged as expected")
+
+@test
+def validate_fizzle_frames_rejects_zero() -> void can[Abort.Panic, Video.Fizzle]:
+    can Video.Fizzle:
+        can Abort.Panic:
+            if validate_fizzle_frames(1.u32()) != 0:
+                panic("non-zero frame counts should pass validation")
+
+            if validate_fizzle_frames(0.u32()) != -1:
+                panic("zero frame counts should fail validation")

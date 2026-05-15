@@ -71,9 +71,10 @@ SRCS += crt.cpp
 
 DEPS = $(filter %.d, $(SRCS:.c=.d) $(SRCS:.cpp=.d))
 OBJS = $(filter %.o, $(SRCS:.c=.o) $(SRCS:.cpp=.o))
-ELISA_SRCS := elisa_wolf3d_effects.elisa elisa_wolf3d_palette.elisa elisa_wolf3d_audio.elisa elisa_wolf3d_save.elisa elisa_wolf3d_ui.elisa elisa_wolf3d_video.elisa elisa_wolf3d_pagefile.elisa
+ELISA_SRCS := elisa_wolf3d_effects.elisa elisa_wolf3d_palette.elisa elisa_wolf3d_audio.elisa elisa_wolf3d_save.elisa elisa_wolf3d_ui.elisa elisa_wolf3d_video.elisa elisa_wolf3d_pagefile.elisa elisa_wolf3d_input.elisa
 ELISA_OBJS := $(ELISA_SRCS:.elisa=.o)
 OBJS += $(ELISA_OBJS)
+ELISA_TEST_SRCS := elisa_wolf3d_palette.elisa elisa_wolf3d_audio.elisa elisa_wolf3d_pagefile.elisa elisa_wolf3d_input.elisa elisa_wolf3d_video.elisa
 
 .SUFFIXES:
 .SUFFIXES: .c .cpp .d .o
@@ -96,7 +97,7 @@ $(BINARY): $(OBJS)
 
 id_pm.o: elisa_wolf3d_effects.h elisa_wolf3d_pagefile.h
 id_sd.o: elisa_wolf3d_audio.h elisa_wolf3d_effects.h
-id_in.o: elisa_wolf3d_effects.h
+id_in.o: elisa_wolf3d_effects.h elisa_wolf3d_input.h
 id_us_1.o: elisa_wolf3d_ui.h
 id_vh.o: elisa_wolf3d_video.h
 id_vl.o: elisa_wolf3d_palette.h elisa_wolf3d_effects.h
@@ -125,6 +126,13 @@ wl_main.o: elisa_wolf3d_save.h
 clean distclean:
 	@echo '===> CLEAN'
 	$(Q)rm -fr $(DEPS) $(OBJS) $(BINARY)
+
+elisa-tests:
+	@set -e; \
+	for src in $(ELISA_TEST_SRCS); do \
+		echo '===> ELISA-TEST' $$src; \
+		cd $(ELISA_COMPILER_DIR) && go run ./src -emit test "$(abspath $$src)"; \
+	done
 
 install: $(BINARY)
 	@echo '===> INSTALL'

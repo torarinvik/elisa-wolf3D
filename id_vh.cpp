@@ -59,12 +59,12 @@ void VWB_DrawPropString(const char* string)
 
 void VL_MungePic (byte *source, unsigned width, unsigned height)
 {
-    unsigned x,y,plane,size,pwidth;
-    byte *temp, *dest, *srcline;
+    unsigned size;
+    byte *temp;
 
     size = width*height;
 
-    if (width&3)
+    if (wolf3d_validate_munge_pic_width(width) != 0)
         Quit ("VL_MungePic: Not divisable by 4!");
 
 //
@@ -77,19 +77,7 @@ void VL_MungePic (byte *source, unsigned width, unsigned height)
 //
 // munge it back into the original buffer
 //
-    dest = source;
-    pwidth = width/4;
-
-    for (plane=0;plane<4;plane++)
-    {
-        srcline = temp;
-        for (y=0;y<height;y++)
-        {
-            for (x=0;x<pwidth;x++)
-                *dest++ = *(srcline+x*4+plane);
-            srcline+=width;
-        }
-    }
+    wolf3d_munge_pic_from_temp(source, temp, width, height);
 
     free(temp);
 }
@@ -292,20 +280,6 @@ void LoadLatchMem (void)
 ===================
 */
 
-// XOR masks for the pseudo-random number sequence starting with n=17 bits
-static const uint32_t rndmasks[] = {
-                    // n    XNOR from (starting at 1, not 0 as usual)
-    0x00012000,     // 17   17,14
-    0x00020400,     // 18   18,11
-    0x00040023,     // 19   19,6,2,1
-    0x00090000,     // 20   20,17
-    0x00140000,     // 21   21,19
-    0x00300000,     // 22   22,21
-    0x00420000,     // 23   23,18
-    0x00e10000,     // 24   24,23,22,17
-    0x01200000,     // 25   25,22      (this is enough for 8191x4095)
-};
-
 static unsigned int rndbits_y;
 static unsigned int rndmask;
 
@@ -328,7 +302,7 @@ void VH_Startup()
     else if(rndbits > 25)
         rndbits = 25;       // fizzle fade will not fill whole screen
 
-    rndmask = rndmasks[rndbits - 17];
+    rndmask = wolf3d_fizzle_mask_for_bits(rndbits);
 }
 
 boolean FizzleFade (SDL_Surface *source, int x1, int y1,
@@ -340,6 +314,8 @@ boolean FizzleFade (SDL_Surface *source, int x1, int y1,
     int      first = 1;
 
     lastrndval = 0;
+    if (wolf3d_validate_fizzle_frames(frames) != 0)
+        Quit ("FizzleFade: frames must be greater than zero!");
     pixperframe = width * height / frames;
 
     IN_StartAck ();
