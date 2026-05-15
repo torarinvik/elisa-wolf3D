@@ -1,21 +1,48 @@
 permission Game:
     Run
 
+permission FileSystem:
+    Read
+    Write
+
 extern wolf3d_legacy_check_parameters_default() -> i32 effects[Game.Run, Unsafe.RawExtern]
-extern wolf3d_legacy_check_for_episodes() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_prepare_config_dir() -> i32 effects[Game.Run, FileSystem.Write, Unsafe.RawExtern]
+extern wolf3d_legacy_file_exists(path: u8&) -> i32 effects[FileSystem.Read, Unsafe.RawExtern]
+extern wolf3d_legacy_apply_wolf3d_data_extension(extension: u8&, missing_episodes: i32) -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_no_wolf3d_data_files() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_init_game() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_demo_loop() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_unreachable_demo_loop_exit() -> i32 effects[Game.Run, Unsafe.RawExtern]
 
-def run_game() -> i32 can[Game.Run, Unsafe.RawExtern]:
+def select_wolf3d_data_files() -> i32 can[Game.Run, FileSystem.Read, FileSystem.Write, Unsafe.RawExtern]:
+    can Game.Run, FileSystem.Write, Unsafe.RawExtern:
+        if wolf3d_legacy_prepare_config_dir() != 0:
+            return 1
+
+    can Game.Run, FileSystem.Read, Unsafe.RawExtern:
+        if wolf3d_legacy_file_exists("vswap.wl6") != 0:
+            return wolf3d_legacy_apply_wolf3d_data_extension("wl6", 0)
+        if wolf3d_legacy_file_exists("vswap.wl3") != 0:
+            return wolf3d_legacy_apply_wolf3d_data_extension("wl3", 3)
+        if wolf3d_legacy_file_exists("vswap.wl1") != 0:
+            return wolf3d_legacy_apply_wolf3d_data_extension("wl1", 5)
+
+    can Game.Run, Unsafe.RawExtern:
+        return wolf3d_legacy_no_wolf3d_data_files()
+
+def run_game() -> i32 can[Game.Run, FileSystem.Read, FileSystem.Write, Unsafe.RawExtern]:
     can Game.Run:
         signal Game.Run
 
     can Game.Run, Unsafe.RawExtern:
         if wolf3d_legacy_check_parameters_default() != 0:
             return 1
-        if wolf3d_legacy_check_for_episodes() != 0:
+
+    can Game.Run, FileSystem.Read, FileSystem.Write, Unsafe.RawExtern:
+        if select_wolf3d_data_files() != 0:
             return 1
+
+    can Game.Run, Unsafe.RawExtern:
         if wolf3d_legacy_init_game() != 0:
             return 1
         if wolf3d_legacy_demo_loop() != 0:
