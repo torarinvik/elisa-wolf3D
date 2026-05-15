@@ -574,9 +574,8 @@ byte VL_GetPixel (int x, int y)
 
 void VL_Hlin (unsigned x, unsigned y, unsigned width, int color)
 {
-    assert(x >= 0 && x + width <= screenWidth
-            && y >= 0 && y < screenHeight
-            && "VL_Hlin: Destination rectangle out of bounds!");
+    if (wolf3d_validate_hline_bounds((int32_t) x, (int32_t) y, (int32_t) width, (int32_t) screenWidth, (int32_t) screenHeight) != 0)
+        Quit ("VL_Hlin: Destination rectangle out of bounds!");
 
     VL_LockSurface(curSurface);
     Uint8 *dest = ((byte *) curSurface->pixels) + y * curPitch + x;
@@ -595,9 +594,8 @@ void VL_Hlin (unsigned x, unsigned y, unsigned width, int color)
 
 void VL_Vlin (int x, int y, int height, int color)
 {
-    assert(x >= 0 && (unsigned) x < screenWidth
-            && y >= 0 && (unsigned) y + height <= screenHeight
-            && "VL_Vlin: Destination rectangle out of bounds!");
+    if (wolf3d_validate_vline_bounds(x, y, height, (int32_t) screenWidth, (int32_t) screenHeight) != 0)
+        Quit ("VL_Vlin: Destination rectangle out of bounds!");
 
     VL_LockSurface(curSurface);
     Uint8 *dest = ((byte *) curSurface->pixels) + y * curPitch + x;
@@ -621,9 +619,8 @@ void VL_Vlin (int x, int y, int height, int color)
 
 void VL_BarScaledCoord (int scx, int scy, int scwidth, int scheight, int color)
 {
-    assert(scx >= 0 && (unsigned) scx + scwidth <= screenWidth
-            && scy >= 0 && (unsigned) scy + scheight <= screenHeight
-            && "VL_BarScaledCoord: Destination rectangle out of bounds!");
+    if (wolf3d_validate_bar_bounds(scx, scy, scwidth, scheight, (int32_t) screenWidth, (int32_t) screenHeight) != 0)
+        Quit ("VL_BarScaledCoord: Destination rectangle out of bounds!");
 
     VL_LockSurface(curSurface);
     Uint8 *dest = ((byte *) curSurface->pixels) + scy * curPitch + scx;
@@ -655,9 +652,8 @@ void VL_BarScaledCoord (int scx, int scy, int scwidth, int scheight, int color)
 void VL_MemToLatch(byte *source, int width, int height,
     SDL_Surface *destSurface, int x, int y)
 {
-    assert(x >= 0 && (unsigned) x + width <= screenWidth
-            && y >= 0 && (unsigned) y + height <= screenHeight
-            && "VL_MemToLatch: Destination rectangle out of bounds!");
+    if (wolf3d_validate_mem_to_latch_bounds(x, y, width, height, (int32_t) destSurface->w, (int32_t) destSurface->h) != 0)
+        Quit ("VL_MemToLatch: Destination rectangle out of bounds!");
 
     VL_LockSurface(destSurface);
     int pitch = destSurface->pitch;
