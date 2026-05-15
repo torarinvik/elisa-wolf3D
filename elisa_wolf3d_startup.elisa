@@ -1,0 +1,26 @@
+def wolf3d_data_extension_code(has_wl6: bool, has_wl3: bool, has_wl1: bool) -> i32:
+    if has_wl6:
+        return 6
+    if has_wl3:
+        return 3
+    if has_wl1:
+        return 1
+    return 0
+
+@test
+def wolf3d_data_extension_prefers_full_version() -> void can[Abort.Panic]:
+    can Abort.Panic:
+        if wolf3d_data_extension_code(true, true, true) != 6:
+            panic("wl6 should be preferred when present")
+
+        if wolf3d_data_extension_code(false, true, true) != 3:
+            panic("wl3 should be preferred over wl1")
+
+@test
+def wolf3d_data_extension_handles_shareware_and_missing_data() -> void can[Abort.Panic]:
+    can Abort.Panic:
+        if wolf3d_data_extension_code(false, false, true) != 1:
+            panic("wl1 should be selected when it is the only data file")
+
+        if wolf3d_data_extension_code(false, false, false) != 0:
+            panic("missing data should return no selected extension")

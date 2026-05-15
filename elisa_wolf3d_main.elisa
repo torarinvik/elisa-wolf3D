@@ -1,3 +1,5 @@
+include "elisa_wolf3d_startup.elisa"
+
 permission Game:
     Run
 
@@ -20,11 +22,17 @@ def select_wolf3d_data_files() -> i32 can[Game.Run, FileSystem.Read, FileSystem.
             return 1
 
     can Game.Run, FileSystem.Read, Unsafe.RawExtern:
-        if wolf3d_legacy_file_exists("vswap.wl6") != 0:
+        selected: i32 = wolf3d_data_extension_code(
+            wolf3d_legacy_file_exists("vswap.wl6") != 0,
+            wolf3d_legacy_file_exists("vswap.wl3") != 0,
+            wolf3d_legacy_file_exists("vswap.wl1") != 0
+        )
+
+        if selected == 6:
             return wolf3d_legacy_apply_wolf3d_data_extension("wl6", 0)
-        if wolf3d_legacy_file_exists("vswap.wl3") != 0:
+        if selected == 3:
             return wolf3d_legacy_apply_wolf3d_data_extension("wl3", 3)
-        if wolf3d_legacy_file_exists("vswap.wl1") != 0:
+        if selected == 1:
             return wolf3d_legacy_apply_wolf3d_data_extension("wl1", 5)
 
     can Game.Run, Unsafe.RawExtern:

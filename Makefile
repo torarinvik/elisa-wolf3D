@@ -81,7 +81,7 @@ OBJS += $(ELISA_OBJS)
 ELISA_HOSTED_MAIN := $(BUILD_DIR)/elisa_wolf3d_main.o
 ELISA_HOSTED_WL_MAIN := $(BUILD_DIR)/hosted/wl_main.o
 ELISA_HOSTED_OBJS := $(filter-out $(BUILD_DIR)/wl_main.o,$(OBJS)) $(ELISA_HOSTED_WL_MAIN) $(ELISA_HOSTED_MAIN)
-ELISA_TEST_SRCS := elisa_wolf3d_audio.elisa elisa_wolf3d_pagefile.elisa elisa_wolf3d_input.elisa elisa_wolf3d_video.elisa
+ELISA_TEST_SRCS := elisa_wolf3d_audio.elisa elisa_wolf3d_pagefile.elisa elisa_wolf3d_input.elisa elisa_wolf3d_video.elisa elisa_wolf3d_startup.elisa
 LEGACY_OBJS := $(filter %.o, $(SRCS:.c=.o) $(SRCS:.cpp=.o)) $(ELISA_SRCS:.elisa=.o)
 LEGACY_DEPS := $(filter %.d, $(SRCS:.c=.d) $(SRCS:.cpp=.d))
 
