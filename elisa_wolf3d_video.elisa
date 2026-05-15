@@ -99,6 +99,19 @@ def measure_prop_string_width(text: u8&, font_width: u8&) -> i32 can[Video.Text]
     can Video.Text:
         return checked_measure_prop_string_width(text, font_width)
 
+def checked_inclusive_span_length(start: i32, end: i32) -> i32 error[VideoCoordinateError] can[Video.Geometry]:
+    if end < start.i32():
+        raise VideoCoordinateError.OutOfBounds
+
+    can Video.Geometry:
+        signal Video.Geometry
+
+    return end - start + 1
+
+def inclusive_span_length(start: i32, end: i32) -> i32 can[Video.Geometry]:
+    can Video.Geometry:
+        return try checked_inclusive_span_length(start, end) else -1
+
 def checked_fizzle_frames(frames: u32) -> i32 error[VideoFadeError] can[Video.Fizzle]:
     if frames == 0.u32():
         raise VideoFadeError.ZeroFrames
@@ -297,6 +310,7 @@ export func wolf3d_validate_fizzle_work_area(dest_x: i32, dest_y: i32, width: i3
 export func wolf3d_fade_scale_6bit_color_component(component: i32) -> i32 = fade_scale_6bit_color_component
 export func wolf3d_fade_interpolated_channel(origin: i32, target: i32, frame: i32, steps: i32) -> i32 = fade_interpolated_channel
 export func wolf3d_measure_prop_string_width(text: u8&, font_width: u8&) -> i32 = measure_prop_string_width
+export func wolf3d_inclusive_span_length(start: i32, end: i32) -> i32 = inclusive_span_length
 
 @test
 def log2_ceil_rounds_up_to_the_next_power_of_two() -> void can[Abort.Panic, Video.Geometry]:
@@ -584,3 +598,16 @@ def measure_prop_string_width_matches_font_glyph_widths() -> void can[Abort.Pani
             text[0] <- 0.u8()
             if measure_prop_string_width(text[0].ref[u8&], font_width[0].ref[u8&]) != 0:
                 panic("empty strings should measure as zero width")
+
+@test
+def inclusive_span_length_rejects_reversed_ranges() -> void can[Abort.Panic, Video.Geometry]:
+    can Video.Geometry:
+        can Abort.Panic:
+            if inclusive_span_length(2, 6) != 5:
+                panic("inclusive span should include both endpoints")
+
+            if inclusive_span_length(7, 7) != 1:
+                panic("single-point span should be one unit")
+
+            if inclusive_span_length(6, 2) != -1:
+                panic("reversed span should be rejected")

@@ -158,18 +158,28 @@ void VWB_Plot (int x, int y, int color)
 
 void VWB_Hlin (int x1, int x2, int y, int color)
 {
+    int width = (int) wolf3d_inclusive_span_length((int32_t) x1, (int32_t) x2);
+
+    if (width < 0)
+        Quit("VWB_Hlin: invalid line span");
+
     if(scaleFactor == 1)
         VW_Hlin(x1,x2,y,color);
     else
-        VW_Bar(x1, y, x2-x1+1, 1, color);
+        VW_Bar(x1, y, width, 1, color);
 }
 
 void VWB_Vlin (int y1, int y2, int x, int color)
 {
+    int height = (int) wolf3d_inclusive_span_length((int32_t) y1, (int32_t) y2);
+
+    if (height < 0)
+        Quit("VWB_Vlin: invalid line span");
+
     if(scaleFactor == 1)
         VW_Vlin(y1,y2,x,color);
     else
-        VW_Bar(x, y1, 1, y2-y1+1, color);
+        VW_Bar(x, y1, 1, height, color);
 }
 
 

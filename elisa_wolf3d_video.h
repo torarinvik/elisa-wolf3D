@@ -26,6 +26,7 @@ int32_t wolf3d_validate_fizzle_work_area(int32_t dest_x, int32_t dest_y, int32_t
 int32_t wolf3d_fade_scale_6bit_color_component(int32_t component);
 int32_t wolf3d_fade_interpolated_channel(int32_t origin, int32_t target, int32_t frame, int32_t steps);
 int32_t wolf3d_measure_prop_string_width(const uint8_t *text, const uint8_t *font_width);
+int32_t wolf3d_inclusive_span_length(int32_t start, int32_t end);
 
 #ifdef __cplusplus
 }
