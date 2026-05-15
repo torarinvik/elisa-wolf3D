@@ -1904,12 +1904,12 @@ void CheckParameters(int argc, char *argv[])
 /*
 ==========================
 =
-= main
+= legacy C API entry
 =
 ==========================
 */
 
-int main (int argc, char *argv[])
+extern "C" int wolf3d_legacy_run(int argc, char *argv[])
 {
 
     CheckParameters(argc, argv);
@@ -1923,3 +1923,25 @@ int main (int argc, char *argv[])
     Quit("Demo loop exited???");
     return 1;
 }
+
+extern "C" int wolf3d_legacy_run_default(void)
+{
+    char arg0[] = "Chocolate-Wolfenstein-3D";
+    char *argv[] = { arg0, NULL };
+    return wolf3d_legacy_run(1, argv);
+}
+
+#ifndef ELISA_HOSTED
+/*
+==========================
+=
+= main
+=
+==========================
+*/
+
+int main (int argc, char *argv[])
+{
+    return wolf3d_legacy_run(argc, argv);
+}
+#endif

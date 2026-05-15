@@ -1,0 +1,13 @@
+permission Game:
+    Run
+
+extern wolf3d_legacy_run_default() -> i32 effects[Game.Run, Unsafe.RawExtern]
+
+def run_game() -> i32 can[Game.Run, Unsafe.RawExtern]:
+    can Game.Run:
+        signal Game.Run
+
+    can Game.Run, Unsafe.RawExtern:
+        return wolf3d_legacy_run_default()
+
+export func main() -> i32 = run_game

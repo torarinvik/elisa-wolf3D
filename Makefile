@@ -5,6 +5,8 @@ CONFIG ?= config.default
 BINARY    ?= Chocolate-Wolfenstein-3D
 BUILD_DIR ?= build
 TARGET    := $(BUILD_DIR)/$(BINARY)
+ELISA_HOSTED_BINARY ?= Elisa-Wolfenstein-3D
+ELISA_HOSTED_TARGET := $(BUILD_DIR)/$(ELISA_HOSTED_BINARY)
 PREFIX    ?= /usr/local
 MANPREFIX ?= $(PREFIX)
 UNAME := $(shell uname -s)
@@ -76,6 +78,9 @@ OBJS = $(addprefix $(BUILD_DIR)/,$(filter %.o, $(SRCS:.c=.o) $(SRCS:.cpp=.o)))
 ELISA_SRCS := elisa_wolf3d_effects.elisa elisa_wolf3d_audio.elisa elisa_wolf3d_save.elisa elisa_wolf3d_ui.elisa elisa_wolf3d_video.elisa elisa_wolf3d_sdl.elisa elisa_wolf3d_pagefile.elisa elisa_wolf3d_input.elisa
 ELISA_OBJS := $(addprefix $(BUILD_DIR)/,$(ELISA_SRCS:.elisa=.o))
 OBJS += $(ELISA_OBJS)
+ELISA_HOSTED_MAIN := $(BUILD_DIR)/elisa_wolf3d_main.o
+ELISA_HOSTED_WL_MAIN := $(BUILD_DIR)/hosted/wl_main.o
+ELISA_HOSTED_OBJS := $(filter-out $(BUILD_DIR)/wl_main.o,$(OBJS)) $(ELISA_HOSTED_WL_MAIN) $(ELISA_HOSTED_MAIN)
 ELISA_TEST_SRCS := elisa_wolf3d_audio.elisa elisa_wolf3d_pagefile.elisa elisa_wolf3d_input.elisa elisa_wolf3d_video.elisa
 LEGACY_OBJS := $(filter %.o, $(SRCS:.c=.o) $(SRCS:.cpp=.o)) $(ELISA_SRCS:.elisa=.o)
 LEGACY_DEPS := $(filter %.d, $(SRCS:.c=.d) $(SRCS:.cpp=.d))
@@ -86,6 +91,7 @@ LEGACY_DEPS := $(filter %.d, $(SRCS:.c=.d) $(SRCS:.cpp=.d))
 Q ?= @
 
 all: $(TARGET)
+elisa-hosted: $(ELISA_HOSTED_TARGET)
 
 ifndef NO_DEPS
 depend: $(DEPS)
@@ -100,6 +106,11 @@ $(TARGET): $(OBJS)
 	$(Q)mkdir -p $(dir $@)
 	$(Q)$(CXX) $(CFLAGS) $(OBJS) $(LDFLAGS) -o $@
 
+$(ELISA_HOSTED_TARGET): $(ELISA_HOSTED_OBJS)
+	@echo '===> LD $@'
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CXX) $(CFLAGS) $(ELISA_HOSTED_OBJS) $(LDFLAGS) -o $@
+
 $(BUILD_DIR)/id_pm.o: elisa_wolf3d_effects.h elisa_wolf3d_pagefile.h
 $(BUILD_DIR)/id_sd.o: elisa_wolf3d_audio.h elisa_wolf3d_effects.h
 $(BUILD_DIR)/id_in.o: elisa_wolf3d_effects.h elisa_wolf3d_input.h
@@ -107,6 +118,10 @@ $(BUILD_DIR)/id_us_1.o: elisa_wolf3d_ui.h
 $(BUILD_DIR)/id_vh.o: elisa_wolf3d_video.h
 $(BUILD_DIR)/id_vl.o: elisa_wolf3d_sdl.h elisa_wolf3d_effects.h elisa_wolf3d_video.h
 $(BUILD_DIR)/wl_main.o: elisa_wolf3d_save.h
+$(ELISA_HOSTED_WL_MAIN): wl_main.cpp elisa_wolf3d_save.h
+	@echo '===> CXX $< (Elisa hosted)'
+	$(Q)mkdir -p $(dir $@)
+	$(Q)$(CXX) $(CXXFLAGS) -DELISA_HOSTED -c $< -o $@
 
 $(BUILD_DIR)/%.o: %.elisa
 	@echo '===> ELISA-O $@'
