@@ -27,6 +27,10 @@ int32_t wolf3d_fade_scale_6bit_color_component(int32_t component);
 int32_t wolf3d_fade_interpolated_channel(int32_t origin, int32_t target, int32_t frame, int32_t steps);
 int32_t wolf3d_measure_prop_string_width(const uint8_t *text, const uint8_t *font_width);
 int32_t wolf3d_inclusive_span_length(int32_t start, int32_t end);
+int32_t wolf3d_convert_palette_6bit_rgb_to_sdl_colors(const uint8_t *src, uint8_t *dst, int32_t count);
+int32_t wolf3d_fill_sdl_palette_rgb(uint8_t *dst, int32_t red, int32_t green, int32_t blue, int32_t count);
+int32_t wolf3d_build_fade_out_sdl_palette(const uint8_t *origin, uint8_t *dst, int32_t start, int32_t end, int32_t red, int32_t green, int32_t blue, int32_t frame, int32_t steps, int32_t count);
+int32_t wolf3d_build_fade_in_sdl_palette(const uint8_t *origin, const uint8_t *target, uint8_t *dst, int32_t start, int32_t end, int32_t frame, int32_t steps, int32_t count);
 
 #ifdef __cplusplus
 }

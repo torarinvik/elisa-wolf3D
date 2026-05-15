@@ -73,10 +73,10 @@ SRCS += crt.cpp
 
 DEPS = $(addprefix $(BUILD_DIR)/,$(filter %.d, $(SRCS:.c=.d) $(SRCS:.cpp=.d)))
 OBJS = $(addprefix $(BUILD_DIR)/,$(filter %.o, $(SRCS:.c=.o) $(SRCS:.cpp=.o)))
-ELISA_SRCS := elisa_wolf3d_effects.elisa elisa_wolf3d_palette.elisa elisa_wolf3d_audio.elisa elisa_wolf3d_save.elisa elisa_wolf3d_ui.elisa elisa_wolf3d_video.elisa elisa_wolf3d_pagefile.elisa elisa_wolf3d_input.elisa
+ELISA_SRCS := elisa_wolf3d_effects.elisa elisa_wolf3d_audio.elisa elisa_wolf3d_save.elisa elisa_wolf3d_ui.elisa elisa_wolf3d_video.elisa elisa_wolf3d_sdl.elisa elisa_wolf3d_pagefile.elisa elisa_wolf3d_input.elisa
 ELISA_OBJS := $(addprefix $(BUILD_DIR)/,$(ELISA_SRCS:.elisa=.o))
 OBJS += $(ELISA_OBJS)
-ELISA_TEST_SRCS := elisa_wolf3d_palette.elisa elisa_wolf3d_audio.elisa elisa_wolf3d_pagefile.elisa elisa_wolf3d_input.elisa elisa_wolf3d_video.elisa
+ELISA_TEST_SRCS := elisa_wolf3d_audio.elisa elisa_wolf3d_pagefile.elisa elisa_wolf3d_input.elisa elisa_wolf3d_video.elisa
 LEGACY_OBJS := $(filter %.o, $(SRCS:.c=.o) $(SRCS:.cpp=.o)) $(ELISA_SRCS:.elisa=.o)
 LEGACY_DEPS := $(filter %.d, $(SRCS:.c=.d) $(SRCS:.cpp=.d))
 
@@ -105,7 +105,7 @@ $(BUILD_DIR)/id_sd.o: elisa_wolf3d_audio.h elisa_wolf3d_effects.h
 $(BUILD_DIR)/id_in.o: elisa_wolf3d_effects.h elisa_wolf3d_input.h
 $(BUILD_DIR)/id_us_1.o: elisa_wolf3d_ui.h
 $(BUILD_DIR)/id_vh.o: elisa_wolf3d_video.h
-$(BUILD_DIR)/id_vl.o: elisa_wolf3d_palette.h elisa_wolf3d_effects.h
+$(BUILD_DIR)/id_vl.o: elisa_wolf3d_sdl.h elisa_wolf3d_effects.h elisa_wolf3d_video.h
 $(BUILD_DIR)/wl_main.o: elisa_wolf3d_save.h
 
 $(BUILD_DIR)/%.o: %.elisa

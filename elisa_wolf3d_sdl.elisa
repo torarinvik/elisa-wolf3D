@@ -1,0 +1,39 @@
+permission Video:
+    Palette
+
+@link_name(SDL_SetPaletteColors)
+extern sdl_set_palette_colors_raw(palette: mutable void&?, colors: u8&, firstcolor: int, ncolors: int) -> bool effects[Video.Palette, Unsafe.RawExtern]
+
+@link_name(SDL_SetSurfacePalette)
+extern sdl_set_surface_palette_raw(surface: mutable void&?, palette: mutable void&?) -> bool effects[Video.Palette, Unsafe.RawExtern]
+
+def sdl_set_palette_colors(palette: mutable void&?, colors: u8&, firstcolor: i32, ncolors: i32) -> i32 can[Video.Palette, Unsafe.RawExtern]:
+    can Video.Palette:
+        signal Video.Palette
+
+    can Video.Palette, Unsafe.RawExtern:
+        if palette != null:
+            _ = sdl_set_palette_colors_raw(palette, colors, firstcolor, ncolors)
+
+    return 0
+
+def sdl_set_surface_palette(surface: mutable void&?, palette: mutable void&?) -> i32 can[Video.Palette, Unsafe.RawExtern]:
+    can Video.Palette:
+        signal Video.Palette
+
+    can Video.Palette, Unsafe.RawExtern:
+        if surface != null:
+            _ = sdl_set_surface_palette_raw(surface, palette)
+
+    return 0
+
+def sdl_set_game_palette(surface: mutable void&?, palette: mutable void&?, colors: u8&, firstcolor: i32, ncolors: i32) -> i32 can[Video.Palette, Unsafe.RawExtern]:
+    can Video.Palette, Unsafe.RawExtern:
+        _ = sdl_set_palette_colors(palette, colors, firstcolor, ncolors)
+        _ = sdl_set_surface_palette(surface, palette)
+
+    return 0
+
+export func wolf3d_sdl_set_palette_colors(palette: mutable void&?, colors: u8&, firstcolor: i32, ncolors: i32) -> i32 = sdl_set_palette_colors
+export func wolf3d_sdl_set_surface_palette(surface: mutable void&?, palette: mutable void&?) -> i32 = sdl_set_surface_palette
+export func wolf3d_sdl_set_game_palette(surface: mutable void&?, palette: mutable void&?, colors: u8&, firstcolor: i32, ncolors: i32) -> i32 = sdl_set_game_palette

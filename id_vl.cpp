@@ -4,7 +4,7 @@
 #include "wl_def.h"
 #include "crt.h"
 #include "elisa_wolf3d_effects.h"
-#include "elisa_wolf3d_palette.h"
+#include "elisa_wolf3d_sdl.h"
 #include "elisa_wolf3d_video.h"
 #pragma hdrstop
 
@@ -142,8 +142,7 @@ void    VL_SetVGAPlaneMode (void)
         wolf3d_effect_process_abort();
         exit(1);
     }
-    wolf3d_effect_video_palette();
-    SDL_SetPaletteColors(sdlGamePalette, gamepal, 0, 256);
+    wolf3d_sdl_set_palette_colors(sdlGamePalette, (uint8_t *) gamepal, 0, 256);
     memcpy(curpal, gamepal, sizeof(SDL_Color) * 256);
 
     //Fab's CRT Hack
@@ -203,16 +202,7 @@ SDL_Surface *SDL_CreateIndexedSurface(int width, int height)
 
 void SDL_SetGamePalette(SDL_Surface *surface, const SDL_Color *colors, int firstcolor, int ncolors)
 {
-    if(sdlGamePalette)
-    {
-        wolf3d_effect_video_palette();
-        SDL_SetPaletteColors(sdlGamePalette, colors, firstcolor, ncolors);
-    }
-    if(surface)
-    {
-        wolf3d_effect_video_palette();
-        SDL_SetSurfacePalette(surface, sdlGamePalette);
-    }
+    wolf3d_sdl_set_game_palette(surface, sdlGamePalette, (const uint8_t *) colors, firstcolor, ncolors);
 }
 
 void SDL_SetGamePaletteColor(SDL_Surface *surface, const SDL_Color *color, int firstcolor)
@@ -264,26 +254,7 @@ SDL_Joystick *SDL_OpenJoystickByIndex(int index)
 
 void VL_ConvertPalette(byte *srcpal, SDL_Color *destpal, int numColors)
 {
-    if(numColors <= 0)
-        return;
-
-    byte rgb[256 * 3];
-
-    for(int baseColor=0; baseColor<numColors; baseColor += 256)
-    {
-        int chunkColors = numColors - baseColor;
-        if(chunkColors > 256)
-            chunkColors = 256;
-
-        wolf3d_convert_palette_6bit_rgb_to_8bit_rgb(srcpal + baseColor * 3, rgb, chunkColors);
-
-        for(int i=0; i<chunkColors; i++)
-        {
-            destpal[baseColor + i].r = rgb[i * 3];
-            destpal[baseColor + i].g = rgb[i * 3 + 1];
-            destpal[baseColor + i].b = rgb[i * 3 + 2];
-        }
-    }
+    wolf3d_convert_palette_6bit_rgb_to_sdl_colors(srcpal, (uint8_t *) destpal, numColors);
 }
 
 /*
@@ -296,16 +267,9 @@ void VL_ConvertPalette(byte *srcpal, SDL_Color *destpal, int numColors)
 
 void VL_FillPalette (int red, int green, int blue)
 {
-    int i;
     SDL_Color pal[256];
 
-    for(i=0; i<256; i++)
-    {
-        pal[i].r = red;
-        pal[i].g = green;
-        pal[i].b = blue;
-    }
-
+    wolf3d_fill_sdl_palette_rgb((uint8_t *) pal, red, green, blue, 256);
     VL_SetPalette(pal, true);
 }
 
@@ -327,7 +291,6 @@ void VL_SetColor    (int color, int red, int green, int blue)
     SDL_Color col = { (Uint8)red, (Uint8)green, (Uint8)blue, 255 };
     curpal[color] = col;
 
-    wolf3d_effect_video_palette();
     SDL_SetGamePaletteColor(curSurface, &col, color);
     wolf3d_effect_video_render();
     SDL_BlitSurface(screenBuffer, NULL, screen, NULL);
@@ -369,7 +332,6 @@ void VL_SetPalette (SDL_Color *palette, bool forceupdate)
 {
     memcpy(curpal, palette, sizeof(SDL_Color) * 256);
 
-    wolf3d_effect_video_palette();
     SDL_SetGamePalette(curSurface, palette, 0, 256);
     if(forceupdate)
     {
@@ -410,38 +372,22 @@ void VL_GetPalette (SDL_Color *palette)
 
 void VL_FadeOut (int start, int end, int red, int green, int blue, int steps)
 {
-    int         i,j,orig;
-    SDL_Color   *origptr, *newptr;
+    int i;
 
     if (wolf3d_validate_fade_steps(steps) != 0)
         Quit ("VL_FadeOut: steps must be greater than zero!");
 
-    red = wolf3d_fade_scale_6bit_color_component(red);
-    green = wolf3d_fade_scale_6bit_color_component(green);
-    blue = wolf3d_fade_scale_6bit_color_component(blue);
-
     VL_WaitVBL(1);
     VL_GetPalette(palette1);
-    memcpy(palette2, palette1, sizeof(SDL_Color) * 256);
 
 //
 // fade through intermediate frames
 //
     for (i=0;i<steps;i++)
     {
-        origptr = &palette1[start];
-        newptr = &palette2[start];
-        for (j=start;j<=end;j++)
-        {
-            orig = origptr->r;
-            newptr->r = wolf3d_fade_interpolated_channel(orig, red, i, steps);
-            orig = origptr->g;
-            newptr->g = wolf3d_fade_interpolated_channel(orig, green, i, steps);
-            orig = origptr->b;
-            newptr->b = wolf3d_fade_interpolated_channel(orig, blue, i, steps);
-            origptr++;
-            newptr++;
-        }
+        if (wolf3d_build_fade_out_sdl_palette((uint8_t *) palette1, (uint8_t *) palette2,
+            start, end, red, green, blue, i, steps, 256) != 0)
+            Quit ("VL_FadeOut: invalid palette range!");
 
         if(!usedoublebuffering || screenBits == 8) VL_WaitVBL(1);
         VL_SetPalette (palette2, true);
@@ -450,6 +396,9 @@ void VL_FadeOut (int start, int end, int red, int green, int blue, int steps)
 //
 // final color
 //
+    red = wolf3d_fade_scale_6bit_color_component(red);
+    green = wolf3d_fade_scale_6bit_color_component(green);
+    blue = wolf3d_fade_scale_6bit_color_component(blue);
     VL_FillPalette (red,green,blue);
 
     screenfaded = true;
@@ -466,26 +415,22 @@ void VL_FadeOut (int start, int end, int red, int green, int blue, int steps)
 
 void VL_FadeIn (int start, int end, SDL_Color *palette, int steps)
 {
-    int i,j;
+    int i;
 
     if (wolf3d_validate_fade_steps(steps) != 0)
         Quit ("VL_FadeIn: steps must be greater than zero!");
 
     VL_WaitVBL(1);
     VL_GetPalette(palette1);
-    memcpy(palette2, palette1, sizeof(SDL_Color) * 256);
 
 //
 // fade through intermediate frames
 //
     for (i=0;i<steps;i++)
     {
-        for (j=start;j<=end;j++)
-        {
-            palette2[j].r = wolf3d_fade_interpolated_channel(palette1[j].r, palette[j].r, i, steps);
-            palette2[j].g = wolf3d_fade_interpolated_channel(palette1[j].g, palette[j].g, i, steps);
-            palette2[j].b = wolf3d_fade_interpolated_channel(palette1[j].b, palette[j].b, i, steps);
-        }
+        if (wolf3d_build_fade_in_sdl_palette((uint8_t *) palette1, (uint8_t *) palette,
+            (uint8_t *) palette2, start, end, i, steps, 256) != 0)
+            Quit ("VL_FadeIn: invalid palette range!");
 
         if(!usedoublebuffering || screenBits == 8) VL_WaitVBL(1);
         VL_SetPalette(palette2, true);
