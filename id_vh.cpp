@@ -283,8 +283,8 @@ boolean FizzleFade (SDL_Surface *source, int x1, int y1,
     unsigned width, unsigned height, unsigned frames, boolean abortable)
 {
 
-    unsigned x, y, frame, pixperframe;
-    int32_t  rndval, lastrndval;
+    unsigned frame, pixperframe;
+    uint32_t rndval, lastrndval;
     int      first = 1;
 
     lastrndval = 0;
@@ -326,49 +326,13 @@ boolean FizzleFade (SDL_Surface *source, int x1, int y1,
         // Only for the first frame, there is no "last frame"
         for(int i = first; i < 2; i++)
         {
-            for(unsigned p = 0; p < pixperframe; p++)
-            {
-                //
-                // seperate random value into x/y pair
-                //
-
-                x = rndval >> rndbits_y;
-                y = rndval & ((1 << rndbits_y) - 1);
-
-                //
-                // advance to next random element
-                //
-
-                rndval = (rndval >> 1) ^ (rndval & 1 ? 0 : rndmask);
-
-                if(x >= width || y >= height)
-                {
-                    if(rndval == 0)     // entire sequence has been completed
-                        goto finished;
-                    p--;
-                    continue;
-                }
-
-                //
-                // copy one pixel
-                //
-
-                if(screenBits == 8)
-                {
-                    *(destptr + (y1 + y) * screen->pitch + x1 + x)
-                        = *(srcptr + (y1 + y) * source->pitch + x1 + x);
-                }
-                else
-                {
-                    byte col = *(srcptr + (y1 + y) * source->pitch + x1 + x);
-                    *(destptr + (y1 + y) * screen->pitch + x1 + x) = col;
-                }
-
-                if(rndval == 0)     // entire sequence has been completed
-                    goto finished;
-            }
+            rndval = wolf3d_apply_fizzle_pixels(srcptr, destptr, x1, y1, width, height,
+                source->pitch, screen->pitch, rndbits_y, rndmask, pixperframe, rndval);
 
             if(!i || first) lastrndval = rndval;
+
+            if(rndval == 0)     // entire sequence has been completed
+                goto finished;
         }
 
         // If there is no double buffering, we always use the "first frame" case

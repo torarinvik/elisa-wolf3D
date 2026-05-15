@@ -40,6 +40,14 @@ def fizzle_mask_for_bits(bits: i32) -> u32 can[Video.Fizzle]:
         return 0x00e10000
     return 0x01200000
 
+def fizzle_advance(rndval: u32, rndmask: u32) -> u32 can[Video.Fizzle]:
+    can Video.Fizzle:
+        signal Video.Fizzle
+
+    if rndval & 1.u32() != 0.u32():
+        return rndval >> 1
+    return (rndval >> 1) ^ rndmask
+
 error VideoPictureError:
     WidthNotDivisibleBy4
 
@@ -248,6 +256,44 @@ def draw_prop_string_scaled(text: u8&, font_base: u8&, font_locations: i16&, fon
             text_index <- text_index + 1
 
     return drawn_width
+
+def apply_fizzle_pixels(source: u8&, dest: mutable u8&, x1: i32, y1: i32, width: i32, height: i32, source_pitch: i32, dest_pitch: i32, rndbits_y: i32, rndmask: u32, pixperframe: u32, start_rndval: u32) -> u32 can[Video.Fizzle, Video.Picture]:
+    rndval: mutable u32 = start_rndval
+    copied: mutable u32 = 0
+
+    can Video.Fizzle:
+        signal Video.Fizzle
+
+    can Video.Picture:
+        signal Video.Picture
+
+        y_mask: u32 = (1.u32() << rndbits_y.u32()) - 1.u32()
+        x_origin: usize = x1.usize()
+        y_origin: usize = y1.usize()
+        source_pitch_usize: usize = source_pitch.usize()
+        dest_pitch_usize: usize = dest_pitch.usize()
+
+        while copied < pixperframe:
+            x: u32 = rndval >> rndbits_y.u32()
+            y: u32 = rndval & y_mask
+
+            can Video.Fizzle:
+                rndval <- fizzle_advance(rndval, rndmask)
+
+            if x >= width.u32() or y >= height.u32():
+                if rndval == 0.u32():
+                    return 0.u32()
+            else:
+                offset_source: usize = (y_origin + y.usize()) * source_pitch_usize + x_origin + x.usize()
+                offset_dest: usize = (y_origin + y.usize()) * dest_pitch_usize + x_origin + x.usize()
+                dest[offset_dest] <- source[offset_source]
+
+                if rndval == 0.u32():
+                    return 0.u32()
+
+                copied <- copied + 1.u32()
+
+    return rndval
 
 def checked_measure_prop_string_width(text: u8&, font_width: u8&) -> i32 can[Video.Text]:
     width: mutable i32 = 0
@@ -558,6 +604,7 @@ export func wolf3d_fill_linear_span(dest: mutable u8&, width: i32, color: i32) -
 export func wolf3d_fill_linear_vline(dest: mutable u8&, height: i32, pitch: i32, color: i32) -> i32 = fill_linear_vline
 export func wolf3d_fill_linear_rect(dest: mutable u8&, width: i32, height: i32, pitch: i32, color: i32) -> i32 = fill_linear_rect
 export func wolf3d_draw_prop_string_scaled(text: u8&, font_base: u8&, font_locations: i16&, font_width: u8&, dest: mutable u8&, font_height: i32, scale: i32, dest_pitch: i32, color: i32) -> i32 = draw_prop_string_scaled
+export func wolf3d_apply_fizzle_pixels(source: u8&, dest: mutable u8&, x1: i32, y1: i32, width: i32, height: i32, source_pitch: i32, dest_pitch: i32, rndbits_y: i32, rndmask: u32, pixperframe: u32, start_rndval: u32) -> u32 = apply_fizzle_pixels
 export func wolf3d_validate_fizzle_frames(frames: u32) -> i32 = validate_fizzle_frames
 export func wolf3d_fizzle_bits_for_dimensions(width: u32, height: u32) -> i32 = fizzle_bits_for_dimensions
 export func wolf3d_fizzle_mask_for_dimensions(width: u32, height: u32) -> u32 = fizzle_mask_for_dimensions
@@ -807,6 +854,42 @@ def draw_prop_string_scaled_renders_glyph_columns() -> void can[Abort.Panic, Vid
 
                 if dest[2] != 0.u8() or dest[16] != 0.u8():
                     panic("blank glyph pixels should remain untouched")
+
+@test
+def apply_fizzle_pixels_copies_lfsr_selected_pixels() -> void can[Abort.Panic, Video.Fizzle, Video.Picture]:
+    can Video.Fizzle:
+        can Video.Picture:
+            can Abort.Panic:
+                source: mutable u8[8] = zeroed
+                dest: mutable u8[8] = zeroed
+
+                source[2] <- 11.u8()
+
+                next: u32 = apply_fizzle_pixels(source[0].ref[u8&], dest[0].ref[mutable u8&], 0, 0, 4, 1, 4, 4, 0, 0.u32(), 1.u32(), 2.u32())
+
+                if next != 1.u32():
+                    panic("fizzle helper returned the wrong next random value")
+
+                if dest[2] != 11.u8() or dest[0] != 0.u8() or dest[1] != 0.u8():
+                    panic("fizzle helper copied the wrong pixel")
+
+@test
+def apply_fizzle_pixels_skips_out_of_bounds_positions() -> void can[Abort.Panic, Video.Fizzle, Video.Picture]:
+    can Video.Fizzle:
+        can Video.Picture:
+            can Abort.Panic:
+                source: mutable u8[4] = zeroed
+                dest: mutable u8[4] = zeroed
+
+                source[0] <- 9.u8()
+
+                next: u32 = apply_fizzle_pixels(source[0].ref[u8&], dest[0].ref[mutable u8&], 0, 0, 1, 1, 1, 1, 0, 0.u32(), 1.u32(), 2.u32())
+
+                if next != 0.u32():
+                    panic("fizzle helper should stop when the sequence is complete")
+
+                if dest[0] != 0.u8():
+                    panic("out-of-bounds fizzle positions should not copy")
 
 @test
 def validate_fizzle_frames_rejects_zero() -> void can[Abort.Panic, Video.Fizzle]:
