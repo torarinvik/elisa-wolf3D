@@ -1,9 +1,16 @@
 include "elisa_wolf3d_startup.elisa"
-
 permission Game:
     Run
     Menu
     Session
+
+permission Video:
+    Picture
+    Palette
+    Surface
+
+permission Input:
+    Poll
 
 permission FileSystem:
     Read
@@ -16,10 +23,37 @@ extern wolf3d_legacy_apply_wolf3d_data_extension(extension: u8&, missing_episode
 extern wolf3d_legacy_check_parameters_default_status() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_no_wolf3d_data_files() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_init_platform_and_signon() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_get_param_joystickindex() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_report_invalid_joystick_selection(joystick_index: i32, num_joysticks: i32) -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_copy_game_palette(dest: mutable u8&) -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_get_usedoublebuffering() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_get_screen_pitch() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_get_buffer_pitch() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_get_cur_pitch() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_sdl_num_joysticks_compat() -> i32 effects[Input.Poll, Unsafe.RawExtern]
+extern wolf3d_sdl_open_joystick_by_index(index: i32) -> mutable void&? effects[Input.Poll, Unsafe.RawExtern]
+extern wolf3d_sdl_joystick_num_buttons(joystick: mutable void&?) -> i32 effects[Input.Poll, Unsafe.RawExtern]
+extern wolf3d_sdl_joystick_num_hats(joystick: mutable void&?) -> i32 effects[Input.Poll, Unsafe.RawExtern]
+extern wolf3d_sdl_create_game_palette(ncolors: i32) -> mutable void&? effects[Video.Palette, Unsafe.RawExtern]
+extern wolf3d_sdl_set_palette_colors(palette: mutable void&?, colors: u8&, firstcolor: i32, ncolors: i32) -> i32 effects[Video.Palette, Unsafe.RawExtern]
+extern wolf3d_sdl_create_indexed_surface(width: i32, height: i32, palette: mutable void&?) -> mutable void&? effects[Video.Surface, Video.Palette, Unsafe.RawExtern]
+extern wolf3d_latch_tile_surface_height(num_tiles: i32) -> i32 effects[Video.Picture, Unsafe.RawExtern]
+extern wolf3d_legacy_attach_joystick(joystick: mutable void&?, joy_num_buttons: i32, joy_num_hats: i32) -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_install_vl_bootstrap(palette: mutable void&?, screen_surface: mutable void&?, screen_buffer_surface: mutable void&?) -> i32 effects[Video.Surface, Video.Palette, Unsafe.RawExtern]
+extern wolf3d_legacy_register_latchpic_surface(index: i32, surface: mutable void&?) -> i32 effects[Video.Surface, Unsafe.RawExtern]
+extern wolf3d_legacy_get_latchpic_dimensions(picnum: i32, width: mutable i32&, height: mutable i32&) -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_startup_subsystems() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_check_memory_floor() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_load_config_and_intro() -> i32 effects[Game.Run, Unsafe.RawExtern]
-extern wolf3d_legacy_prepare_startup_assets() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_cache_startup_assets() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_new_view_size() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_init_red_shifts() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_finish_signon() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_vl_set_vga_plane_mode() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_signon_screen() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_build_tables() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_setup_walls() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_load_latch_mem() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_run_ted_launch_if_requested() -> i32 effects[Game.Run, Unsafe.RawExtern]
 extern wolf3d_legacy_prepare_hosted_session_state() -> i32 effects[Game.Session, Unsafe.RawExtern]
 extern wolf3d_legacy_should_run_attract_loop() -> i32 effects[Game.Run, Unsafe.RawExtern]
@@ -37,6 +71,9 @@ extern wolf3d_legacy_unreachable_demo_loop_exit() -> i32 effects[Game.Run, Unsaf
 const wolf3d_demo_loop_stage_attract: i32 = 0
 const wolf3d_demo_loop_stage_control_panel: i32 = 1
 const wolf3d_demo_loop_stage_game: i32 = 2
+const wolf3d_num_tile8: i32 = 72
+const wolf3d_latchpics_lump_start: i32 = 91
+const wolf3d_latchpics_lump_end: i32 = 134
 
 def select_wolf3d_data_files() -> i32 can[Game.Run, FileSystem.Read, FileSystem.Write, Unsafe.RawExtern]:
     can Game.Run, FileSystem.Write, Unsafe.RawExtern:
@@ -60,9 +97,26 @@ def select_wolf3d_data_files() -> i32 can[Game.Run, FileSystem.Read, FileSystem.
     can Game.Run, Unsafe.RawExtern:
         return wolf3d_legacy_no_wolf3d_data_files()
 
-def initialize_game() -> i32 can[Game.Run, Unsafe.RawExtern]:
-    can Game.Run, Unsafe.RawExtern:
+def initialize_game() -> i32 can[Game.Run, Input.Poll, Video.Picture, Video.Palette, Video.Surface, Unsafe.RawExtern]:
+    can Game.Run, Input.Poll, Video.Picture, Video.Palette, Video.Surface, Unsafe.RawExtern:
         if wolf3d_legacy_init_platform_and_signon() != 0:
+            return 1
+        num_joysticks: i32 = wolf3d_sdl_num_joysticks_compat()
+        joystick_index: i32 = wolf3d_legacy_get_param_joystickindex()
+        if joystick_selection_is_invalid(joystick_index, num_joysticks) != 0:
+            return wolf3d_legacy_report_invalid_joystick_selection(joystick_index, num_joysticks)
+        if joystick_selection_should_attach(joystick_index, num_joysticks) != 0:
+            joystick: mutable void&? = wolf3d_sdl_open_joystick_by_index(joystick_index)
+            if joystick != null:
+                joy_buttons: i32 = wolf3d_sdl_joystick_num_buttons(joystick)
+                joy_hats: i32 = wolf3d_sdl_joystick_num_hats(joystick)
+                if wolf3d_legacy_attach_joystick(joystick, joy_buttons, joy_hats) != 0:
+                    return 1
+        if prepare_vl_bootstrap() != 0:
+            return 1
+        if wolf3d_legacy_vl_set_vga_plane_mode() != 0:
+            return 1
+        if wolf3d_legacy_signon_screen() != 0:
             return 1
         if wolf3d_legacy_startup_subsystems() != 0:
             return 1
@@ -70,9 +124,111 @@ def initialize_game() -> i32 can[Game.Run, Unsafe.RawExtern]:
             return 1
         if wolf3d_legacy_load_config_and_intro() != 0:
             return 1
-        if wolf3d_legacy_prepare_startup_assets() != 0:
+        if wolf3d_legacy_cache_startup_assets() != 0:
+            return 1
+        if wolf3d_legacy_new_view_size() != 0:
+            return 1
+        if wolf3d_legacy_init_red_shifts() != 0:
+            return 1
+        if wolf3d_legacy_finish_signon() != 0:
+            return 1
+        if wolf3d_legacy_build_tables() != 0:
+            return 1
+        if wolf3d_legacy_setup_walls() != 0:
+            return 1
+        if prepare_latch_surfaces() != 0:
+            return 1
+        if wolf3d_legacy_load_latch_mem() != 0:
             return 1
         return 0
+
+def prepare_vl_bootstrap() -> i32 can[Game.Run, Video.Picture, Video.Palette, Video.Surface, Unsafe.RawExtern]:
+    can Game.Run, Video.Picture, Video.Palette, Video.Surface, Unsafe.RawExtern:
+        game_palette_bytes: mutable u8[1024] = zeroed
+        if wolf3d_legacy_copy_game_palette(game_palette_bytes[0].ref[mutable u8&]) != 0:
+            return 1
+
+        palette: mutable void&? = wolf3d_sdl_create_game_palette(256)
+        if palette == null:
+            return 1
+
+        _ = wolf3d_sdl_set_palette_colors(palette, game_palette_bytes[0].ref[mutable u8&], 0, 256)
+
+        screen_surface: mutable void&? = wolf3d_sdl_create_indexed_surface(320, 200, palette)
+        if screen_surface == null:
+            return 1
+
+        screen_buffer_surface: mutable void&? = wolf3d_sdl_create_indexed_surface(320, 200, palette)
+        if screen_buffer_surface == null:
+            return 1
+
+        if wolf3d_legacy_install_vl_bootstrap(palette, screen_surface, screen_buffer_surface) != 0:
+            return 1
+
+        return 0
+
+def prepare_latch_surfaces() -> i32 can[Game.Run, Video.Picture, Video.Palette, Video.Surface, Unsafe.RawExtern]:
+    can Game.Run, Video.Picture, Video.Palette, Video.Surface, Unsafe.RawExtern:
+        game_palette_bytes: mutable u8[1024] = zeroed
+        if wolf3d_legacy_copy_game_palette(game_palette_bytes[0].ref[mutable u8&]) != 0:
+            return 1
+
+        palette: mutable void&? = wolf3d_sdl_create_game_palette(256)
+        if palette == null:
+            return 1
+
+        _ = wolf3d_sdl_set_palette_colors(palette, game_palette_bytes[0].ref[mutable u8&], 0, 256)
+
+        tile_surface_height: i32 = wolf3d_latch_tile_surface_height(wolf3d_num_tile8)
+        tile_surface: mutable void&? = wolf3d_sdl_create_indexed_surface(8 * 8, tile_surface_height, palette)
+        if tile_surface == null:
+            return 1
+        if wolf3d_legacy_register_latchpic_surface(0, tile_surface) != 0:
+            return 1
+
+        latchpic: mutable i32 = wolf3d_latchpics_lump_start
+        while latchpic <= wolf3d_latchpics_lump_end:
+            width: mutable i32 = 0
+            height: mutable i32 = 0
+            surface: mutable void&? = null
+
+            if wolf3d_legacy_get_latchpic_dimensions(latchpic, width, height) != 0:
+                return 1
+
+            surface <- wolf3d_sdl_create_indexed_surface(width, height, palette)
+            if surface == null:
+                return 1
+
+            if wolf3d_legacy_register_latchpic_surface(2 + latchpic - wolf3d_latchpics_lump_start, surface) != 0:
+                return 1
+
+            latchpic <- latchpic + 1
+
+        return 0
+
+def joystick_selection_is_invalid(joystick_index: i32, num_joysticks: i32) -> i32 can[Input.Poll]:
+    can Input.Poll:
+        signal Input.Poll
+
+    if joystick_index != 0 and (joystick_index < -1 or joystick_index >= num_joysticks):
+        return 1
+
+    return 0
+
+def joystick_selection_should_attach(joystick_index: i32, num_joysticks: i32) -> i32 can[Input.Poll]:
+    can Input.Poll:
+        signal Input.Poll
+
+    if joystick_index >= 0 and joystick_index < num_joysticks:
+        return 1
+
+    return 0
+
+@test
+def latch_surface_bounds_follow_legacy_latchpic_window() -> void can[Abort.Panic]:
+    can Abort.Panic:
+        if wolf3d_latchpics_lump_end - wolf3d_latchpics_lump_start + 1 != 44:
+            panic("latch surface count should match legacy window")
 
 def run_demo_loop_step(stage: mutable i32, last_demo: mutable i32) -> i32 can[Game.Menu, Game.Session, Game.Run, Unsafe.RawExtern]:
     can Game.Run, Unsafe.RawExtern:
@@ -144,19 +300,19 @@ def run_demo_loop() -> i32 can[Game.Run, Game.Menu, Game.Session, Unsafe.RawExte
 
         return 0
 
-def run_game() -> i32 can[Game.Run, Game.Menu, Game.Session, FileSystem.Read, FileSystem.Write, Unsafe.RawExtern]:
+def run_game() -> i32 can[Game.Run, Game.Menu, Game.Session, FileSystem.Read, FileSystem.Write, Input.Poll, Video.Picture, Video.Palette, Video.Surface, Unsafe.RawExtern]:
     can Game.Run:
         signal Game.Run
 
-    can Game.Run, Unsafe.RawExtern:
+    can Game.Run, Input.Poll, Unsafe.RawExtern:
         if wolf3d_legacy_check_parameters_default_status() != 0:
             return 1
 
-    can Game.Run, FileSystem.Read, FileSystem.Write, Unsafe.RawExtern:
+    can Game.Run, FileSystem.Read, FileSystem.Write, Input.Poll, Unsafe.RawExtern:
         if select_wolf3d_data_files() != 0:
             return 1
 
-    can Game.Run, Game.Menu, Game.Session, Unsafe.RawExtern:
+    can Game.Run, Game.Menu, Game.Session, Input.Poll, Video.Picture, Video.Palette, Video.Surface, Unsafe.RawExtern:
         if initialize_game() != 0:
             return 1
         if run_demo_loop() != 0:
@@ -164,6 +320,27 @@ def run_game() -> i32 can[Game.Run, Game.Menu, Game.Session, FileSystem.Read, Fi
         return wolf3d_legacy_unreachable_demo_loop_exit()
 
 export func run_game_entry() -> i32 = run_game
+
+@test
+def joystick_selection_rules_match_legacy_behavior() -> void can[Abort.Panic, Input.Poll]:
+    can Input.Poll, Abort.Panic:
+        if joystick_selection_is_invalid(0, 0) != 0:
+            panic("default joystick selection should remain valid when no device exists")
+
+        if joystick_selection_is_invalid(1, 0) == 0:
+            panic("positive joystick indices should be rejected when no devices exist")
+
+        if joystick_selection_is_invalid(-1, 4) != 0:
+            panic("special -1 joystick selection should remain allowed")
+
+        if joystick_selection_is_invalid(2, 4) != 0:
+            panic("valid joystick indices should be accepted")
+
+        if joystick_selection_should_attach(0, 0) != 0:
+            panic("default selection should not attach when no joystick is available")
+
+        if joystick_selection_should_attach(2, 4) == 0:
+            panic("valid joystick indices should attach through Elisa-owned control flow")
 
 @test
 def demo_loop_stage_order_is_well_formed() -> void can[Abort.Panic, Game.Run]:

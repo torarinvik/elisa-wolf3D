@@ -23,6 +23,9 @@
 #include "sdl_compat.h"
 
 extern SDL_Color curpal[256];
+#ifdef __cplusplus
+extern "C" {
+#endif
 /*
  * CRT aspect ratio is 4:3, height will be infered.
  */
@@ -34,6 +37,10 @@ void CRT_Init(int width);
 void CRT_DAC(void);
 
 void CRT_Screenshot(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 
 #endif

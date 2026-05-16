@@ -3,7 +3,53 @@ permission Video:
     Geometry
     Picture
     Palette
+    Surface
     Text
+
+permission Input:
+    Poll
+
+permission Game:
+    Run
+
+const wolf3d_latchpics_lump_start: i32 = 91
+
+@link_name(SDL_BlitSurface)
+extern sdl_blit_surface_raw(source: mutable void&?, source_rect: mutable void&?, dest: mutable void&?, dest_rect: mutable void&?) -> bool effects[Video.Surface, Unsafe.RawExtern]
+
+@link_name(CRT_DAC)
+extern crt_dac_raw() -> void effects[Video.Surface, Unsafe.RawExtern]
+
+@link_name(SDL_GetTicks)
+extern sdl_get_ticks_raw() -> u32 effects[Unsafe.RawExtern]
+
+@link_name(SDL_Delay)
+extern sdl_delay_raw(ms: u32) -> void effects[Unsafe.RawExtern]
+
+extern wolf3d_legacy_get_scale_factor() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_get_latchpic_surface(index: i32) -> mutable void&? effects[Video.Surface, Unsafe.RawExtern]
+extern wolf3d_legacy_vl_latch_to_screen_scaled_coord(source: mutable void&?, xsrc: i32, ysrc: i32, width: i32, height: i32, scxdest: i32, scydest: i32) -> i32 effects[Video.Surface, Unsafe.RawExtern]
+extern wolf3d_legacy_get_latchpic_dimensions(picnum: i32, width: mutable i32&, height: mutable i32&) -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_in_start_ack() -> i32 effects[Input.Poll, Unsafe.RawExtern]
+extern wolf3d_legacy_in_check_ack() -> i32 effects[Input.Poll, Unsafe.RawExtern]
+extern wolf3d_legacy_vl_get_palette(palette: mutable u8&) -> i32 effects[Video.Palette, Unsafe.RawExtern]
+extern wolf3d_legacy_vl_set_palette(palette: mutable u8&, forceupdate: i32) -> i32 effects[Video.Palette, Unsafe.RawExtern]
+extern wolf3d_legacy_vl_fill_palette(red: i32, green: i32, blue: i32) -> i32 effects[Video.Palette, Unsafe.RawExtern]
+extern wolf3d_legacy_get_usedoublebuffering() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_get_screen_bits() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_get_screen_width() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_get_screen_height() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_get_screen_pitch() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_get_buffer_pitch() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_get_cur_pitch() -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_get_screen_surface() -> mutable void&? effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_get_screen_buffer_surface() -> mutable void&? effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_get_cur_surface() -> mutable void&? effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_get_game_palette() -> mutable void&? effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_set_screen_width(screen_width: i32) -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_set_screen_height(screen_height: i32) -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_set_screen_bits(screen_bits: i32) -> i32 effects[Game.Run, Unsafe.RawExtern]
+extern wolf3d_legacy_set_usedoublebuffering(usedoublebuffering: i32) -> i32 effects[Game.Run, Unsafe.RawExtern]
 
 def log2_ceil_impl(value: u32) -> i32 can[Video.Geometry]:
     can Video.Geometry:
@@ -289,6 +335,159 @@ def fill_linear_rect(dest: mutable u8&, width: i32, height: i32, pitch: i32, col
 
     return 0
 
+def draw_pixel_on_linear_buffer(dest: mutable u8&, x: i32, y: i32, color: i32, pitch: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        if validate_pixel_bounds(x, y, screen_width, screen_height) != 0:
+            return -1
+
+        dest[y.usize() * pitch.usize() + x.usize()] <- color.u8()
+
+    return 0
+
+def get_pixel_from_linear_buffer(source: u8&, x: i32, y: i32, pitch: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        if validate_pixel_bounds(x, y, screen_width, screen_height) != 0:
+            return -1
+
+        return source[y.usize() * pitch.usize() + x.usize()].i32()
+
+def draw_hline_on_linear_buffer(dest: mutable u8&, x: i32, y: i32, width: i32, color: i32, pitch: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        if validate_hline_bounds(x, y, width, screen_width, screen_height) != 0:
+            return -1
+
+        offset: usize = y.usize() * pitch.usize() + x.usize()
+        return fill_linear_span(dest[offset].ref[mutable u8&], width, color)
+
+def draw_vline_on_linear_buffer(dest: mutable u8&, x: i32, y: i32, height: i32, color: i32, pitch: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        if validate_vline_bounds(x, y, height, screen_width, screen_height) != 0:
+            return -1
+
+        offset: usize = y.usize() * pitch.usize() + x.usize()
+        return fill_linear_vline(dest[offset].ref[mutable u8&], height, pitch, color)
+
+def draw_bar_scaled_coord_on_linear_buffer(dest: mutable u8&, scx: i32, scy: i32, scwidth: i32, scheight: i32, color: i32, pitch: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        if validate_bar_bounds(scx, scy, scwidth, scheight, screen_width, screen_height) != 0:
+            return -1
+
+        offset: usize = scy.usize() * pitch.usize() + scx.usize()
+        return fill_linear_rect(dest[offset].ref[mutable u8&], scwidth, scheight, pitch, color)
+
+def draw_logical_plot_on_linear_buffer(dest: mutable u8&, x: i32, y: i32, color: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        if scale <= 0:
+            return -1
+
+        if scale == 1:
+            return draw_pixel_on_linear_buffer(dest, x, y, color, pitch, screen_width, screen_height)
+
+        return draw_bar_scaled_coord_on_linear_buffer(dest, x * scale, y * scale, scale, scale, color, pitch, screen_width, screen_height)
+
+def draw_logical_hline_on_linear_buffer(dest: mutable u8&, x1: i32, x2: i32, y: i32, color: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture, Video.Geometry]:
+    can Video.Picture, Video.Geometry:
+        if scale <= 0:
+            return -1
+
+        span: i32 = inclusive_span_length(x1, x2)
+        if span < 0:
+            return -1
+        return draw_bar_scaled_coord_on_linear_buffer(dest, x1 * scale, y * scale, span * scale, scale, color, pitch, screen_width, screen_height)
+
+def draw_logical_vline_on_linear_buffer(dest: mutable u8&, y1: i32, y2: i32, x: i32, color: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture, Video.Geometry]:
+    can Video.Picture, Video.Geometry:
+        if scale <= 0:
+            return -1
+
+        span: i32 = inclusive_span_length(y1, y2)
+        if span < 0:
+            return -1
+        return draw_bar_scaled_coord_on_linear_buffer(dest, x * scale, y1 * scale, scale, span * scale, color, pitch, screen_width, screen_height)
+
+def draw_logical_bar_on_linear_buffer(dest: mutable u8&, x: i32, y: i32, width: i32, height: i32, color: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        if scale <= 0:
+            return -1
+
+        return draw_bar_scaled_coord_on_linear_buffer(dest, x * scale, y * scale, width * scale, height * scale, color, pitch, screen_width, screen_height)
+
+def vwb_bar_on_linear_buffer(dest: mutable u8&, x: i32, y: i32, width: i32, height: i32, color: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        return draw_logical_bar_on_linear_buffer(dest, x, y, width, height, color, pitch, scale, screen_width, screen_height)
+
+def vwb_plot_on_linear_buffer(dest: mutable u8&, x: i32, y: i32, color: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        return draw_logical_plot_on_linear_buffer(dest, x, y, color, pitch, scale, screen_width, screen_height)
+
+def vwb_hlin_on_linear_buffer(dest: mutable u8&, x1: i32, x2: i32, y: i32, color: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture, Video.Geometry]:
+    can Video.Picture, Video.Geometry:
+        return draw_logical_hline_on_linear_buffer(dest, x1, x2, y, color, pitch, scale, screen_width, screen_height)
+
+def vwb_vlin_on_linear_buffer(dest: mutable u8&, y1: i32, y2: i32, x: i32, color: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture, Video.Geometry]:
+    can Video.Picture, Video.Geometry:
+        return draw_logical_vline_on_linear_buffer(dest, y1, y2, x, color, pitch, scale, screen_width, screen_height)
+
+def vwb_draw_prop_string_on_linear_buffer(text: u8&, font_base: u8&, font_locations: i16&, font_width: u8&, dest: mutable u8&, font_height: i32, scale: i32, dest_pitch: i32, color: i32) -> i32 can[Video.Text, Video.Picture]:
+    can Video.Text, Video.Picture:
+        return draw_prop_string_scaled(text, font_base, font_locations, font_width, dest, font_height, scale, dest_pitch, color)
+
+def vwb_draw_pic_on_linear_buffer(source: u8&, width: i32, height: i32, dest: mutable u8&, x: i32, y: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        return draw_planar_block_on_linear_buffer(source, dest, width, height, x, y, scale, pitch, screen_width, screen_height)
+
+def vwb_draw_pic_scaled_coord_on_linear_buffer(source: u8&, width: i32, height: i32, dest: mutable u8&, x: i32, y: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        return draw_planar_block_on_linear_buffer(source, dest, width, height, x, y, scale, pitch, screen_width, screen_height)
+
+def latch_draw_pic_on_screen(picnum: i32, x: i32, y: i32) -> i32 can[Game.Run, Video.Picture, Video.Surface, Unsafe.RawExtern]:
+    can Game.Run, Video.Picture, Video.Surface, Unsafe.RawExtern:
+        index: i32 = latchpic_index(picnum, wolf3d_latchpics_lump_start)
+        surface: mutable void&? = wolf3d_legacy_get_latchpic_surface(index)
+        if surface == null:
+            return -1
+
+        width: mutable i32 = 0
+        height: mutable i32 = 0
+        if wolf3d_legacy_get_latchpic_dimensions(picnum, width, height) != 0:
+            return -1
+
+        scale: i32 = wolf3d_legacy_get_scale_factor()
+        return wolf3d_legacy_vl_latch_to_screen_scaled_coord(surface, 0, 0, width, height, scale * x * 8, scale * y)
+
+def latch_draw_pic_scaled_coord_on_screen(picnum: i32, scx: i32, scy: i32) -> i32 can[Game.Run, Video.Picture, Video.Surface, Unsafe.RawExtern]:
+    can Game.Run, Video.Picture, Video.Surface, Unsafe.RawExtern:
+        index: i32 = latchpic_index(picnum, wolf3d_latchpics_lump_start)
+        surface: mutable void&? = wolf3d_legacy_get_latchpic_surface(index)
+        if surface == null:
+            return -1
+
+        width: mutable i32 = 0
+        height: mutable i32 = 0
+        if wolf3d_legacy_get_latchpic_dimensions(picnum, width, height) != 0:
+            return -1
+
+        scale: i32 = wolf3d_legacy_get_scale_factor()
+        return wolf3d_legacy_vl_latch_to_screen_scaled_coord(surface, 0, 0, width, height, scale * scx * 8, scale * scy)
+
+def vh_update_screen(screen_buffer: mutable void&?, screen: mutable void&?) -> i32 can[Video.Surface, Unsafe.RawExtern]:
+    can Video.Surface, Unsafe.RawExtern:
+        _ = sdl_blit_surface_raw(screen_buffer, null, screen, null)
+        crt_dac_raw()
+    return 0
+
+def draw_planar_block_on_linear_buffer(source: u8&, dest: mutable u8&, width: i32, height: i32, dest_x: i32, dest_y: i32, scale: i32, dest_pitch: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        if validate_scaled_draw_bounds(dest_x, dest_y, width, height, scale, screen_width, screen_height) != 0:
+            return -1
+        return draw_planar_scaled_to_linear(source, dest, width, height, dest_x, dest_y, scale, dest_pitch)
+
+def draw_planar_region_on_linear_buffer(source: u8&, dest: mutable u8&, orig_width: i32, orig_height: i32, src_x: i32, src_y: i32, dest_x: i32, dest_y: i32, width: i32, height: i32, scale: i32, dest_pitch: i32, screen_width: i32, screen_height: i32) -> i32 can[Video.Picture]:
+    can Video.Picture:
+        if validate_scaled_draw_bounds(dest_x, dest_y, width, height, scale, screen_width, screen_height) != 0:
+            return -1
+        return draw_planar_region_scaled_to_linear(source, dest, orig_width, orig_height, src_x, src_y, dest_x, dest_y, width, height, scale, dest_pitch)
+
 def draw_prop_string_scaled(text: u8&, font_base: u8&, font_locations: i16&, font_width: u8&, dest: mutable u8&, font_height: i32, scale: i32, dest_pitch: i32, color: i32) -> i32 can[Video.Text, Video.Picture]:
     if font_height < 0 or scale <= 0:
         return -1
@@ -363,6 +562,50 @@ def apply_fizzle_pixels(source: u8&, dest: mutable u8&, x1: i32, y1: i32, width:
                 copied <- copied + 1.u32()
 
     return rndval
+
+def fizzle_fade_on_locked_buffers(source_pixels: u8&, source_pitch: i32, screen_copy_pixels: mutable u8&, screen_copy_pitch: i32, x1: i32, y1: i32, width: i32, height: i32, frames: u32, abortable: i32, usedoublebuffering: i32, rndbits_y: i32, rndmask: u32, source_width: i32, source_height: i32, screen_width: i32, screen_height: i32, screen_copy: mutable void&?, screen_buffer: mutable void&?, screen: mutable void&?) -> i32 can[Game.Run, Video.Fizzle, Video.Picture, Video.Surface, Unsafe.RawExtern]:
+    if validate_fizzle_work_area(x1, y1, width, height, source_width, source_height, screen_width, screen_height) != 0:
+        return 1
+    if validate_fizzle_frames(frames) != 0:
+        return 1
+
+    pixperframe: u32 = fizzle_pixels_per_frame(width.u32(), height.u32(), frames)
+    _ = wolf3d_legacy_in_start_ack()
+
+    frame: mutable u32 = (sdl_get_ticks_raw() * 7.u32()) / 100.u32()
+    lastrndval: mutable u32 = 0.u32()
+    first: mutable i32 = 1
+
+    while true:
+        if abortable != 0 and wolf3d_legacy_in_check_ack() != 0:
+            _ = sdl_blit_surface_raw(screen_copy, null, screen_buffer, null)
+            _ = sdl_blit_surface_raw(screen_buffer, null, screen, null)
+            crt_dac_raw()
+            return 1
+
+        rndval: mutable u32 = lastrndval
+        for i in first..<2:
+            rndval <- apply_fizzle_pixels(source_pixels, screen_copy_pixels, x1, y1, width, height,
+                source_pitch, screen_copy_pitch, rndbits_y, rndmask, pixperframe, rndval)
+            if i == 0 or first != 0:
+                lastrndval <- rndval
+            if rndval == 0.u32():
+                _ = sdl_blit_surface_raw(screen_copy, null, screen_buffer, null)
+                _ = sdl_blit_surface_raw(screen_buffer, null, screen, null)
+                crt_dac_raw()
+                return 0
+
+        first <- next_fizzle_first(usedoublebuffering, first)
+        _ = sdl_blit_surface_raw(screen_copy, null, screen_buffer, null)
+        _ = sdl_blit_surface_raw(screen_buffer, null, screen, null)
+        crt_dac_raw()
+
+        frame <- frame + 1.u32()
+        current: u32 = (sdl_get_ticks_raw() * 7.u32()) / 100.u32()
+        if frame > current:
+            sdl_delay_raw(((frame - current) * 100.u32()) / 7.u32())
+
+    return 1
 
 def checked_measure_prop_string_width(text: u8&, font_width: u8&) -> i32 can[Video.Text]:
     width: mutable i32 = 0
@@ -723,6 +966,117 @@ def fizzle_mask_for_dimensions(width: u32, height: u32) -> u32 can[Video.Fizzle,
     can Video.Fizzle, Video.Geometry:
         return fizzle_mask_for_bits(fizzle_bits_for_dimensions(width, height))
 
+def get_video_screen_width() -> i32 can[Game.Run]:
+    return wolf3d_legacy_get_screen_width()
+
+def get_video_screen_height() -> i32 can[Game.Run]:
+    return wolf3d_legacy_get_screen_height()
+
+def get_video_screen_bits() -> i32 can[Game.Run]:
+    return wolf3d_legacy_get_screen_bits()
+
+def get_video_screen_pitch() -> i32 can[Game.Run]:
+    return wolf3d_legacy_get_screen_pitch()
+
+def get_video_buffer_pitch() -> i32 can[Game.Run]:
+    return wolf3d_legacy_get_buffer_pitch()
+
+def get_video_cur_pitch() -> i32 can[Game.Run]:
+    return wolf3d_legacy_get_cur_pitch()
+
+def get_video_scale_factor() -> i32 can[Game.Run]:
+    return wolf3d_legacy_get_scale_factor()
+
+def get_video_usedoublebuffering() -> i32 can[Game.Run]:
+    return wolf3d_legacy_get_usedoublebuffering()
+
+def get_video_screen_surface() -> mutable void&? can[Game.Run]:
+    return wolf3d_legacy_get_screen_surface()
+
+def get_video_screen_buffer_surface() -> mutable void&? can[Game.Run]:
+    return wolf3d_legacy_get_screen_buffer_surface()
+
+def get_video_cur_surface() -> mutable void&? can[Game.Run]:
+    return wolf3d_legacy_get_cur_surface()
+
+def get_video_game_palette() -> mutable void&? can[Game.Run]:
+    return wolf3d_legacy_get_game_palette()
+
+def set_video_screen_width(screen_width: i32) -> i32 can[Game.Run, Unsafe.RawExtern]:
+    can Game.Run, Unsafe.RawExtern:
+        return wolf3d_legacy_set_screen_width(screen_width)
+
+def set_video_screen_height(screen_height: i32) -> i32 can[Game.Run, Unsafe.RawExtern]:
+    can Game.Run, Unsafe.RawExtern:
+        return wolf3d_legacy_set_screen_height(screen_height)
+
+def set_video_screen_bits(screen_bits: i32) -> i32 can[Game.Run, Unsafe.RawExtern]:
+    can Game.Run, Unsafe.RawExtern:
+        return wolf3d_legacy_set_screen_bits(screen_bits)
+
+def set_video_usedoublebuffering(usedoublebuffering: i32) -> i32 can[Game.Run, Unsafe.RawExtern]:
+    can Game.Run, Unsafe.RawExtern:
+        return wolf3d_legacy_set_usedoublebuffering(usedoublebuffering)
+
+def vl_set_palette_from_host(palette: mutable u8&, forceupdate: i32) -> i32 can[Video.Palette, Video.Surface, Unsafe.RawExtern]:
+    can Video.Palette, Video.Surface, Unsafe.RawExtern:
+        return wolf3d_legacy_vl_set_palette(palette, forceupdate)
+
+def vl_get_palette_from_host(palette: mutable u8&) -> i32 can[Video.Palette, Unsafe.RawExtern]:
+    can Video.Palette, Unsafe.RawExtern:
+        return wolf3d_legacy_vl_get_palette(palette)
+
+def vl_fill_palette_from_host(red: i32, green: i32, blue: i32) -> i32 can[Video.Palette, Unsafe.RawExtern]:
+    can Video.Palette, Unsafe.RawExtern:
+        return wolf3d_legacy_vl_fill_palette(red, green, blue)
+
+def vl_fade_out_from_host(start: i32, end: i32, red: i32, green: i32, blue: i32, steps: i32) -> i32 can[Game.Run, Video.Palette, Video.Surface, Video.Fizzle, Unsafe.RawExtern]:
+    can Game.Run, Video.Palette, Video.Surface, Video.Fizzle, Unsafe.RawExtern:
+        palette1: mutable u8[1024] = zeroed
+        palette2: mutable u8[1024] = zeroed
+
+        if validate_fade_steps(steps.u32()) != 0:
+            return -1
+        if wolf3d_legacy_vl_get_palette(palette1[0].ref[mutable u8&]) != 0:
+            return -1
+
+        i: mutable i32 = 0
+        while i < steps:
+            if build_fade_out_sdl_palette(palette1[0].ref[u8&], palette2[0].ref[mutable u8&], start, end, red, green, blue, i, steps, 256) != 0:
+                return -1
+            if wolf3d_legacy_get_usedoublebuffering() == 0 or wolf3d_legacy_get_screen_bits() == 8:
+                sdl_delay_raw(8.u32())
+            _ = wolf3d_legacy_vl_set_palette(palette2[0].ref[mutable u8&], 1)
+            i <- i + 1
+
+        red6: i32 = fade_scale_6bit_color_component(red)
+        green6: i32 = fade_scale_6bit_color_component(green)
+        blue6: i32 = fade_scale_6bit_color_component(blue)
+        _ = wolf3d_legacy_vl_fill_palette(red6, green6, blue6)
+        return 0
+
+def vl_fade_in_from_host(start: i32, end: i32, palette: mutable u8&, steps: i32) -> i32 can[Game.Run, Video.Palette, Video.Surface, Video.Fizzle, Unsafe.RawExtern]:
+    can Game.Run, Video.Palette, Video.Surface, Video.Fizzle, Unsafe.RawExtern:
+        palette1: mutable u8[1024] = zeroed
+        palette2: mutable u8[1024] = zeroed
+
+        if validate_fade_steps(steps.u32()) != 0:
+            return -1
+        if wolf3d_legacy_vl_get_palette(palette1[0].ref[mutable u8&]) != 0:
+            return -1
+
+        i: mutable i32 = 0
+        while i < steps:
+            if build_fade_in_sdl_palette(palette1[0].ref[u8&], palette, palette2[0].ref[mutable u8&], start, end, i, steps, 256) != 0:
+                return -1
+            if wolf3d_legacy_get_usedoublebuffering() == 0 or wolf3d_legacy_get_screen_bits() == 8:
+                sdl_delay_raw(8.u32())
+            _ = wolf3d_legacy_vl_set_palette(palette2[0].ref[mutable u8&], 1)
+            i <- i + 1
+
+        _ = wolf3d_legacy_vl_set_palette(palette, 1)
+        return 0
+
 export func wolf3d_log2_ceil(value: u32) -> i32 = log2_ceil_impl
 export func wolf3d_fizzle_mask_for_bits(bits: i32) -> u32 = fizzle_mask_for_bits
 export func wolf3d_validate_munge_pic_width(width: u32) -> i32 = validate_munge_pic_width
@@ -736,6 +1090,22 @@ export func wolf3d_latch_tile_dest_y(tile_index: i32) -> i32 = latch_tile_dest_y
 export func wolf3d_fizzle_pixels_per_frame(width: u32, height: u32, frames: u32) -> u32 = fizzle_pixels_per_frame
 export func wolf3d_configure_fizzle_state(width: u32, height: u32, rndbits_y: mutable u32&, rndmask: mutable u32&) -> i32 = configure_fizzle_state
 export func wolf3d_next_fizzle_first(usedoublebuffering: i32, current_first: i32) -> i32 = next_fizzle_first
+export func wolf3d_video_get_screen_width() -> i32 = get_video_screen_width
+export func wolf3d_video_get_screen_height() -> i32 = get_video_screen_height
+export func wolf3d_video_get_screen_bits() -> i32 = get_video_screen_bits
+export func wolf3d_video_get_screen_pitch() -> i32 = get_video_screen_pitch
+export func wolf3d_video_get_buffer_pitch() -> i32 = get_video_buffer_pitch
+export func wolf3d_video_get_cur_pitch() -> i32 = get_video_cur_pitch
+export func wolf3d_video_get_scale_factor() -> i32 = get_video_scale_factor
+export func wolf3d_video_get_usedoublebuffering() -> i32 = get_video_usedoublebuffering
+export func wolf3d_video_get_screen_surface() -> mutable void&? = get_video_screen_surface
+export func wolf3d_video_get_screen_buffer_surface() -> mutable void&? = get_video_screen_buffer_surface
+export func wolf3d_video_get_cur_surface() -> mutable void&? = get_video_cur_surface
+export func wolf3d_video_get_game_palette() -> mutable void&? = get_video_game_palette
+export func wolf3d_video_set_screen_width(screen_width: i32) -> i32 = set_video_screen_width
+export func wolf3d_video_set_screen_height(screen_height: i32) -> i32 = set_video_screen_height
+export func wolf3d_video_set_screen_bits(screen_bits: i32) -> i32 = set_video_screen_bits
+export func wolf3d_video_set_usedoublebuffering(usedoublebuffering: i32) -> i32 = set_video_usedoublebuffering
 export func wolf3d_draw_block_for_plot(scale: i32) -> i32 = draw_block_for_plot
 export func wolf3d_copy_planar_to_linear(source: u8&, dest: mutable u8&, width: i32, height: i32, dest_pitch: i32) -> i32 = copy_planar_to_linear
 export func wolf3d_draw_planar_scaled_to_linear(source: u8&, dest: mutable u8&, width: i32, height: i32, dest_x: i32, dest_y: i32, scale: i32, dest_pitch: i32) -> i32 = draw_planar_scaled_to_linear
@@ -744,8 +1114,30 @@ export func wolf3d_copy_linear_scaled_to_linear(source: u8&, dest: mutable u8&, 
 export func wolf3d_fill_linear_span(dest: mutable u8&, width: i32, color: i32) -> i32 = fill_linear_span
 export func wolf3d_fill_linear_vline(dest: mutable u8&, height: i32, pitch: i32, color: i32) -> i32 = fill_linear_vline
 export func wolf3d_fill_linear_rect(dest: mutable u8&, width: i32, height: i32, pitch: i32, color: i32) -> i32 = fill_linear_rect
+export func wolf3d_vwb_bar_on_linear_buffer(dest: mutable u8&, x: i32, y: i32, width: i32, height: i32, color: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 = vwb_bar_on_linear_buffer
+export func wolf3d_vwb_plot_on_linear_buffer(dest: mutable u8&, x: i32, y: i32, color: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 = vwb_plot_on_linear_buffer
+export func wolf3d_vwb_hlin_on_linear_buffer(dest: mutable u8&, x1: i32, x2: i32, y: i32, color: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 = vwb_hlin_on_linear_buffer
+export func wolf3d_vwb_vlin_on_linear_buffer(dest: mutable u8&, y1: i32, y2: i32, x: i32, color: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 = vwb_vlin_on_linear_buffer
+export func wolf3d_vwb_draw_prop_string_on_linear_buffer(text: u8&, font_base: u8&, font_locations: i16&, font_width: u8&, dest: mutable u8&, font_height: i32, scale: i32, dest_pitch: i32, color: i32) -> i32 = vwb_draw_prop_string_on_linear_buffer
+export func wolf3d_vwb_draw_pic_on_linear_buffer(source: u8&, width: i32, height: i32, dest: mutable u8&, x: i32, y: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 = vwb_draw_pic_on_linear_buffer
+export func wolf3d_vwb_draw_pic_scaled_coord_on_linear_buffer(source: u8&, width: i32, height: i32, dest: mutable u8&, x: i32, y: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 = vwb_draw_pic_scaled_coord_on_linear_buffer
+export func wolf3d_latch_draw_pic_on_screen(picnum: i32, x: i32, y: i32) -> i32 = latch_draw_pic_on_screen
+export func wolf3d_latch_draw_pic_scaled_coord_on_screen(picnum: i32, scx: i32, scy: i32) -> i32 = latch_draw_pic_scaled_coord_on_screen
+export func wolf3d_fizzle_fade_on_locked_buffers(source_pixels: u8&, source_pitch: i32, screen_copy_pixels: mutable u8&, screen_copy_pitch: i32, x1: i32, y1: i32, width: i32, height: i32, frames: u32, abortable: i32, usedoublebuffering: i32, rndbits_y: i32, rndmask: u32, source_width: i32, source_height: i32, screen_width: i32, screen_height: i32, screen_copy: mutable void&?, screen_buffer: mutable void&?, screen: mutable void&?) -> i32 = fizzle_fade_on_locked_buffers
+export func wolf3d_draw_pixel_on_linear_buffer(dest: mutable u8&, x: i32, y: i32, color: i32, pitch: i32, screen_width: i32, screen_height: i32) -> i32 = draw_pixel_on_linear_buffer
+export func wolf3d_get_pixel_from_linear_buffer(source: u8&, x: i32, y: i32, pitch: i32, screen_width: i32, screen_height: i32) -> i32 = get_pixel_from_linear_buffer
+export func wolf3d_draw_hline_on_linear_buffer(dest: mutable u8&, x: i32, y: i32, width: i32, color: i32, pitch: i32, screen_width: i32, screen_height: i32) -> i32 = draw_hline_on_linear_buffer
+export func wolf3d_draw_vline_on_linear_buffer(dest: mutable u8&, x: i32, y: i32, height: i32, color: i32, pitch: i32, screen_width: i32, screen_height: i32) -> i32 = draw_vline_on_linear_buffer
+export func wolf3d_draw_bar_scaled_coord_on_linear_buffer(dest: mutable u8&, scx: i32, scy: i32, scwidth: i32, scheight: i32, color: i32, pitch: i32, screen_width: i32, screen_height: i32) -> i32 = draw_bar_scaled_coord_on_linear_buffer
+export func wolf3d_draw_logical_plot_on_linear_buffer(dest: mutable u8&, x: i32, y: i32, color: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 = draw_logical_plot_on_linear_buffer
+export func wolf3d_draw_logical_hline_on_linear_buffer(dest: mutable u8&, x1: i32, x2: i32, y: i32, color: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 = draw_logical_hline_on_linear_buffer
+export func wolf3d_draw_logical_vline_on_linear_buffer(dest: mutable u8&, y1: i32, y2: i32, x: i32, color: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 = draw_logical_vline_on_linear_buffer
+export func wolf3d_draw_logical_bar_on_linear_buffer(dest: mutable u8&, x: i32, y: i32, width: i32, height: i32, color: i32, pitch: i32, scale: i32, screen_width: i32, screen_height: i32) -> i32 = draw_logical_bar_on_linear_buffer
+export func wolf3d_draw_planar_block_on_linear_buffer(source: u8&, dest: mutable u8&, width: i32, height: i32, dest_x: i32, dest_y: i32, scale: i32, dest_pitch: i32, screen_width: i32, screen_height: i32) -> i32 = draw_planar_block_on_linear_buffer
+export func wolf3d_draw_planar_region_on_linear_buffer(source: u8&, dest: mutable u8&, orig_width: i32, orig_height: i32, src_x: i32, src_y: i32, dest_x: i32, dest_y: i32, width: i32, height: i32, scale: i32, dest_pitch: i32, screen_width: i32, screen_height: i32) -> i32 = draw_planar_region_on_linear_buffer
 export func wolf3d_draw_prop_string_scaled(text: u8&, font_base: u8&, font_locations: i16&, font_width: u8&, dest: mutable u8&, font_height: i32, scale: i32, dest_pitch: i32, color: i32) -> i32 = draw_prop_string_scaled
 export func wolf3d_apply_fizzle_pixels(source: u8&, dest: mutable u8&, x1: i32, y1: i32, width: i32, height: i32, source_pitch: i32, dest_pitch: i32, rndbits_y: i32, rndmask: u32, pixperframe: u32, start_rndval: u32) -> u32 = apply_fizzle_pixels
+export func wolf3d_vh_update_screen(screen_buffer: mutable void&?, screen: mutable void&?) -> i32 = vh_update_screen
 export func wolf3d_validate_fizzle_frames(frames: u32) -> i32 = validate_fizzle_frames
 export func wolf3d_fizzle_bits_for_dimensions(width: u32, height: u32) -> i32 = fizzle_bits_for_dimensions
 export func wolf3d_fizzle_mask_for_dimensions(width: u32, height: u32) -> u32 = fizzle_mask_for_dimensions
@@ -769,6 +1161,11 @@ export func wolf3d_fill_sdl_palette_rgb(dst: mutable u8&, red: i32, green: i32, 
 export func wolf3d_build_fade_out_sdl_palette(origin: u8&, dst: mutable u8&, start: i32, end: i32, red: i32, green: i32, blue: i32, frame: i32, steps: i32, count: i32) -> i32 = build_fade_out_sdl_palette
 export func wolf3d_build_fade_in_sdl_palette(origin: u8&, target: u8&, dst: mutable u8&, start: i32, end: i32, frame: i32, steps: i32, count: i32) -> i32 = build_fade_in_sdl_palette
 export func wolf3d_build_palette_shift_table(base_palette: u8&, dst: mutable u8&, frames: i32, steps: i32, target_red: i32, target_green: i32, target_blue: i32, count: i32) -> i32 = build_palette_shift_table
+export func wolf3d_vl_set_palette_from_host(palette: mutable u8&, forceupdate: i32) -> i32 = vl_set_palette_from_host
+export func wolf3d_vl_get_palette_from_host(palette: mutable u8&) -> i32 = vl_get_palette_from_host
+export func wolf3d_vl_fill_palette_from_host(red: i32, green: i32, blue: i32) -> i32 = vl_fill_palette_from_host
+export func wolf3d_vl_fade_out_from_host(start: i32, end: i32, red: i32, green: i32, blue: i32, steps: i32) -> i32 = vl_fade_out_from_host
+export func wolf3d_vl_fade_in_from_host(start: i32, end: i32, palette: mutable u8&, steps: i32) -> i32 = vl_fade_in_from_host
 
 @test
 def log2_ceil_rounds_up_to_the_next_power_of_two() -> void can[Abort.Panic, Video.Geometry]:
@@ -1467,6 +1864,155 @@ def inclusive_span_length_rejects_reversed_ranges() -> void can[Abort.Panic, Vid
 
         if inclusive_span_length(6, 2) != -1:
             panic("reversed span should be rejected")
+
+@test
+def linear_buffer_draw_helpers_write_expected_pixels() -> void can[Abort.Panic, Video.Picture]:
+    can Video.Picture, Abort.Panic:
+        buffer: mutable u8[16] = zeroed
+
+        if draw_pixel_on_linear_buffer(buffer[0].ref[mutable u8&], 1, 1, 9, 4, 4, 4) != 0:
+            panic("plot helper should succeed")
+
+        if buffer[5] != 9.u8():
+            panic("plot helper should write the target pixel")
+
+        if get_pixel_from_linear_buffer(buffer[0].ref[u8&], 1, 1, 4, 4, 4) != 9:
+            panic("get helper should read the target pixel")
+
+        if draw_hline_on_linear_buffer(buffer[0].ref[mutable u8&], 0, 2, 3, 7, 4, 4, 4) != 0:
+            panic("hline helper should succeed")
+
+        if buffer[8] != 7.u8() or buffer[10] != 7.u8():
+            panic("hline helper should fill the requested row")
+
+        if draw_vline_on_linear_buffer(buffer[0].ref[mutable u8&], 3, 0, 3, 5, 4, 4, 4) != 0:
+            panic("vline helper should succeed")
+
+        if buffer[3] != 5.u8() or buffer[7] != 5.u8():
+            panic("vline helper should step by pitch")
+
+        if draw_bar_scaled_coord_on_linear_buffer(buffer[0].ref[mutable u8&], 0, 0, 2, 2, 4, 4, 4, 4) != 0:
+            panic("bar helper should succeed")
+
+        if buffer[0] != 4.u8() or buffer[1] != 4.u8() or buffer[4] != 4.u8() or buffer[5] != 4.u8():
+            panic("bar helper should fill the rectangle")
+
+@test
+def logical_draw_helpers_scale_inputs_before_filling() -> void can[Abort.Panic, Video.Picture, Video.Geometry]:
+    can Video.Picture, Video.Geometry, Abort.Panic:
+        buffer: mutable u8[64] = zeroed
+
+        if draw_logical_plot_on_linear_buffer(buffer[0].ref[mutable u8&], 1, 1, 3, 8, 2, 8, 8) != 0:
+            panic("logical plot helper should succeed")
+
+        if buffer[18] != 3.u8() or buffer[19] != 3.u8() or buffer[26] != 3.u8() or buffer[27] != 3.u8():
+            panic("logical plot helper should draw a scaled block")
+
+        if draw_logical_hline_on_linear_buffer(buffer[0].ref[mutable u8&], 1, 2, 2, 6, 8, 2, 8, 8) != 0:
+            panic("logical hline helper should succeed")
+
+        if buffer[34] != 6.u8() or buffer[35] != 6.u8() or buffer[36] != 6.u8() or buffer[37] != 6.u8():
+            panic("logical hline helper should fill the scaled span")
+
+        if draw_logical_vline_on_linear_buffer(buffer[0].ref[mutable u8&], 1, 2, 3, 8, 8, 2, 8, 8) != 0:
+            panic("logical vline helper should succeed")
+
+        if buffer[22] != 8.u8() or buffer[23] != 8.u8() or buffer[30] != 8.u8() or buffer[31] != 8.u8():
+            panic("logical vline helper should fill the scaled column")
+
+        if draw_logical_bar_on_linear_buffer(buffer[0].ref[mutable u8&], 0, 0, 1, 1, 11, 8, 2, 8, 8) != 0:
+            panic("logical bar helper should succeed")
+
+        if buffer[0] != 11.u8() or buffer[1] != 11.u8() or buffer[8] != 11.u8() or buffer[9] != 11.u8():
+            panic("logical bar helper should fill the scaled rectangle")
+
+@test
+def vwb_linear_wrappers_forward_to_logical_helpers() -> void can[Abort.Panic, Video.Picture, Video.Geometry]:
+    can Video.Picture, Video.Geometry, Abort.Panic:
+        buffer: mutable u8[64] = zeroed
+
+        if vwb_bar_on_linear_buffer(buffer[0].ref[mutable u8&], 0, 0, 1, 1, 14, 8, 2, 8, 8) != 0:
+            panic("vwb bar wrapper should succeed")
+
+        if buffer[0] != 14.u8() or buffer[1] != 14.u8() or buffer[8] != 14.u8() or buffer[9] != 14.u8():
+            panic("vwb bar wrapper should fill the scaled rectangle")
+
+        if vwb_plot_on_linear_buffer(buffer[0].ref[mutable u8&], 2, 1, 7, 8, 2, 8, 8) != 0:
+            panic("vwb plot wrapper should succeed")
+
+        if buffer[20] != 7.u8() or buffer[21] != 7.u8() or buffer[28] != 7.u8() or buffer[29] != 7.u8():
+            panic("vwb plot wrapper should draw a scaled pixel block")
+
+        if vwb_hlin_on_linear_buffer(buffer[0].ref[mutable u8&], 0, 2, 3, 5, 8, 2, 8, 8) != 0:
+            panic("vwb hlin wrapper should succeed")
+
+        if buffer[48] != 5.u8() or buffer[49] != 5.u8() or buffer[50] != 5.u8() or buffer[51] != 5.u8():
+            panic("vwb hlin wrapper should fill the scaled span")
+
+        if vwb_vlin_on_linear_buffer(buffer[0].ref[mutable u8&], 1, 2, 3, 6, 8, 2, 8, 8) != 0:
+            panic("vwb vlin wrapper should succeed")
+
+        if buffer[22] != 6.u8() or buffer[23] != 6.u8() or buffer[30] != 6.u8() or buffer[31] != 6.u8():
+            panic("vwb vlin wrapper should fill the scaled column")
+
+@test
+def vwb_picture_and_text_wrappers_forward_to_video_helpers() -> void can[Abort.Panic, Video.Picture, Video.Text]:
+    can Video.Picture, Video.Text, Abort.Panic:
+        font_base: mutable u8[16] = zeroed
+        font_locations: mutable i16[256] = zeroed
+        font_width: mutable u8[256] = zeroed
+        text: mutable u8[2] = zeroed
+        text_dest: mutable u8[64] = zeroed
+
+        font_locations[65] <- 0.i16()
+        font_width[65] <- 2.u8()
+        font_base[0] <- 1.u8()
+        font_base[1] <- 0.u8()
+        font_base[2] <- 0.u8()
+        font_base[3] <- 1.u8()
+        text[0] <- 65.u8()
+
+        if vwb_draw_prop_string_on_linear_buffer(text[0].ref[u8&], font_base[0].ref[u8&], font_locations[0].ref[i16&], font_width[0].ref[u8&], text_dest[0].ref[mutable u8&], 2, 2, 8, 7) != 2:
+            panic("vwb prop string wrapper should return drawn width")
+
+        if text_dest[0] != 7.u8() or text_dest[1] != 7.u8() or text_dest[8] != 7.u8() or text_dest[9] != 7.u8():
+            panic("vwb prop string wrapper should draw the scaled glyph")
+
+        source: mutable u8[4] = zeroed
+        pic_dest: mutable u8[16] = zeroed
+        source[0] <- 1.u8()
+        source[1] <- 2.u8()
+        source[2] <- 3.u8()
+        source[3] <- 4.u8()
+
+        if vwb_draw_pic_on_linear_buffer(source[0].ref[u8&], 4, 1, pic_dest[0].ref[mutable u8&], 0, 0, 4, 1, 4, 4) != 0:
+            panic("vwb pic wrapper should succeed")
+
+        if pic_dest[0] != 1.u8() or pic_dest[1] != 2.u8() or pic_dest[2] != 3.u8() or pic_dest[3] != 4.u8():
+            panic("vwb pic wrapper should copy the planar source")
+
+        if vwb_draw_pic_scaled_coord_on_linear_buffer(source[0].ref[u8&], 4, 1, pic_dest[0].ref[mutable u8&], 0, 0, 4, 1, 4, 4) != 0:
+            panic("vwb pic scaled wrapper should succeed")
+
+@test
+def planar_block_draw_helper_scales_block_copies() -> void can[Abort.Panic, Video.Picture]:
+    can Video.Picture, Abort.Panic:
+        source: mutable u8[4] = zeroed
+        buffer: mutable u8[64] = zeroed
+
+        source[0] <- 1.u8()
+        source[1] <- 2.u8()
+        source[2] <- 3.u8()
+        source[3] <- 4.u8()
+
+        if draw_planar_block_on_linear_buffer(source[0].ref[u8&], buffer[0].ref[mutable u8&], 4, 1, 0, 0, 2, 8, 8, 8) != 0:
+            panic("planar block helper should succeed")
+
+        if buffer[0] != 1.u8() or buffer[1] != 1.u8() or buffer[8] != 1.u8() or buffer[9] != 1.u8():
+            panic("first planar pixel should scale into a 2x2 block")
+
+        if buffer[2] != 2.u8() or buffer[3] != 2.u8() or buffer[10] != 2.u8() or buffer[11] != 2.u8():
+            panic("second planar pixel should scale into the next block")
 
 error VideoTextMeasureError:
     NullPointer

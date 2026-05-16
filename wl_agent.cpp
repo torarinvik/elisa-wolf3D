@@ -1,6 +1,7 @@
 // WL_AGENT.C
 
 #include "wl_def.h"
+#include "elisa_wolf3d_video.h"
 #pragma hdrstop
 
 /*
@@ -264,8 +265,8 @@ void ControlMovement (objtype *ob)
 
 void StatusDrawPic (unsigned x, unsigned y, unsigned picnum)
 {
-    LatchDrawPicScaledCoord ((screenWidth-scaleFactor*320)/16 + scaleFactor*x,
-        screenHeight-scaleFactor*(STATUSLINES-y),picnum);
+    LatchDrawPicScaledCoord ((wolf3d_video_get_screen_width()-wolf3d_video_get_scale_factor()*320)/16 + wolf3d_video_get_scale_factor()*x,
+        wolf3d_video_get_screen_height()-wolf3d_video_get_scale_factor()*(STATUSLINES-y),picnum);
 }
 
 void StatusDrawFace(unsigned picnum)

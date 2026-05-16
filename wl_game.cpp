@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include "wl_def.h"
+#include "elisa_wolf3d_video.h"
 #include "mix_compat.h"
 
 
@@ -776,11 +777,11 @@ void DrawPlayBorderSides(void)
 {
     if(viewsize == 21) return;
 
-    const int sw = screenWidth;
-    const int sh = screenHeight;
+    const int sw = wolf3d_video_get_screen_width();
+    const int sh = wolf3d_video_get_screen_height();
     const int vw = viewwidth;
     const int vh = viewheight;
-    const int px = scaleFactor; // size of one "pixel"
+    const int px = wolf3d_video_get_scale_factor(); // size of one "pixel"
 
     const int h  = sh - px * STATUSLINES;
     const int xl = sw / 2 - vw / 2;

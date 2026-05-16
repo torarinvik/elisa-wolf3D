@@ -1,11 +1,42 @@
 permission Video:
     Palette
+    Surface
+
+permission Input:
+    Poll
+
+@link_name(SDL_CreateSurface)
+extern sdl_create_surface_raw(width: int, height: int, format: u32) -> mutable void&? effects[Video.Surface, Unsafe.RawExtern]
+
+@link_name(SDL_CreatePalette)
+extern sdl_create_palette_raw(ncolors: int) -> mutable void&? effects[Video.Palette, Unsafe.RawExtern]
 
 @link_name(SDL_SetPaletteColors)
 extern sdl_set_palette_colors_raw(palette: mutable void&?, colors: u8&, firstcolor: int, ncolors: int) -> bool effects[Video.Palette, Unsafe.RawExtern]
 
 @link_name(SDL_SetSurfacePalette)
 extern sdl_set_surface_palette_raw(surface: mutable void&?, palette: mutable void&?) -> bool effects[Video.Palette, Unsafe.RawExtern]
+
+@link_name(SDL_BlitSurface)
+extern sdl_blit_surface_raw(source: mutable void&?, source_rect: mutable void&?, dest: mutable void&?, dest_rect: mutable void&?) -> bool effects[Video.Surface, Unsafe.RawExtern]
+
+@link_name(SDL_Flip)
+extern sdl_flip_surface_raw(surface: mutable void&?) -> bool effects[Video.Surface, Unsafe.RawExtern]
+
+@link_name(SDL_GetJoysticks)
+extern sdl_get_joysticks_raw(count: mutable i32&) -> mutable u32&? effects[Input.Poll, Unsafe.RawExtern]
+
+@link_name(SDL_OpenJoystick)
+extern sdl_open_joystick_raw(instance_id: u32) -> mutable void&? effects[Input.Poll, Unsafe.RawExtern]
+
+@link_name(SDL_GetNumJoystickButtons)
+extern sdl_joystick_num_buttons_raw(joystick: mutable void&?) -> i32 effects[Input.Poll, Unsafe.RawExtern]
+
+@link_name(SDL_GetNumJoystickHats)
+extern sdl_joystick_num_hats_raw(joystick: mutable void&?) -> i32 effects[Input.Poll, Unsafe.RawExtern]
+
+@link_name(SDL_free)
+extern sdl_free_raw(mem: mutable u32&?) -> void effects[Unsafe.RawExtern]
 
 def sdl_set_palette_colors(palette: mutable void&?, colors: u8&, firstcolor: i32, ncolors: i32) -> i32 can[Video.Palette, Unsafe.RawExtern]:
     can Video.Palette:
@@ -34,6 +65,75 @@ def sdl_set_game_palette(surface: mutable void&?, palette: mutable void&?, color
 
     return 0
 
+def sdl_create_indexed_surface(width: i32, height: i32, palette: mutable void&?) -> mutable void&? can[Video.Surface, Video.Palette, Unsafe.RawExtern]:
+    can Video.Surface:
+        signal Video.Surface
+
+    can Video.Surface, Unsafe.RawExtern:
+        surface: mutable void&? = sdl_create_surface_raw(width, height, 0x13000801.u32())
+        if surface != null:
+            can Video.Palette, Unsafe.RawExtern:
+                _ = sdl_set_surface_palette(surface, palette)
+        return surface
+
+def sdl_create_game_palette(ncolors: i32) -> mutable void&? can[Video.Palette, Unsafe.RawExtern]:
+    can Video.Palette:
+        signal Video.Palette
+
+    can Video.Palette, Unsafe.RawExtern:
+        return sdl_create_palette_raw(ncolors)
+
+def sdl_num_joysticks_compat() -> i32 can[Input.Poll, Unsafe.RawExtern]:
+    can Input.Poll:
+        signal Input.Poll
+
+    can Input.Poll, Unsafe.RawExtern:
+        count: mutable i32 = 0
+        ids: mutable u32&? = sdl_get_joysticks_raw(count)
+        if ids != null:
+            sdl_free_raw(ids)
+        return count
+
+def sdl_open_joystick_by_index(index: i32) -> mutable void&? can[Input.Poll, Unsafe.RawExtern]:
+    can Input.Poll:
+        signal Input.Poll
+
+    can Input.Poll, Unsafe.RawExtern:
+        count: mutable i32 = 0
+        ids: mutable u32&? = sdl_get_joysticks_raw(count)
+        joystick: mutable void&? = null
+
+        if ids != null:
+            if index >= 0 and index < count:
+                joystick <- sdl_open_joystick_raw(ids[index])
+            sdl_free_raw(ids)
+
+        return joystick
+
+def sdl_joystick_num_buttons(joystick: mutable void&?) -> i32 can[Input.Poll, Unsafe.RawExtern]:
+    can Input.Poll:
+        signal Input.Poll
+
+    can Input.Poll, Unsafe.RawExtern:
+        if joystick == null:
+            return 0
+        return sdl_joystick_num_buttons_raw(joystick)
+
+def sdl_joystick_num_hats(joystick: mutable void&?) -> i32 can[Input.Poll, Unsafe.RawExtern]:
+    can Input.Poll:
+        signal Input.Poll
+
+    can Input.Poll, Unsafe.RawExtern:
+        if joystick == null:
+            return 0
+        return sdl_joystick_num_hats_raw(joystick)
+
 export func wolf3d_sdl_set_palette_colors(palette: mutable void&?, colors: u8&, firstcolor: i32, ncolors: i32) -> i32 = sdl_set_palette_colors
 export func wolf3d_sdl_set_surface_palette(surface: mutable void&?, palette: mutable void&?) -> i32 = sdl_set_surface_palette
 export func wolf3d_sdl_set_game_palette(surface: mutable void&?, palette: mutable void&?, colors: u8&, firstcolor: i32, ncolors: i32) -> i32 = sdl_set_game_palette
+export func wolf3d_sdl_create_indexed_surface(width: i32, height: i32, palette: mutable void&?) -> mutable void&? = sdl_create_indexed_surface
+export func wolf3d_sdl_create_game_palette(ncolors: i32) -> mutable void&? = sdl_create_game_palette
+export func wolf3d_sdl_num_joysticks_compat() -> i32 = sdl_num_joysticks_compat
+export func wolf3d_sdl_open_joystick_by_index(index: i32) -> mutable void&? = sdl_open_joystick_by_index
+export func wolf3d_sdl_joystick_num_buttons(joystick: mutable void&?) -> i32 = sdl_joystick_num_buttons
+export func wolf3d_sdl_joystick_num_hats(joystick: mutable void&?) -> i32 = sdl_joystick_num_hats

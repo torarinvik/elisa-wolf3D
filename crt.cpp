@@ -7,6 +7,9 @@
 //
 
 #include "crt.h"
+#include "elisa_wolf3d_video.h"
+#include <stdint.h>
+#include <stdlib.h>
 
 static int width;
 static int height;
@@ -15,7 +18,7 @@ GLuint crtTexture;
 
 unsigned char coloredFrameBuffer[320*200*3];
 
-void CRT_Init(int _width){
+extern "C" void CRT_Init(int _width){
     width  = _width;
     height = _width * 3.0/4.0;
     
@@ -50,19 +53,21 @@ void CRT_Init(int _width){
     SDL_GL_SwapWindow(sdlWindow);
 }
 
-#include "id_vl.h"
-void CRT_DAC(void){
+extern "C" void CRT_DAC(void){
     // Grab the screen framebuffer from SDL
-    SDL_Surface *screen = screenBuffer ;
+    SDL_Surface *screen = (SDL_Surface *) wolf3d_video_get_screen_buffer_surface();
+    SDL_Palette *palette = (SDL_Palette *) wolf3d_video_get_game_palette();
+    if(!screen || !palette)
+        return;
     
     //Convert palette based framebuffer to RGB for OpenGL
-    byte* pixelPointer = coloredFrameBuffer;
+    uint8_t* pixelPointer = coloredFrameBuffer;
     for (int i=0; i < 320*200; i++) {
         unsigned char paletteIndex;
-        paletteIndex = ((byte*)screen->pixels)[i];
-        *pixelPointer++ = curpal[paletteIndex].r;
-        *pixelPointer++ = curpal[paletteIndex].g;
-        *pixelPointer++ = curpal[paletteIndex].b;
+        paletteIndex = ((uint8_t*)screen->pixels)[i];
+        *pixelPointer++ = palette->colors[paletteIndex].r;
+        *pixelPointer++ = palette->colors[paletteIndex].g;
+        *pixelPointer++ = palette->colors[paletteIndex].b;
     }
     
 
@@ -102,7 +107,7 @@ void CRT_DAC(void){
 		wasPressed = 0;	
 }
 
-void CRT_Screenshot(void){
+extern "C" void CRT_Screenshot(void){
 
   const char* filename = "screenshot.tga" ;
 

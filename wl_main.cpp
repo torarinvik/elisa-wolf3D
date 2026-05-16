@@ -7,6 +7,7 @@
 #endif
 
 #include "wl_def.h"
+#include "elisa_wolf3d_video.h"
 #include "elisa_wolf3d_save.h"
 #pragma hdrstop
 
@@ -128,6 +129,13 @@ static int wolf3d_hosted_next_demo_index(int lastDemo)
     return lastDemo + 1;
 #endif
 }
+
+extern "C" int wolf3d_legacy_cache_startup_assets(void);
+extern "C" int wolf3d_legacy_new_view_size(void);
+extern "C" int wolf3d_legacy_init_red_shifts(void);
+extern "C" int wolf3d_legacy_finish_signon(void);
+extern "C" int wolf3d_legacy_vl_set_vga_plane_mode(void);
+extern "C" int wolf3d_legacy_signon_screen(void);
 
 /*
 =============================================================================
@@ -839,8 +847,6 @@ void SetupWalls (void)
 
 void SignonScreen (void)                        // VGA version
 {
-    VL_SetVGAPlaneMode ();
-
     VL_MungePic (signon,320,200);
     VL_MemToScreen (signon,320,200,0,0);
 }
@@ -1225,18 +1231,6 @@ extern "C" int wolf3d_legacy_init_platform_and_signon(void)
     }
     atexit(SDL_Quit);
 
-    int numJoysticks = SDL_NumJoysticksCompat();
-    if(param_joystickindex && (param_joystickindex < -1 || param_joystickindex >= numJoysticks))
-    {
-        if(!numJoysticks)
-            printf("No joysticks are available to SDL!\n");
-        else
-            printf("The joystick index must be between -1 and %i!\n", numJoysticks - 1);
-        exit(1);
-    }
-
-    SignonScreen ();
-
 #if defined _WIN32
     if(!fullscreen)
     {
@@ -1253,6 +1247,27 @@ extern "C" int wolf3d_legacy_init_platform_and_signon(void)
     }
 #endif
 
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_get_param_joystickindex(void)
+{
+    return param_joystickindex;
+}
+
+extern "C" int wolf3d_legacy_report_invalid_joystick_selection(int joystickIndex, int numJoysticks)
+{
+    if(!numJoysticks)
+        printf("No joysticks are available to SDL!\n");
+    else
+        printf("The joystick index must be between -1 and %i!\n", numJoysticks - 1);
+    exit(1);
+    return joystickIndex;
+}
+
+extern "C" int wolf3d_legacy_signon_screen(void)
+{
+    SignonScreen();
     return 0;
 }
 
@@ -1321,34 +1336,63 @@ extern "C" int wolf3d_legacy_load_config_and_intro(void)
     return 0;
 }
 
-extern "C" int wolf3d_legacy_prepare_startup_assets(void)
+extern "C" int wolf3d_legacy_cache_startup_assets(void)
 {
-    //
-    // load in and lock down some basic chunks
-    //
-
     CA_CacheGrChunk(STARTFONT);
     CA_CacheGrChunk(STATUSBARPIC);
+    return 0;
+}
 
-    LoadLatchMem ();
-    BuildTables ();          // trig tables
-    SetupWalls ();
+extern "C" int wolf3d_legacy_new_view_size(void)
+{
+    NewViewSize(viewsize);
+    return 0;
+}
 
-    NewViewSize (viewsize);
-
-//
-// initialize variables
-//
-    InitRedShifts ();
+extern "C" int wolf3d_legacy_finish_signon(void)
+{
 #ifndef SPEARDEMO
     if(!didjukebox)
-#endif
         FinishSignon();
+#else
+    FinishSignon();
+#endif
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_prepare_startup_assets(void)
+{
+    if (wolf3d_legacy_cache_startup_assets() != 0)
+        return 1;
+    if (wolf3d_legacy_new_view_size() != 0)
+        return 1;
+    if (wolf3d_legacy_init_red_shifts() != 0)
+        return 1;
+    if (wolf3d_legacy_finish_signon() != 0)
+        return 1;
 
 #ifdef NOTYET
     vdisp = (byte *) (0xa0000+PAGE1START);
     vbuf = (byte *) (0xa0000+PAGE2START);
 #endif
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_build_tables(void)
+{
+    BuildTables();
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_setup_walls(void)
+{
+    SetupWalls();
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_load_latch_mem(void)
+{
+    LoadLatchMem();
     return 0;
 }
 
@@ -1363,13 +1407,23 @@ static void InitGame()
     wolf3d_hosted_reset_shutdown_request();
     if (wolf3d_legacy_init_platform_and_signon() != 0)
         exit(1);
+    if (wolf3d_legacy_vl_set_vga_plane_mode() != 0)
+        exit(1);
+    if (wolf3d_legacy_signon_screen() != 0)
+        exit(1);
     if (wolf3d_legacy_startup_subsystems() != 0)
         exit(1);
     if (wolf3d_legacy_check_memory_floor() != 0)
         exit(1);
     if (wolf3d_legacy_load_config_and_intro() != 0)
         exit(1);
-    if (wolf3d_legacy_prepare_startup_assets() != 0)
+    if (wolf3d_legacy_cache_startup_assets() != 0)
+        exit(1);
+    if (wolf3d_legacy_new_view_size() != 0)
+        exit(1);
+    if (wolf3d_legacy_init_red_shifts() != 0)
+        exit(1);
+    if (wolf3d_legacy_finish_signon() != 0)
         exit(1);
 }
 
@@ -1861,8 +1915,8 @@ static int ParseParameters(int argc, char *argv[], bool should_exit_on_error)
             }
             else
             {
-                screenWidth = atoi(argv[++i]);
-                screenHeight = atoi(argv[++i]);
+                (void) wolf3d_video_set_screen_width(atoi(argv[++i]));
+                (void) wolf3d_video_set_screen_height(atoi(argv[++i]));
                 unsigned factor = screenWidth / 320;
                 if(screenWidth % 320 || screenHeight != 200 * factor && screenHeight != 240 * factor)
                     printf("Screen size must be a multiple of 320x200 or 320x240!\n"), hasError = true;
@@ -1877,8 +1931,8 @@ static int ParseParameters(int argc, char *argv[], bool should_exit_on_error)
             }
             else
             {
-                screenWidth = atoi(argv[++i]);
-                screenHeight = atoi(argv[++i]);
+                (void) wolf3d_video_set_screen_width(atoi(argv[++i]));
+                (void) wolf3d_video_set_screen_height(atoi(argv[++i]));
                 if(screenWidth < 320)
                     printf("Screen width must be at least 320!\n"), hasError = true;
                 if(screenHeight < 200)
@@ -1894,7 +1948,7 @@ static int ParseParameters(int argc, char *argv[], bool should_exit_on_error)
             }
             else
             {
-                screenBits = atoi(argv[i]);
+                (void) wolf3d_video_set_screen_bits(atoi(argv[i]));
                 switch(screenBits)
                 {
                     case 8:
@@ -1911,7 +1965,9 @@ static int ParseParameters(int argc, char *argv[], bool should_exit_on_error)
             }
         }
         else IFARG("--nodblbuf")
-            usedoublebuffering = false;
+        {
+            (void) wolf3d_video_set_usedoublebuffering(0);
+        }
         else IFARG("--extravbls")
         {
             if(++i >= argc)

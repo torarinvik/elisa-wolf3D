@@ -343,8 +343,8 @@ void PollMouseMove (void)
     int mousexmove = (int)mousexf;
     int mouseymove = (int)mouseyf;
 
-    mousexmove -= screenWidth / 2;
-    mouseymove -= screenHeight / 2;
+    mousexmove -= wolf3d_video_get_screen_width() / 2;
+    mouseymove -= wolf3d_video_get_screen_height() / 2;
 
     controlx += mousexmove * 10 / (13 - mouseadjustment);
     controly += mouseymove * 20 / (13 - mouseadjustment);
@@ -976,6 +976,11 @@ void InitRedShifts (void)
         Quit("InitRedShifts: invalid white shift parameters!");
 }
 
+extern "C" int wolf3d_legacy_init_red_shifts(void)
+{
+    InitRedShifts();
+    return 0;
+}
 
 /*
 =====================

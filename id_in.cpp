@@ -298,6 +298,14 @@ static void processEvent(SDL_Event *event)
     }
 }
 
+extern "C" int wolf3d_legacy_attach_joystick(SDL_Joystick *joystick, int joyNumButtons, int joyNumHats)
+{
+    Joystick = joystick;
+    JoyNumButtons = joyNumButtons > 32 ? 32 : joyNumButtons;
+    JoyNumHats = joyNumHats;
+    return 0;
+}
+
 void IN_WaitAndProcessEvents()
 {
     SDL_Event event;
@@ -333,20 +341,8 @@ IN_Startup(void)
         return;
 
     IN_ClearKeysDown();
-
-    if(param_joystickindex >= 0 && param_joystickindex < SDL_NumJoysticksCompat())
-    {
-        Joystick = SDL_OpenJoystickByIndex(param_joystickindex);
-        if(Joystick)
-        {
-            wolf3d_effect_input_poll();
-            JoyNumButtons = SDL_JoystickNumButtons(Joystick);
-            if(JoyNumButtons > 32) JoyNumButtons = 32;      // only up to 32 buttons are supported
-            JoyNumHats = SDL_JoystickNumHats(Joystick);
-            if(param_joystickhat < -1 || param_joystickhat >= JoyNumHats)
-                Quit("The joystickhat param must be between 0 and %i!", JoyNumHats - 1);
-        }
-    }
+    if(Joystick && (param_joystickhat < -1 || param_joystickhat >= JoyNumHats))
+        Quit("The joystickhat param must be between 0 and %i!", JoyNumHats - 1);
 
     if(fullscreen || forcegrabmouse)
     {
@@ -519,6 +515,17 @@ boolean IN_CheckAck (void)
     }
 
     return false;
+}
+
+extern "C" int wolf3d_legacy_in_start_ack(void)
+{
+    IN_StartAck();
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_in_check_ack(void)
+{
+    return IN_CheckAck() ? 1 : 0;
 }
 
 
