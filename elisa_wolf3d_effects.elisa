@@ -1,0 +1,119 @@
+permission Audio:
+    Device
+    Load
+    Playback
+
+permission Video:
+    Window
+    Surface
+    Palette
+    Render
+
+permission Input:
+    Poll
+    Grab
+
+permission FileSystem:
+    Read
+    Write
+
+permission Time:
+    Read
+    Delay
+
+permission Diagnostics:
+    Console
+
+permission Process:
+    Abort
+
+def effect_audio_device() -> i32 can[Audio.Device]:
+    can Audio.Device:
+        signal Audio.Device
+    return 0
+
+def effect_audio_load() -> i32 can[Audio.Load]:
+    can Audio.Load:
+        signal Audio.Load
+    return 0
+
+def effect_audio_playback() -> i32 can[Audio.Playback]:
+    can Audio.Playback:
+        signal Audio.Playback
+    return 0
+
+def effect_video_window() -> i32 can[Video.Window]:
+    can Video.Window:
+        signal Video.Window
+    return 0
+
+def effect_video_surface() -> i32 can[Video.Surface]:
+    can Video.Surface:
+        signal Video.Surface
+    return 0
+
+def effect_video_palette() -> i32 can[Video.Palette]:
+    can Video.Palette:
+        signal Video.Palette
+    return 0
+
+def effect_video_render() -> i32 can[Video.Render]:
+    can Video.Render:
+        signal Video.Render
+    return 0
+
+def effect_input_poll() -> i32 can[Input.Poll]:
+    can Input.Poll:
+        signal Input.Poll
+    return 0
+
+def effect_input_grab() -> i32 can[Input.Grab]:
+    can Input.Grab:
+        signal Input.Grab
+    return 0
+
+def effect_filesystem_read() -> i32 can[FileSystem.Read]:
+    can FileSystem.Read:
+        signal FileSystem.Read
+    return 0
+
+def effect_filesystem_write() -> i32 can[FileSystem.Write]:
+    can FileSystem.Write:
+        signal FileSystem.Write
+    return 0
+
+def effect_time_read() -> i32 can[Time.Read]:
+    can Time.Read:
+        signal Time.Read
+    return 0
+
+def effect_time_delay() -> i32 can[Time.Delay]:
+    can Time.Delay:
+        signal Time.Delay
+    return 0
+
+def effect_diagnostics_console() -> i32 can[Diagnostics.Console]:
+    can Diagnostics.Console:
+        signal Diagnostics.Console
+    return 0
+
+def effect_process_abort() -> i32 can[Process.Abort]:
+    can Process.Abort:
+        signal Process.Abort
+    return 0
+
+export func wolf3d_effect_audio_device() -> i32 = effect_audio_device
+export func wolf3d_effect_audio_load() -> i32 = effect_audio_load
+export func wolf3d_effect_audio_playback() -> i32 = effect_audio_playback
+export func wolf3d_effect_video_window() -> i32 = effect_video_window
+export func wolf3d_effect_video_surface() -> i32 = effect_video_surface
+export func wolf3d_effect_video_palette() -> i32 = effect_video_palette
+export func wolf3d_effect_video_render() -> i32 = effect_video_render
+export func wolf3d_effect_input_poll() -> i32 = effect_input_poll
+export func wolf3d_effect_input_grab() -> i32 = effect_input_grab
+export func wolf3d_effect_filesystem_read() -> i32 = effect_filesystem_read
+export func wolf3d_effect_filesystem_write() -> i32 = effect_filesystem_write
+export func wolf3d_effect_time_read() -> i32 = effect_time_read
+export func wolf3d_effect_time_delay() -> i32 = effect_time_delay
+export func wolf3d_effect_diagnostics_console() -> i32 = effect_diagnostics_console
+export func wolf3d_effect_process_abort() -> i32 = effect_process_abort

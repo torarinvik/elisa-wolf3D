@@ -1,0 +1,20 @@
+permission SaveGame:
+    Checksum
+
+def checksum_impl(source: u8&, size: u32, seed: i32) -> i32 can[SaveGame.Checksum]:
+    can SaveGame.Checksum:
+        signal SaveGame.Checksum
+
+    if size < 2:
+        return seed
+
+    out: mutable i32 = seed
+    limit: usize = (size - 1).usize()
+
+    for i in 0..<limit:
+        pair: u32 = source[i].u32() ^ source[i + 1].u32()
+        out <- out + pair.i32()
+
+    return out
+
+export func wolf3d_checksum(source: u8&, size: u32, seed: i32) -> i32 = checksum_impl

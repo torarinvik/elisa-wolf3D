@@ -1,8 +1,13 @@
 // ID_VL.C
 
+#define ID_VL_IMPLEMENTATION 1
+
 #include <string.h>
 #include "wl_def.h"
 #include "crt.h"
+#include "elisa_wolf3d_effects.h"
+#include "elisa_wolf3d_sdl.h"
+#include "elisa_wolf3d_video.h"
 #pragma hdrstop
 
 // Uncomment the following line, if you get destination out of bounds
@@ -34,6 +39,10 @@ unsigned bufferPitch;
 
 SDL_Surface *curSurface = NULL;
 unsigned curPitch;
+
+SDL_Window *sdlWindow = NULL;
+SDL_GLContext sdlGLContext = NULL;
+SDL_Palette *sdlGamePalette = NULL;
 
 unsigned scaleFactor;
 
@@ -85,37 +94,60 @@ void    VL_Shutdown (void)
 void    VL_SetVGAPlaneMode (void)
 {
 #ifdef SPEAR
-    SDL_WM_SetCaption("Spear of Destiny", NULL);
+    const char *windowTitle = "Spear of Destiny";
 #else
-    SDL_WM_SetCaption("Wolfenstein 3D", NULL);
+    const char *windowTitle = "Wolfenstein 3D";
 #endif
 
-    if(screenBits == -1)
-    {
-        const SDL_VideoInfo *vidInfo = SDL_GetVideoInfo();
-        screenBits = vidInfo->vfmt->BitsPerPixel;
-    }
+    screenBits = 8;
 
     //Fab's CRT Hack
     //Adjust height so the screen is 4:3 aspect ratio
     screenHeight=screenWidth * 3.0/4.0;
-    
-    screen = SDL_SetVideoMode(screenWidth, screenHeight, screenBits,
-          (usedoublebuffering ? SDL_HWSURFACE | SDL_DOUBLEBUF : 0)
-        | (screenBits == 8 ? SDL_HWPALETTE : 0)
-        | (fullscreen ? SDL_FULLSCREEN : 0) | SDL_OPENGL | SDL_OPENGLBLIT);
-    
-    
-    if(!screen)
+
+    SDL_WindowFlags windowFlags = SDL_WINDOW_OPENGL;
+    if(fullscreen)
+        windowFlags |= SDL_WINDOW_FULLSCREEN;
+
+    wolf3d_effect_video_window();
+    sdlWindow = SDL_CreateWindow(windowTitle, screenWidth, screenHeight, windowFlags);
+    if(!sdlWindow)
     {
-        printf("Unable to set %ix%ix%i video mode: %s\n", screenWidth, screenHeight, screenBits, SDL_GetError());
+        wolf3d_effect_diagnostics_console();
+        printf("Unable to create %ix%i OpenGL window: %s\n", screenWidth, screenHeight, SDL_GetError());
+        wolf3d_effect_process_abort();
         exit(1);
     }
-    if((screen->flags & SDL_DOUBLEBUF) != SDL_DOUBLEBUF)
-        usedoublebuffering = false;
-    SDL_ShowCursor(SDL_DISABLE);
 
-    SDL_SetColors(screen, gamepal, 0, 256);
+    wolf3d_effect_video_window();
+    sdlGLContext = SDL_GL_CreateContext(sdlWindow);
+    if(!sdlGLContext)
+    {
+        wolf3d_effect_diagnostics_console();
+        printf("Unable to create OpenGL context: %s\n", SDL_GetError());
+        wolf3d_effect_process_abort();
+        exit(1);
+    }
+    wolf3d_effect_video_window();
+    SDL_GL_MakeCurrent(sdlWindow, sdlGLContext);
+    SDL_GL_SetSwapInterval(usedoublebuffering ? 1 : 0);
+
+    wolf3d_effect_input_grab();
+    SDL_HideCursor();
+
+    wolf3d_effect_video_palette();
+    if(!sdlGamePalette)
+    {
+        sdlGamePalette = SDL_CreatePalette(256);
+        if(!sdlGamePalette)
+        {
+            wolf3d_effect_diagnostics_console();
+            printf("Unable to create palette: %s\n", SDL_GetError());
+            wolf3d_effect_process_abort();
+            exit(1);
+        }
+        wolf3d_sdl_set_palette_colors(sdlGamePalette, (uint8_t *) gamepal, 0, 256);
+    }
     memcpy(curpal, gamepal, sizeof(SDL_Color) * 256);
 
     //Fab's CRT Hack
@@ -124,15 +156,30 @@ void    VL_SetVGAPlaneMode (void)
     //Fab's CRT Hack
     screenWidth=320;
     screenHeight=200;
-    
-    screenBuffer = SDL_CreateRGBSurface(SDL_SWSURFACE, screenWidth,
-        screenHeight, 8, 0, 0, 0, 0);
+
+    if(!screen)
+    {
+        screen = SDL_CreateIndexedSurface(screenWidth, screenHeight);
+        if(!screen)
+        {
+            wolf3d_effect_diagnostics_console();
+            printf("Unable to create screen surface: %s\n", SDL_GetError());
+            wolf3d_effect_process_abort();
+            exit(1);
+        }
+    }
+
     if(!screenBuffer)
     {
-        printf("Unable to create screen buffer surface: %s\n", SDL_GetError());
-        exit(1);
+        screenBuffer = SDL_CreateIndexedSurface(screenWidth, screenHeight);
+        if(!screenBuffer)
+        {
+            wolf3d_effect_diagnostics_console();
+            printf("Unable to create screen buffer surface: %s\n", SDL_GetError());
+            wolf3d_effect_process_abort();
+            exit(1);
+        }
     }
-    SDL_SetColors(screenBuffer, gamepal, 0, 256);
 
     screenPitch = screen->pitch;
     bufferPitch = screenBuffer->pitch;
@@ -150,6 +197,52 @@ void    VL_SetVGAPlaneMode (void)
     CHECKMALLOCRESULT(wallheight);
     
     
+}
+
+SDL_Surface *SDL_CreateIndexedSurface(int width, int height)
+{
+    wolf3d_effect_video_surface();
+    SDL_Surface *surface = SDL_CreateSurface(width, height, SDL_PIXELFORMAT_INDEX8);
+    if(surface)
+    {
+        wolf3d_effect_video_palette();
+        SDL_SetSurfacePalette(surface, sdlGamePalette);
+    }
+    return surface;
+}
+
+void SDL_SetGamePalette(SDL_Surface *surface, const SDL_Color *colors, int firstcolor, int ncolors)
+{
+    wolf3d_sdl_set_game_palette(surface, sdlGamePalette, (const uint8_t *) colors, firstcolor, ncolors);
+}
+
+void SDL_SetGamePaletteColor(SDL_Surface *surface, const SDL_Color *color, int firstcolor)
+{
+    SDL_SetGamePalette(surface, color, firstcolor, 1);
+}
+
+int SDL_NumJoysticksCompat(void)
+{
+    int count = 0;
+    wolf3d_effect_input_poll();
+    SDL_JoystickID *ids = SDL_GetJoysticks(&count);
+    SDL_free(ids);
+    return count;
+}
+
+SDL_Joystick *SDL_OpenJoystickByIndex(int index)
+{
+    int count = 0;
+    wolf3d_effect_input_poll();
+    SDL_JoystickID *ids = SDL_GetJoysticks(&count);
+    SDL_Joystick *joystick = NULL;
+    if(ids && index >= 0 && index < count)
+    {
+        wolf3d_effect_input_grab();
+        joystick = SDL_OpenJoystick(ids[index]);
+    }
+    SDL_free(ids);
+    return joystick;
 }
 
 /*
@@ -172,12 +265,7 @@ void    VL_SetVGAPlaneMode (void)
 
 void VL_ConvertPalette(byte *srcpal, SDL_Color *destpal, int numColors)
 {
-    for(int i=0; i<numColors; i++)
-    {
-        destpal[i].r = *srcpal++ * 255 / 63;
-        destpal[i].g = *srcpal++ * 255 / 63;
-        destpal[i].b = *srcpal++ * 255 / 63;
-    }
+    wolf3d_convert_palette_6bit_rgb_to_sdl_colors(srcpal, (uint8_t *) destpal, numColors);
 }
 
 /*
@@ -190,16 +278,9 @@ void VL_ConvertPalette(byte *srcpal, SDL_Color *destpal, int numColors)
 
 void VL_FillPalette (int red, int green, int blue)
 {
-    int i;
     SDL_Color pal[256];
 
-    for(i=0; i<256; i++)
-    {
-        pal[i].r = red;
-        pal[i].g = green;
-        pal[i].b = blue;
-    }
-
+    wolf3d_fill_sdl_palette_rgb((uint8_t *) pal, red, green, blue, 256);
     VL_SetPalette(pal, true);
 }
 
@@ -215,17 +296,16 @@ void VL_FillPalette (int red, int green, int blue)
 
 void VL_SetColor    (int color, int red, int green, int blue)
 {
-    SDL_Color col = { red, green, blue };
+    if (wolf3d_validate_palette_index(color) != 0)
+        Quit ("VL_SetColor: color must be in the range [0, 255]!");
+
+    SDL_Color col = { (Uint8)red, (Uint8)green, (Uint8)blue, 255 };
     curpal[color] = col;
 
-    if(screenBits == 8)
-        SDL_SetPalette(screen, SDL_PHYSPAL, &col, color, 1);
-    else
-    {
-        SDL_SetPalette(curSurface, SDL_LOGPAL, &col, color, 1);
-        SDL_BlitSurface(screenBuffer, NULL, screen, NULL);
-        SDL_Flip(screen);
-    }
+    SDL_SetGamePaletteColor(curSurface, &col, color);
+    wolf3d_effect_video_render();
+    SDL_BlitSurface(screenBuffer, NULL, screen, NULL);
+    SDL_Flip(screen);
 }
 
 //===========================================================================
@@ -240,6 +320,9 @@ void VL_SetColor    (int color, int red, int green, int blue)
 
 void VL_GetColor    (int color, int *red, int *green, int *blue)
 {
+    if (wolf3d_validate_palette_index(color) != 0)
+        Quit ("VL_GetColor: color must be in the range [0, 255]!");
+
     SDL_Color *col = &curpal[color];
     *red = col->r;
     *green = col->g;
@@ -260,16 +343,12 @@ void VL_SetPalette (SDL_Color *palette, bool forceupdate)
 {
     memcpy(curpal, palette, sizeof(SDL_Color) * 256);
 
-    if(screenBits == 8)
-        SDL_SetPalette(screen, SDL_PHYSPAL, palette, 0, 256);
-    else
+    SDL_SetGamePalette(curSurface, palette, 0, 256);
+    if(forceupdate)
     {
-        SDL_SetPalette(curSurface, SDL_LOGPAL, palette, 0, 256);
-        if(forceupdate)
-        {
-            SDL_BlitSurface(screenBuffer, NULL, screen, NULL);
-            SDL_Flip(screen);
-        }
+        wolf3d_effect_video_render();
+        SDL_BlitSurface(screenBuffer, NULL, screen, NULL);
+        SDL_Flip(screen);
     }
 }
 
@@ -304,48 +383,8 @@ void VL_GetPalette (SDL_Color *palette)
 
 void VL_FadeOut (int start, int end, int red, int green, int blue, int steps)
 {
-    int         i,j,orig,delta;
-    SDL_Color   *origptr, *newptr;
-
-    red = red * 255 / 63;
-    green = green * 255 / 63;
-    blue = blue * 255 / 63;
-
-    VL_WaitVBL(1);
-    VL_GetPalette(palette1);
-    memcpy(palette2, palette1, sizeof(SDL_Color) * 256);
-
-//
-// fade through intermediate frames
-//
-    for (i=0;i<steps;i++)
-    {
-        origptr = &palette1[start];
-        newptr = &palette2[start];
-        for (j=start;j<=end;j++)
-        {
-            orig = origptr->r;
-            delta = red-orig;
-            newptr->r = orig + delta * i / steps;
-            orig = origptr->g;
-            delta = green-orig;
-            newptr->g = orig + delta * i / steps;
-            orig = origptr->b;
-            delta = blue-orig;
-            newptr->b = orig + delta * i / steps;
-            origptr++;
-            newptr++;
-        }
-
-        if(!usedoublebuffering || screenBits == 8) VL_WaitVBL(1);
-        VL_SetPalette (palette2, true);
-    }
-
-//
-// final color
-//
-    VL_FillPalette (red,green,blue);
-
+    if (wolf3d_vl_fade_out_from_host(start, end, red, green, blue, steps) != 0)
+        Quit ("VL_FadeOut: steps must be greater than zero!");
     screenfaded = true;
 }
 
@@ -360,35 +399,8 @@ void VL_FadeOut (int start, int end, int red, int green, int blue, int steps)
 
 void VL_FadeIn (int start, int end, SDL_Color *palette, int steps)
 {
-    int i,j,delta;
-
-    VL_WaitVBL(1);
-    VL_GetPalette(palette1);
-    memcpy(palette2, palette1, sizeof(SDL_Color) * 256);
-
-//
-// fade through intermediate frames
-//
-    for (i=0;i<steps;i++)
-    {
-        for (j=start;j<=end;j++)
-        {
-            delta = palette[j].r-palette1[j].r;
-            palette2[j].r = palette1[j].r + delta * i / steps;
-            delta = palette[j].g-palette1[j].g;
-            palette2[j].g = palette1[j].g + delta * i / steps;
-            delta = palette[j].b-palette1[j].b;
-            palette2[j].b = palette1[j].b + delta * i / steps;
-        }
-
-        if(!usedoublebuffering || screenBits == 8) VL_WaitVBL(1);
-        VL_SetPalette(palette2, true);
-    }
-
-//
-// final color
-//
-    VL_SetPalette (palette, true);
+    if (wolf3d_vl_fade_in_from_host(start, end, (uint8_t *) palette, steps) != 0)
+        Quit ("VL_FadeIn: steps must be greater than zero!");
     screenfaded = false;
 }
 
@@ -404,7 +416,7 @@ byte *VL_LockSurface(SDL_Surface *surface)
 {
     if(SDL_MUSTLOCK(surface))
     {
-        if(SDL_LockSurface(surface) < 0)
+        if(!SDL_LockSurface(surface))
             return NULL;
     }
     return (byte *) surface->pixels;
@@ -428,10 +440,8 @@ void VL_UnlockSurface(SDL_Surface *surface)
 
 void VL_Plot (int x, int y, int color)
 {
-    assert(x >= 0 && (unsigned) x < screenWidth
-            && y >= 0 && (unsigned) y < screenHeight
-            && "VL_Plot: Pixel out of bounds!");
-
+    if (wolf3d_validate_pixel_bounds(x, y, (int32_t) screenWidth, (int32_t) screenHeight) != 0)
+        Quit ("VL_Plot: Pixel out of bounds!");
     VL_LockSurface(curSurface);
     ((byte *) curSurface->pixels)[y * curPitch + x] = color;
     VL_UnlockSurface(curSurface);
@@ -447,10 +457,8 @@ void VL_Plot (int x, int y, int color)
 
 byte VL_GetPixel (int x, int y)
 {
-    assert_ret(x >= 0 && (unsigned) x < screenWidth
-            && y >= 0 && (unsigned) y < screenHeight
-            && "VL_GetPixel: Pixel out of bounds!");
-
+    if (wolf3d_validate_pixel_bounds(x, y, (int32_t) screenWidth, (int32_t) screenHeight) != 0)
+        Quit ("VL_GetPixel: Pixel out of bounds!");
     VL_LockSurface(curSurface);
     byte col = ((byte *) curSurface->pixels)[y * curPitch + x];
     VL_UnlockSurface(curSurface);
@@ -468,13 +476,11 @@ byte VL_GetPixel (int x, int y)
 
 void VL_Hlin (unsigned x, unsigned y, unsigned width, int color)
 {
-    assert(x >= 0 && x + width <= screenWidth
-            && y >= 0 && y < screenHeight
-            && "VL_Hlin: Destination rectangle out of bounds!");
-
+    if (wolf3d_validate_hline_bounds((int32_t) x, (int32_t) y, (int32_t) width, (int32_t) screenWidth, (int32_t) screenHeight) != 0)
+        Quit ("VL_Hlin: Destination rectangle out of bounds!");
     VL_LockSurface(curSurface);
     Uint8 *dest = ((byte *) curSurface->pixels) + y * curPitch + x;
-    memset(dest, color, width);
+    wolf3d_fill_linear_span(dest, width, color);
     VL_UnlockSurface(curSurface);
 }
 
@@ -489,18 +495,11 @@ void VL_Hlin (unsigned x, unsigned y, unsigned width, int color)
 
 void VL_Vlin (int x, int y, int height, int color)
 {
-    assert(x >= 0 && (unsigned) x < screenWidth
-            && y >= 0 && (unsigned) y + height <= screenHeight
-            && "VL_Vlin: Destination rectangle out of bounds!");
-
+    if (wolf3d_validate_vline_bounds(x, y, height, (int32_t) screenWidth, (int32_t) screenHeight) != 0)
+        Quit ("VL_Vlin: Destination rectangle out of bounds!");
     VL_LockSurface(curSurface);
     Uint8 *dest = ((byte *) curSurface->pixels) + y * curPitch + x;
-
-    while (height--)
-    {
-        *dest = color;
-        dest += curPitch;
-    }
+    wolf3d_fill_linear_vline(dest, height, curPitch, color);
     VL_UnlockSurface(curSurface);
 }
 
@@ -515,18 +514,11 @@ void VL_Vlin (int x, int y, int height, int color)
 
 void VL_BarScaledCoord (int scx, int scy, int scwidth, int scheight, int color)
 {
-    assert(scx >= 0 && (unsigned) scx + scwidth <= screenWidth
-            && scy >= 0 && (unsigned) scy + scheight <= screenHeight
-            && "VL_BarScaledCoord: Destination rectangle out of bounds!");
-
+    if (wolf3d_validate_bar_bounds(scx, scy, scwidth, scheight, (int32_t) screenWidth, (int32_t) screenHeight) != 0)
+        Quit ("VL_BarScaledCoord: Destination rectangle out of bounds!");
     VL_LockSurface(curSurface);
     Uint8 *dest = ((byte *) curSurface->pixels) + scy * curPitch + scx;
-
-    while (scheight--)
-    {
-        memset(dest, color, scwidth);
-        dest += curPitch;
-    }
+    wolf3d_fill_linear_rect(dest, scwidth, scheight, curPitch, color);
     VL_UnlockSurface(curSurface);
 }
 
@@ -549,21 +541,13 @@ void VL_BarScaledCoord (int scx, int scy, int scwidth, int scheight, int color)
 void VL_MemToLatch(byte *source, int width, int height,
     SDL_Surface *destSurface, int x, int y)
 {
-    assert(x >= 0 && (unsigned) x + width <= screenWidth
-            && y >= 0 && (unsigned) y + height <= screenHeight
-            && "VL_MemToLatch: Destination rectangle out of bounds!");
+    if (wolf3d_validate_mem_to_latch_bounds(x, y, width, height, (int32_t) destSurface->w, (int32_t) destSurface->h) != 0)
+        Quit ("VL_MemToLatch: Destination rectangle out of bounds!");
 
     VL_LockSurface(destSurface);
     int pitch = destSurface->pitch;
     byte *dest = (byte *) destSurface->pixels + y * pitch + x;
-    for(int ysrc = 0; ysrc < height; ysrc++)
-    {
-        for(int xsrc = 0; xsrc < width; xsrc++)
-        {
-            dest[ysrc * pitch + xsrc] = source[(ysrc * (width >> 2) + (xsrc >> 2))
-                + (xsrc & 3) * (width >> 2) * height];
-        }
-    }
+    wolf3d_copy_planar_to_linear(source, dest, width, height, pitch);
     VL_UnlockSurface(destSurface);
 }
 
@@ -582,26 +566,11 @@ void VL_MemToLatch(byte *source, int width, int height,
 
 void VL_MemToScreenScaledCoord (byte *source, int width, int height, int destx, int desty)
 {
-    assert(destx >= 0 && destx + width * scaleFactor <= screenWidth
-            && desty >= 0 && desty + height * scaleFactor <= screenHeight
-            && "VL_MemToScreenScaledCoord: Destination rectangle out of bounds!");
-
+    if (wolf3d_validate_scaled_draw_bounds(destx, desty, width, height, scaleFactor, screenWidth, screenHeight) != 0)
+        Quit ("VL_MemToScreenScaledCoord: Destination rectangle out of bounds!");
     VL_LockSurface(curSurface);
     byte *vbuf = (byte *) curSurface->pixels;
-    for(int j=0,scj=0; j<height; j++, scj+=scaleFactor)
-    {
-        for(int i=0,sci=0; i<width; i++, sci+=scaleFactor)
-        {
-            byte col = source[(j*(width>>2)+(i>>2))+(i&3)*(width>>2)*height];
-            for(unsigned m=0; m<scaleFactor; m++)
-            {
-                for(unsigned n=0; n<scaleFactor; n++)
-                {
-                    vbuf[(scj+m+desty)*curPitch+sci+n+destx] = col;
-                }
-            }
-        }
-    }
+    wolf3d_draw_planar_scaled_to_linear(source, vbuf, width, height, destx, desty, scaleFactor, curPitch);
     VL_UnlockSurface(curSurface);
 }
 
@@ -621,26 +590,12 @@ void VL_MemToScreenScaledCoord (byte *source, int width, int height, int destx, 
 void VL_MemToScreenScaledCoord (byte *source, int origwidth, int origheight, int srcx, int srcy,
                                 int destx, int desty, int width, int height)
 {
-    assert(destx >= 0 && destx + width * scaleFactor <= screenWidth
-            && desty >= 0 && desty + height * scaleFactor <= screenHeight
-            && "VL_MemToScreenScaledCoord: Destination rectangle out of bounds!");
-
+    if (wolf3d_validate_scaled_draw_bounds(destx, desty, width, height, scaleFactor, screenWidth, screenHeight) != 0)
+        Quit ("VL_MemToScreenScaledCoord: Destination rectangle out of bounds!");
     VL_LockSurface(curSurface);
     byte *vbuf = (byte *) curSurface->pixels;
-    for(int j=0,scj=0; j<height; j++, scj+=scaleFactor)
-    {
-        for(int i=0,sci=0; i<width; i++, sci+=scaleFactor)
-        {
-            byte col = source[((j+srcy)*(origwidth>>2)+((i+srcx)>>2))+((i+srcx)&3)*(origwidth>>2)*origheight];
-            for(unsigned m=0; m<scaleFactor; m++)
-            {
-                for(unsigned n=0; n<scaleFactor; n++)
-                {
-                    vbuf[(scj+m+desty)*curPitch+sci+n+destx] = col;
-                }
-            }
-        }
-    }
+    wolf3d_draw_planar_region_scaled_to_linear(source, vbuf, origwidth, origheight, srcx, srcy,
+        destx, desty, width, height, scaleFactor, curPitch);
     VL_UnlockSurface(curSurface);
 }
 
@@ -657,45 +612,14 @@ void VL_MemToScreenScaledCoord (byte *source, int origwidth, int origheight, int
 void VL_LatchToScreenScaledCoord(SDL_Surface *source, int xsrc, int ysrc,
     int width, int height, int scxdest, int scydest)
 {
-    assert(scxdest >= 0 && scxdest + width * scaleFactor <= screenWidth
-            && scydest >= 0 && scydest + height * scaleFactor <= screenHeight
-            && "VL_LatchToScreenScaledCoord: Destination rectangle out of bounds!");
+    if (wolf3d_validate_scaled_draw_bounds(scxdest, scydest, width, height, scaleFactor, screenWidth, screenHeight) != 0)
+        Quit ("VL_LatchToScreenScaledCoord: Destination rectangle out of bounds!");
 
-    if(scaleFactor == 1)
+    if(scaleFactor == 1 && screenBits == 8)
     {
-        // HACK: If screenBits is not 8 and the screen is faded out, the
-        //       result will be black when using SDL_BlitSurface. The reason
-        //       is that the logical palette needed for the transformation
-        //       to the screen color depth is not equal to the logical
-        //       palette of the latch (the latch is not faded). Therefore,
-        //       SDL tries to map the colors...
-        //       The result: All colors are mapped to black.
-        //       So, we do the blit on our own...
-        if(screenBits != 8)
-        {
-            VL_LockSurface(source);
-            byte *src = (byte *) source->pixels;
-            unsigned srcPitch = source->pitch;
-
-            VL_LockSurface(curSurface);
-            byte *vbuf = (byte *) curSurface->pixels;
-            for(int j=0,scj=0; j<height; j++, scj++)
-            {
-                for(int i=0,sci=0; i<width; i++, sci++)
-                {
-                    byte col = src[(ysrc + j)*srcPitch + xsrc + i];
-                    vbuf[(scydest+scj)*curPitch+scxdest+sci] = col;
-                }
-            }
-            VL_UnlockSurface(curSurface);
-            VL_UnlockSurface(source);
-        }
-        else
-        {
-            SDL_Rect srcrect = { xsrc, ysrc, width, height };
-            SDL_Rect destrect = { scxdest, scydest, 0, 0 }; // width and height are ignored
-            SDL_BlitSurface(source, &srcrect, curSurface, &destrect);
-        }
+        SDL_Rect srcrect = { xsrc, ysrc, width, height };
+        SDL_Rect destrect = { scxdest, scydest, 0, 0 }; // width and height are ignored
+        SDL_BlitSurface(source, &srcrect, curSurface, &destrect);
     }
     else
     {
@@ -705,20 +629,8 @@ void VL_LatchToScreenScaledCoord(SDL_Surface *source, int xsrc, int ysrc,
 
         VL_LockSurface(curSurface);
         byte *vbuf = (byte *) curSurface->pixels;
-        for(int j=0,scj=0; j<height; j++, scj+=scaleFactor)
-        {
-            for(int i=0,sci=0; i<width; i++, sci+=scaleFactor)
-            {
-                byte col = src[(ysrc + j)*srcPitch + xsrc + i];
-                for(unsigned m=0; m<scaleFactor; m++)
-                {
-                    for(unsigned n=0; n<scaleFactor; n++)
-                    {
-                        vbuf[(scydest+scj+m)*curPitch+scxdest+sci+n] = col;
-                    }
-                }
-            }
-        }
+        wolf3d_copy_linear_scaled_to_linear(src, vbuf, xsrc, ysrc, width, height,
+            scxdest, scydest, scaleFactor, srcPitch, curPitch);
         VL_UnlockSurface(curSurface);
         VL_UnlockSurface(source);
     }
@@ -737,4 +649,228 @@ void VL_LatchToScreenScaledCoord(SDL_Surface *source, int xsrc, int ysrc,
 void VL_ScreenToScreen (SDL_Surface *source, SDL_Surface *dest)
 {
     SDL_BlitSurface(source, NULL, dest, NULL);
+}
+
+extern "C" int wolf3d_legacy_vl_set_vga_plane_mode(void)
+{
+    VL_SetVGAPlaneMode();
+    return 0;
+}
+
+extern "C" SDL_Surface *wolf3d_legacy_sdl_create_indexed_surface(int width, int height)
+{
+    return SDL_CreateIndexedSurface(width, height);
+}
+
+extern "C" int wolf3d_legacy_sdl_set_game_palette(SDL_Surface *surface, const SDL_Color *colors, int firstcolor, int ncolors)
+{
+    SDL_SetGamePalette(surface, colors, firstcolor, ncolors);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_copy_game_palette(uint8_t *dest)
+{
+    memcpy(dest, gamepal, sizeof(gamepal));
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_sdl_set_game_palette_color(SDL_Surface *surface, const SDL_Color *color, int firstcolor)
+{
+    SDL_SetGamePaletteColor(surface, color, firstcolor);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_install_vl_bootstrap(SDL_Palette *palette, SDL_Surface *screenSurface, SDL_Surface *screenBufferSurface)
+{
+    sdlGamePalette = palette;
+    screen = screenSurface;
+    screenBuffer = screenBufferSurface;
+    screenPitch = screen ? screen->pitch : 0;
+    bufferPitch = screenBuffer ? screenBuffer->pitch : 0;
+    curSurface = screenBuffer;
+    curPitch = bufferPitch;
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_set_screen_width(int value)
+{
+    screenWidth = (unsigned) value;
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_set_screen_height(int value)
+{
+    screenHeight = (unsigned) value;
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_set_screen_bits(int value)
+{
+    screenBits = (unsigned) value;
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_set_usedoublebuffering(int value)
+{
+    usedoublebuffering = value != 0;
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_sdl_num_joysticks_compat(void)
+{
+    return SDL_NumJoysticksCompat();
+}
+
+extern "C" SDL_Joystick *wolf3d_legacy_sdl_open_joystick_by_index(int index)
+{
+    return SDL_OpenJoystickByIndex(index);
+}
+
+extern "C" int wolf3d_legacy_vl_set_palette(SDL_Color *palette, int forceupdate)
+{
+    VL_SetPalette(palette, forceupdate != 0);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vl_get_palette(SDL_Color *palette)
+{
+    VL_GetPalette(palette);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vl_fill_palette(int red, int green, int blue)
+{
+    VL_FillPalette(red, green, blue);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vl_fade_out(int start, int end, int red, int green, int blue, int steps)
+{
+    VL_FadeOut(start, end, red, green, blue, steps);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vl_fade_in(int start, int end, SDL_Color *palette, int steps)
+{
+    VL_FadeIn(start, end, palette, steps);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vl_plot(int x, int y, int color)
+{
+    VL_Plot(x, y, color);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vl_get_pixel(int x, int y)
+{
+    return (int) VL_GetPixel(x, y);
+}
+
+extern "C" int wolf3d_legacy_vl_hlin(int x, int y, int width, int color)
+{
+    VL_Hlin((unsigned) x, (unsigned) y, (unsigned) width, color);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vl_vlin(int x, int y, int height, int color)
+{
+    VL_Vlin(x, y, height, color);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vl_bar_scaled_coord(int scx, int scy, int scwidth, int scheight, int color)
+{
+    VL_BarScaledCoord(scx, scy, scwidth, scheight, color);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vl_mem_to_latch(byte *source, int width, int height, SDL_Surface *destSurface, int x, int y)
+{
+    VL_MemToLatch(source, width, height, destSurface, x, y);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vl_mem_to_screen_scaled_coord(byte *source, int width, int height, int destx, int desty)
+{
+    VL_MemToScreenScaledCoord(source, width, height, destx, desty);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vl_mem_to_screen_scaled_coord_region(byte *source, int origwidth, int origheight, int srcx, int srcy, int destx, int desty, int width, int height)
+{
+    VL_MemToScreenScaledCoord(source, origwidth, origheight, srcx, srcy, destx, desty, width, height);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vl_latch_to_screen_scaled_coord(SDL_Surface *source, int xsrc, int ysrc, int width, int height, int scxdest, int scydest)
+{
+    VL_LatchToScreenScaledCoord(source, xsrc, ysrc, width, height, scxdest, scydest);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vl_screen_to_screen(SDL_Surface *source, SDL_Surface *dest)
+{
+    VL_ScreenToScreen(source, dest);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_get_scale_factor(void)
+{
+    return (int) scaleFactor;
+}
+
+extern "C" int wolf3d_legacy_get_usedoublebuffering(void)
+{
+    return usedoublebuffering ? 1 : 0;
+}
+
+extern "C" int wolf3d_legacy_get_screen_bits(void)
+{
+    return (int) screenBits;
+}
+
+extern "C" int wolf3d_legacy_get_screen_width(void)
+{
+    return (int) screenWidth;
+}
+
+extern "C" int wolf3d_legacy_get_screen_height(void)
+{
+    return (int) screenHeight;
+}
+
+extern "C" int wolf3d_legacy_get_screen_pitch(void)
+{
+    return (int) screenPitch;
+}
+
+extern "C" int wolf3d_legacy_get_buffer_pitch(void)
+{
+    return (int) bufferPitch;
+}
+
+extern "C" int wolf3d_legacy_get_cur_pitch(void)
+{
+    return (int) curPitch;
+}
+
+extern "C" void *wolf3d_legacy_get_screen_surface(void)
+{
+    return screen;
+}
+
+extern "C" void *wolf3d_legacy_get_screen_buffer_surface(void)
+{
+    return screenBuffer;
+}
+
+extern "C" void *wolf3d_legacy_get_cur_surface(void)
+{
+    return curSurface;
+}
+
+extern "C" void *wolf3d_legacy_get_game_palette(void)
+{
+    return sdlGamePalette;
 }

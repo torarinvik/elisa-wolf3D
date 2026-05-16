@@ -14,16 +14,18 @@
 #ifdef _WIN32
 #include <WTypes.h>
 #include <gl\GL.h>
-#include "SDL.h"
 #elif __linux__
 #include <GL/gl.h>
-#include "SDL/SDL.h"
 #else
 #include <OpenGL/gl.h>
-#include "SDL/SDL.h"
 #endif
 
+#include "sdl_compat.h"
+
 extern SDL_Color curpal[256];
+#ifdef __cplusplus
+extern "C" {
+#endif
 /*
  * CRT aspect ratio is 4:3, height will be infered.
  */
@@ -35,6 +37,10 @@ void CRT_Init(int width);
 void CRT_DAC(void);
 
 void CRT_Screenshot(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 
 #endif

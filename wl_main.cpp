@@ -7,6 +7,8 @@
 #endif
 
 #include "wl_def.h"
+#include "elisa_wolf3d_video.h"
+#include "elisa_wolf3d_save.h"
 #pragma hdrstop
 
 
@@ -94,6 +96,46 @@ int     param_audiobuffer = 2048 / (44100 / param_samplerate);
 int     param_mission = 0;
 boolean param_goodtimes = false;
 boolean param_ignorenumchunks = false;
+
+enum wolf3d_hosted_shutdown_reason_e
+{
+    wolf3d_hosted_shutdown_none = 0,
+    wolf3d_hosted_shutdown_ted_launch_complete = 1
+};
+
+static int wolf3d_hosted_shutdown_reason = wolf3d_hosted_shutdown_none;
+static int wolf3d_hosted_shutdown_immediate = 0;
+static int wolf3d_hosted_shutdown_requested = 0;
+
+static void wolf3d_hosted_reset_shutdown_request()
+{
+    wolf3d_hosted_shutdown_reason = wolf3d_hosted_shutdown_none;
+    wolf3d_hosted_shutdown_immediate = 0;
+    wolf3d_hosted_shutdown_requested = 0;
+}
+
+static void wolf3d_hosted_signal_shutdown(int reason, int immediate)
+{
+    wolf3d_hosted_shutdown_reason = reason;
+    wolf3d_hosted_shutdown_immediate = immediate;
+    wolf3d_hosted_shutdown_requested = 1;
+}
+
+static int wolf3d_hosted_next_demo_index(int lastDemo)
+{
+#ifdef SPEARDEMO
+    return lastDemo;
+#else
+    return lastDemo + 1;
+#endif
+}
+
+extern "C" int wolf3d_legacy_cache_startup_assets(void);
+extern "C" int wolf3d_legacy_new_view_size(void);
+extern "C" int wolf3d_legacy_init_red_shifts(void);
+extern "C" int wolf3d_legacy_finish_signon(void);
+extern "C" int wolf3d_legacy_vl_set_vga_plane_mode(void);
+extern "C" int wolf3d_legacy_signon_screen(void);
 
 /*
 =============================================================================
@@ -323,12 +365,7 @@ void DiskFlopAnim(int x,int y)
 
 int32_t DoChecksum(byte *source,unsigned size,int32_t checksum)
 {
-    unsigned i;
-
-    for (i=0;i<size-1;i++)
-    checksum += source[i]^source[i+1];
-
-    return checksum;
+    return wolf3d_checksum(source, size, checksum);
 }
 
 
@@ -810,8 +847,6 @@ void SetupWalls (void)
 
 void SignonScreen (void)                        // VGA version
 {
-    VL_SetVGAPlaneMode ();
-
     VL_MungePic (signon,320,200);
     VL_MemToScreen (signon,320,200,0,0);
 }
@@ -1179,34 +1214,22 @@ void DoJukebox(void)
 ==========================
 */
 
-static void InitGame()
-{
 #ifndef SPEARDEMO
-    boolean didjukebox=false;
+static boolean didjukebox=false;
 #endif
 
+extern "C" int wolf3d_legacy_init_platform_and_signon(void)
+{
     // initialize SDL
 #if defined _WIN32
     putenv("SDL_VIDEODRIVER=directx");
 #endif
-    if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK) < 0)
+    if(!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_JOYSTICK))
     {
         printf("Unable to init SDL: %s\n", SDL_GetError());
         exit(1);
     }
     atexit(SDL_Quit);
-
-    int numJoysticks = SDL_NumJoysticks();
-    if(param_joystickindex && (param_joystickindex < -1 || param_joystickindex >= numJoysticks))
-    {
-        if(!numJoysticks)
-            printf("No joysticks are available to SDL!\n");
-        else
-            printf("The joystick index must be between -1 and %i!\n", numJoysticks - 1);
-        exit(1);
-    }
-
-    SignonScreen ();
 
 #if defined _WIN32
     if(!fullscreen)
@@ -1224,13 +1247,43 @@ static void InitGame()
     }
 #endif
 
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_get_param_joystickindex(void)
+{
+    return param_joystickindex;
+}
+
+extern "C" int wolf3d_legacy_report_invalid_joystick_selection(int joystickIndex, int numJoysticks)
+{
+    if(!numJoysticks)
+        printf("No joysticks are available to SDL!\n");
+    else
+        printf("The joystick index must be between -1 and %i!\n", numJoysticks - 1);
+    exit(1);
+    return joystickIndex;
+}
+
+extern "C" int wolf3d_legacy_signon_screen(void)
+{
+    SignonScreen();
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_startup_subsystems(void)
+{
     VH_Startup ();
     IN_Startup ();
     PM_Startup ();
     SD_Startup ();
     CA_Startup ();
     US_Startup ();
+    return 0;
+}
 
+extern "C" int wolf3d_legacy_check_memory_floor(void)
+{
     // TODO: Will any memory checking be needed someday??
 #ifdef NOTYET
 #ifndef SPEAR
@@ -1249,11 +1302,14 @@ static void InitGame()
         exit(1);
     }
 #endif
+    return 0;
+}
 
-
-//
-// build some tables
-//
+extern "C" int wolf3d_legacy_load_config_and_intro(void)
+{
+    //
+    // build some tables
+    //
     InitDigiMap ();
 
     ReadConfig ();
@@ -1264,6 +1320,7 @@ static void InitGame()
 // HOLDING DOWN 'M' KEY?
 //
 #ifndef SPEARDEMO
+    didjukebox=false;
     if (Keyboard[sc_M])
     {
         DoJukebox();
@@ -1276,34 +1333,98 @@ static void InitGame()
 // draw intro screen stuff
 //
     IntroScreen ();
+    return 0;
+}
 
-
-//
-// load in and lock down some basic chunks
-//
-
+extern "C" int wolf3d_legacy_cache_startup_assets(void)
+{
     CA_CacheGrChunk(STARTFONT);
     CA_CacheGrChunk(STATUSBARPIC);
+    return 0;
+}
 
-    LoadLatchMem ();
-    BuildTables ();          // trig tables
-    SetupWalls ();
+extern "C" int wolf3d_legacy_new_view_size(void)
+{
+    NewViewSize(viewsize);
+    return 0;
+}
 
-    NewViewSize (viewsize);
-
-//
-// initialize variables
-//
-    InitRedShifts ();
+extern "C" int wolf3d_legacy_finish_signon(void)
+{
 #ifndef SPEARDEMO
     if(!didjukebox)
-#endif
         FinishSignon();
+#else
+    FinishSignon();
+#endif
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_prepare_startup_assets(void)
+{
+    if (wolf3d_legacy_cache_startup_assets() != 0)
+        return 1;
+    if (wolf3d_legacy_new_view_size() != 0)
+        return 1;
+    if (wolf3d_legacy_init_red_shifts() != 0)
+        return 1;
+    if (wolf3d_legacy_finish_signon() != 0)
+        return 1;
 
 #ifdef NOTYET
     vdisp = (byte *) (0xa0000+PAGE1START);
     vbuf = (byte *) (0xa0000+PAGE2START);
 #endif
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_build_tables(void)
+{
+    BuildTables();
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_setup_walls(void)
+{
+    SetupWalls();
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_load_latch_mem(void)
+{
+    LoadLatchMem();
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_prepare_hosted_session_state(void)
+{
+    EnableEndGameMenuItem();
+    return 0;
+}
+
+static void InitGame()
+{
+    wolf3d_hosted_reset_shutdown_request();
+    if (wolf3d_legacy_init_platform_and_signon() != 0)
+        exit(1);
+    if (wolf3d_legacy_vl_set_vga_plane_mode() != 0)
+        exit(1);
+    if (wolf3d_legacy_signon_screen() != 0)
+        exit(1);
+    if (wolf3d_legacy_startup_subsystems() != 0)
+        exit(1);
+    if (wolf3d_legacy_check_memory_floor() != 0)
+        exit(1);
+    if (wolf3d_legacy_load_config_and_intro() != 0)
+        exit(1);
+    if (wolf3d_legacy_cache_startup_assets() != 0)
+        exit(1);
+    if (wolf3d_legacy_new_view_size() != 0)
+        exit(1);
+    if (wolf3d_legacy_init_red_shifts() != 0)
+        exit(1);
+    if (wolf3d_legacy_finish_signon() != 0)
+        exit(1);
 }
 
 //===========================================================================
@@ -1486,35 +1607,36 @@ void Quit (const char *errorStr, ...)
 */
 
 
-static void DemoLoop()
+extern "C" int wolf3d_legacy_run_ted_launch_if_requested(void)
 {
-    int LastDemo = 0;
-
 //
 // check for launch from ted
 //
-    if (param_tedlevel != -1)
-    {
-        param_nowait = true;
-        EnableEndGameMenuItem();
-        NewGame(param_difficulty,0);
+    if (param_tedlevel == -1)
+        return 0;
+
+    wolf3d_legacy_prepare_hosted_session_state();
+    NewGame(param_difficulty,0);
 
 #ifndef SPEAR
-        gamestate.episode = param_tedlevel/10;
-        gamestate.mapon = param_tedlevel%10;
+    gamestate.episode = param_tedlevel/10;
+    gamestate.mapon = param_tedlevel%10;
 #else
-        gamestate.episode = 0;
-        gamestate.mapon = param_tedlevel;
+    gamestate.episode = 0;
+    gamestate.mapon = param_tedlevel;
 #endif
-        GameLoop();
-        Quit (NULL);
-    }
+    GameLoop();
+#ifdef ELISA_HOSTED
+    wolf3d_hosted_signal_shutdown(wolf3d_hosted_shutdown_ted_launch_complete, 1);
+    return 1;
+#else
+    Quit (NULL);
+#endif
+    return 0;
+}
 
-
-//
-// main game cycle
-//
-
+extern "C" int wolf3d_legacy_run_demo_attract_prechecks(void)
+{
 #ifndef DEMOTEST
 
     #ifndef UPLOAD
@@ -1545,97 +1667,196 @@ static void DemoLoop()
 #endif
 
 #endif
+    return 0;
+}
 
-    while (1)
-    {
-        while (!param_nowait)
-        {
+extern "C" int wolf3d_legacy_prepare_demo_loop(void)
+{
+//
+// main game cycle
+//
+    return wolf3d_legacy_run_demo_attract_prechecks();
+}
+
+extern "C" int wolf3d_legacy_should_run_attract_loop(void)
+{
+    return !param_nowait;
+}
+
+extern "C" int wolf3d_legacy_run_attract_cycle(int lastDemo)
+{
 //
 // title page
 //
 #ifndef DEMOTEST
 
 #ifdef SPEAR
-            SDL_Color pal[256];
-            CA_CacheGrChunk (TITLEPALETTE);
-            VL_ConvertPalette(grsegs[TITLEPALETTE], pal, 256);
+    SDL_Color pal[256];
+    CA_CacheGrChunk (TITLEPALETTE);
+    VL_ConvertPalette(grsegs[TITLEPALETTE], pal, 256);
 
-            CA_CacheGrChunk (TITLE1PIC);
-            VWB_DrawPic (0,0,TITLE1PIC);
-            UNCACHEGRCHUNK (TITLE1PIC);
+    CA_CacheGrChunk (TITLE1PIC);
+    VWB_DrawPic (0,0,TITLE1PIC);
+    UNCACHEGRCHUNK (TITLE1PIC);
 
-            CA_CacheGrChunk (TITLE2PIC);
-            VWB_DrawPic (0,80,TITLE2PIC);
-            UNCACHEGRCHUNK (TITLE2PIC);
-            VW_UpdateScreen ();
-            VL_FadeIn(0,255,pal,30);
+    CA_CacheGrChunk (TITLE2PIC);
+    VWB_DrawPic (0,80,TITLE2PIC);
+    UNCACHEGRCHUNK (TITLE2PIC);
+    VW_UpdateScreen ();
+    VL_FadeIn(0,255,pal,30);
 
-            UNCACHEGRCHUNK (TITLEPALETTE);
+    UNCACHEGRCHUNK (TITLEPALETTE);
 #else
-            CA_CacheScreen (TITLEPIC);
-            VW_UpdateScreen ();
-            VW_FadeIn();
+    CA_CacheScreen (TITLEPIC);
+    VW_UpdateScreen ();
+    VW_FadeIn();
 #endif
-            if (IN_UserInput(TickBase*15))
-                break;
-            VW_FadeOut();
+    if (IN_UserInput(TickBase*15))
+        return -1;
+    VW_FadeOut();
 //
 // credits page
 //
-            CA_CacheScreen (CREDITSPIC);
-            VW_UpdateScreen();
-            VW_FadeIn ();
-            if (IN_UserInput(TickBase*10))
-                break;
-            VW_FadeOut ();
+    CA_CacheScreen (CREDITSPIC);
+    VW_UpdateScreen();
+    VW_FadeIn ();
+    if (IN_UserInput(TickBase*10))
+        return -1;
+    VW_FadeOut ();
 //
 // high scores
 //
-            DrawHighScores ();
-            VW_UpdateScreen ();
-            VW_FadeIn ();
+    DrawHighScores ();
+    VW_UpdateScreen ();
+    VW_FadeIn ();
 
-            if (IN_UserInput(TickBase*10))
-                break;
+    if (IN_UserInput(TickBase*10))
+        return -1;
 #endif
 //
 // demo
 //
 
-            #ifndef SPEARDEMO
-            PlayDemo (LastDemo++%4);
-            #else
-            PlayDemo (0);
-            #endif
+#ifndef SPEARDEMO
+    PlayDemo (lastDemo%4);
+#else
+    PlayDemo (0);
+#endif
+    lastDemo = wolf3d_hosted_next_demo_index(lastDemo);
 
-            if (playstate == ex_abort)
-                break;
-            VW_FadeOut();
-            if(screenHeight % 200 != 0)
-                VL_ClearScreen(0);
-            StartCPMusic(INTROSONG);
-        }
+    if (playstate == ex_abort)
+        return -1;
+    VW_FadeOut();
+    if(screenHeight % 200 != 0)
+        VL_ClearScreen(0);
+    StartCPMusic(INTROSONG);
+    return lastDemo;
+}
 
-        VW_FadeOut ();
+extern "C" int wolf3d_legacy_run_control_panel_cycle_with_result(int *result);
+
+extern "C" int wolf3d_legacy_advance_demo_index(int lastDemo)
+{
+    return wolf3d_hosted_next_demo_index(lastDemo);
+}
+
+extern "C" int wolf3d_legacy_run_control_panel_cycle(void)
+{
+    return wolf3d_legacy_run_control_panel_cycle_with_result(NULL);
+}
+
+extern "C" int wolf3d_legacy_run_control_panel_cycle_with_result(int *result)
+{
+    int priorStartgame = startgame;
+    int priorLoadedgame = loadedgame;
+    int panelResult = 0;
+
+    VW_FadeOut ();
 
 #ifdef DEBUGKEYS
-        if (Keyboard[sc_Tab] && param_debugmode)
-            RecordDemo ();
-        else
-            US_ControlPanel (0);
+    if (Keyboard[sc_Tab] && param_debugmode)
+        RecordDemo ();
+    else
+        US_ControlPanel (sc_None);
 #else
-        US_ControlPanel (0);
+    US_ControlPanel (0);
 #endif
 
-        if (startgame || loadedgame)
+    if (!priorStartgame && !priorLoadedgame)
+    {
+        if (!startgame && loadedgame)
+            panelResult = 2;
+        else if (startgame)
+            panelResult = 1;
+    }
+
+    if (result != NULL)
+        *result = panelResult;
+
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_run_active_game_cycle(void)
+{
+    if (startgame || loadedgame)
+    {
+        wolf3d_legacy_prepare_hosted_session_state();
+        GameLoop ();
+        if(!param_nowait)
         {
-            GameLoop ();
-            if(!param_nowait)
-            {
-                VW_FadeOut();
-                StartCPMusic(INTROSONG);
-            }
+            VW_FadeOut();
+            StartCPMusic(INTROSONG);
         }
+    }
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_run_pending_game_cycle(void)
+{
+    return wolf3d_legacy_run_active_game_cycle();
+}
+
+extern "C" int wolf3d_legacy_request_hosted_shutdown(int *out_reason, int *out_immediate_shutdown)
+{
+    if (out_reason != NULL)
+        *out_reason = wolf3d_hosted_shutdown_reason;
+    if (out_immediate_shutdown != NULL)
+        *out_immediate_shutdown = wolf3d_hosted_shutdown_immediate;
+    return wolf3d_hosted_shutdown_requested;
+}
+
+extern "C" int wolf3d_legacy_request_hosted_shutdown_reset(void)
+{
+    wolf3d_hosted_reset_shutdown_request();
+    return 0;
+}
+
+static void DemoLoop()
+{
+    int LastDemo = 0;
+    int controlPanelResult = 0;
+
+    if (wolf3d_legacy_run_ted_launch_if_requested() != 0)
+        return;
+    wolf3d_legacy_prepare_demo_loop();
+
+    while (1)
+    {
+        while (wolf3d_legacy_should_run_attract_loop())
+        {
+            int nextDemo = wolf3d_legacy_run_attract_cycle(LastDemo);
+            if (nextDemo < 0)
+                break;
+            LastDemo = nextDemo;
+        }
+
+        controlPanelResult = 0;
+        wolf3d_legacy_run_control_panel_cycle_with_result(&controlPanelResult);
+        if (!controlPanelResult)
+            wolf3d_legacy_run_active_game_cycle();
+
+        if (wolf3d_legacy_request_hosted_shutdown(NULL, NULL))
+            return;
     }
 }
 
@@ -1644,7 +1865,7 @@ static void DemoLoop()
 
 #define IFARG(str) if(!strcmp(arg, (str)))
 
-void CheckParameters(int argc, char *argv[])
+static int ParseParameters(int argc, char *argv[], bool should_exit_on_error)
 {
     bool hasError = false, showHelp = false;
     bool sampleRateGiven = false, audioBufferGiven = false;
@@ -1694,8 +1915,8 @@ void CheckParameters(int argc, char *argv[])
             }
             else
             {
-                screenWidth = atoi(argv[++i]);
-                screenHeight = atoi(argv[++i]);
+                (void) wolf3d_video_set_screen_width(atoi(argv[++i]));
+                (void) wolf3d_video_set_screen_height(atoi(argv[++i]));
                 unsigned factor = screenWidth / 320;
                 if(screenWidth % 320 || screenHeight != 200 * factor && screenHeight != 240 * factor)
                     printf("Screen size must be a multiple of 320x200 or 320x240!\n"), hasError = true;
@@ -1710,8 +1931,8 @@ void CheckParameters(int argc, char *argv[])
             }
             else
             {
-                screenWidth = atoi(argv[++i]);
-                screenHeight = atoi(argv[++i]);
+                (void) wolf3d_video_set_screen_width(atoi(argv[++i]));
+                (void) wolf3d_video_set_screen_height(atoi(argv[++i]));
                 if(screenWidth < 320)
                     printf("Screen width must be at least 320!\n"), hasError = true;
                 if(screenHeight < 200)
@@ -1727,7 +1948,7 @@ void CheckParameters(int argc, char *argv[])
             }
             else
             {
-                screenBits = atoi(argv[i]);
+                (void) wolf3d_video_set_screen_bits(atoi(argv[i]));
                 switch(screenBits)
                 {
                     case 8:
@@ -1744,7 +1965,9 @@ void CheckParameters(int argc, char *argv[])
             }
         }
         else IFARG("--nodblbuf")
-            usedoublebuffering = false;
+        {
+            (void) wolf3d_video_set_usedoublebuffering(0);
+        }
         else IFARG("--extravbls")
         {
             if(++i >= argc)
@@ -1901,22 +2124,29 @@ void CheckParameters(int argc, char *argv[])
         exit(1);
     }
 
-    if(sampleRateGiven && !audioBufferGiven)
+        if(sampleRateGiven && !audioBufferGiven)
         param_audiobuffer = 2048 / (44100 / param_samplerate);
+
+    return hasError ? 1 : 0;
+}
+
+void CheckParameters(int argc, char *argv[])
+{
+    ParseParameters(argc, argv, true);
 }
 
 /*
 ==========================
 =
-= main
+= legacy C API entry
 =
 ==========================
 */
 
-int main (int argc, char *argv[])
+extern "C" int wolf3d_legacy_run(int argc, char *argv[])
 {
-
-    CheckParameters(argc, argv);
+    if (ParseParameters(argc, argv, true) != 0)
+        return 1;
 
     CheckForEpisodes();
 
@@ -1927,3 +2157,79 @@ int main (int argc, char *argv[])
     Quit("Demo loop exited???");
     return 1;
 }
+
+extern "C" int wolf3d_legacy_check_parameters(int argc, char *argv[])
+{
+    return ParseParameters(argc, argv, false);
+}
+
+extern "C" int wolf3d_legacy_check_parameters_status(int argc, char *argv[])
+{
+    return ParseParameters(argc, argv, false);
+}
+
+extern "C" int wolf3d_legacy_check_parameters_default(void)
+{
+    char arg0[] = "Chocolate-Wolfenstein-3D";
+    char *argv[] = { arg0, NULL };
+    return wolf3d_legacy_check_parameters(1, argv);
+}
+
+extern "C" int wolf3d_legacy_check_parameters_default_status(void)
+{
+    char arg0[] = "Chocolate-Wolfenstein-3D";
+    char *argv[] = { arg0, NULL };
+    return wolf3d_legacy_check_parameters_status(1, argv);
+}
+
+extern "C" int wolf3d_legacy_check_for_episodes(void)
+{
+    CheckForEpisodes();
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_init_game(void)
+{
+    InitGame();
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_demo_loop(void)
+{
+    DemoLoop();
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_unreachable_demo_loop_exit(void)
+{
+    Quit("Demo loop exited???");
+    return 1;
+}
+
+extern "C" int wolf3d_legacy_run_default(void)
+{
+    if (wolf3d_legacy_check_parameters_default() != 0)
+        return 1;
+    if (wolf3d_legacy_check_for_episodes() != 0)
+        return 1;
+    if (wolf3d_legacy_init_game() != 0)
+        return 1;
+    if (wolf3d_legacy_demo_loop() != 0)
+        return 1;
+    return wolf3d_legacy_unreachable_demo_loop_exit();
+}
+
+#ifndef ELISA_HOSTED
+/*
+==========================
+=
+= main
+=
+==========================
+*/
+
+int main (int argc, char *argv[])
+{
+    return wolf3d_legacy_run(argc, argv);
+}
+#endif

@@ -1,6 +1,7 @@
 // WL_DRAW.C
 
 #include "wl_def.h"
+#include "elisa_wolf3d_video.h"
 #pragma hdrstop
 
 
@@ -622,16 +623,12 @@ byte vgaCeiling[]=
 void VGAClearScreen (void)
 {
     byte ceiling=vgaCeiling[gamestate.episode*10+mapon];
+    int halfheight = viewheight / 2;
 
-    int y;
-    byte *ptr = vbuf;
-    
-    for(y = 0; y < viewheight / 2; y++, ptr += vbufPitch)
-        memset(ptr, ceiling, viewwidth);
-    
-    for(; y < viewheight; y++, ptr += vbufPitch)
-        memset(ptr, 0x19, viewwidth);
-    
+    wolf3d_fill_linear_rect(vbuf, viewwidth, halfheight, vbufPitch, ceiling);
+    wolf3d_fill_linear_rect(vbuf + halfheight * vbufPitch, viewwidth,
+        viewheight - halfheight, vbufPitch, 0x19);
+
 }
 
 //==========================================================================

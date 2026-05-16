@@ -1,4 +1,5 @@
 #include "wl_def.h"
+#include "elisa_wolf3d_video.h"
 
 
 pictabletype    *pictable;
@@ -13,37 +14,15 @@ int     fontnumber;
 void VWB_DrawPropString(const char* string)
 {
     fontstruct  *font;
-    int         width, step, height;
-    byte        *source, *dest;
-    byte        ch;
+    byte        *dest;
 
     byte *vbuf = LOCK();
 
     font = (fontstruct *) grsegs[STARTFONT+fontnumber];
-    height = font->height;
     dest = vbuf + scaleFactor * (py * curPitch + px);
-
-    while ((ch = (byte)*string++)!=0)
-    {
-        width = step = font->width[ch];
-        source = ((byte *)font)+font->location[ch];
-        while (width--)
-        {
-            for(int i=0;i<height;i++)
-            {
-                if(source[i*step])
-                {
-                    for(unsigned sy=0; sy<scaleFactor; sy++)
-                        for(unsigned sx=0; sx<scaleFactor; sx++)
-                            dest[(scaleFactor*i+sy)*curPitch+sx]=fontcolor;
-                }
-            }
-
-            source++;
-            px++;
-            dest+=scaleFactor;
-        }
-    }
+    px += wolf3d_vwb_draw_prop_string_on_linear_buffer((const uint8_t *) string, (const uint8_t *) font,
+        font->location, (const uint8_t *) font->width, dest, font->height, scaleFactor,
+        curPitch, fontcolor);
 
     UNLOCK();
 }
@@ -58,12 +37,12 @@ void VWB_DrawPropString(const char* string)
 
 void VL_MungePic (byte *source, unsigned width, unsigned height)
 {
-    unsigned x,y,plane,size,pwidth;
-    byte *temp, *dest, *srcline;
+    unsigned size;
+    byte *temp;
 
     size = width*height;
 
-    if (width&3)
+    if (wolf3d_validate_munge_pic_width(width) != 0)
         Quit ("VL_MungePic: Not divisable by 4!");
 
 //
@@ -76,28 +55,16 @@ void VL_MungePic (byte *source, unsigned width, unsigned height)
 //
 // munge it back into the original buffer
 //
-    dest = source;
-    pwidth = width/4;
-
-    for (plane=0;plane<4;plane++)
-    {
-        srcline = temp;
-        for (y=0;y<height;y++)
-        {
-            for (x=0;x<pwidth;x++)
-                *dest++ = *(srcline+x*4+plane);
-            srcline+=width;
-        }
-    }
+    wolf3d_munge_pic_from_temp(source, temp, width, height);
 
     free(temp);
 }
 
 void VWL_MeasureString (const char *string, word *width, word *height, fontstruct *font)
 {
-    *height = font->height;
-    for (*width = 0;*string;string++)
-        *width += font->width[*((byte *)string)];   // proportional width
+    if (wolf3d_measure_prop_string_safe((const uint8_t *) string,
+        width, height, font ? font->height : -1, font ? (const uint8_t *) font->width : nullptr) != 0)
+        Quit ("VWL_MeasureString: Invalid font height!");
 }
 
 void VW_MeasurePropString (const char *string, word *width, word *height)
@@ -115,8 +82,7 @@ void VW_MeasurePropString (const char *string, word *width, word *height)
 
 void VH_UpdateScreen()
 {
-    SDL_BlitSurface(screenBuffer, NULL, screen, NULL);
-    SDL_Flip(screen);
+    wolf3d_vh_update_screen(screenBuffer, screen);
 }
 
 
@@ -132,56 +98,82 @@ void VWB_DrawTile8M (int x, int y, int tile)
 
 void VWB_DrawPic (int x, int y, int chunknum)
 {
-    int picnum = chunknum - STARTPICS;
+    int picnum = wolf3d_pic_index_for_chunk(chunknum, STARTPICS);
     unsigned width,height;
+    byte *vbuf;
 
-    x &= ~7;
+    x = wolf3d_align_picture_x(x);
 
     width = pictable[picnum].width;
     height = pictable[picnum].height;
 
-    VL_MemToScreen (grsegs[chunknum],width,height,x,y);
+    vbuf = LOCK();
+    wolf3d_vwb_draw_pic_on_linear_buffer((const uint8_t *) grsegs[chunknum], (int32_t) width, (int32_t) height,
+        vbuf, x, y, curPitch, scaleFactor, (int32_t) screenWidth, (int32_t) screenHeight);
+    UNLOCK();
 }
 
 void VWB_DrawPicScaledCoord (int scx, int scy, int chunknum)
 {
-    int picnum = chunknum - STARTPICS;
+    int picnum = wolf3d_pic_index_for_chunk(chunknum, STARTPICS);
     unsigned width,height;
+    byte *vbuf;
 
     width = pictable[picnum].width;
     height = pictable[picnum].height;
 
-    VL_MemToScreenScaledCoord (grsegs[chunknum],width,height,scx,scy);
+    vbuf = LOCK();
+    wolf3d_vwb_draw_pic_scaled_coord_on_linear_buffer((const uint8_t *) grsegs[chunknum], (int32_t) width, (int32_t) height,
+        vbuf, scx, scy, curPitch, scaleFactor, (int32_t) screenWidth, (int32_t) screenHeight);
+    UNLOCK();
 }
 
 
+extern "C" int wolf3d_legacy_register_latchpic_surface(int index, SDL_Surface *surface)
+{
+    latchpics[index] = surface;
+    return 0;
+}
+
+extern "C" SDL_Surface *wolf3d_legacy_get_latchpic_surface(int index)
+{
+    return latchpics[index];
+}
+
+extern "C" int wolf3d_legacy_get_latchpic_dimensions(int picnum, int *width, int *height)
+{
+    int picindex = wolf3d_pic_index_for_chunk(picnum, STARTPICS);
+    *width = pictable[picindex].width;
+    *height = pictable[picindex].height;
+    return 0;
+}
+
 void VWB_Bar (int x, int y, int width, int height, int color)
 {
-    VW_Bar (x,y,width,height,color);
+    byte *vbuf = LOCK();
+    wolf3d_vwb_bar_on_linear_buffer(vbuf, x, y, width, height, color, curPitch, scaleFactor, (int32_t) screenWidth, (int32_t) screenHeight);
+    UNLOCK();
 }
 
 void VWB_Plot (int x, int y, int color)
 {
-    if(scaleFactor == 1)
-        VW_Plot(x,y,color);
-    else
-        VW_Bar(x, y, 1, 1, color);
+    byte *vbuf = LOCK();
+    wolf3d_vwb_plot_on_linear_buffer(vbuf, x, y, color, curPitch, scaleFactor, (int32_t) screenWidth, (int32_t) screenHeight);
+    UNLOCK();
 }
 
 void VWB_Hlin (int x1, int x2, int y, int color)
 {
-    if(scaleFactor == 1)
-        VW_Hlin(x1,x2,y,color);
-    else
-        VW_Bar(x1, y, x2-x1+1, 1, color);
+    byte *vbuf = LOCK();
+    wolf3d_vwb_hlin_on_linear_buffer(vbuf, x1, x2, y, color, curPitch, scaleFactor, (int32_t) screenWidth, (int32_t) screenHeight);
+    UNLOCK();
 }
 
 void VWB_Vlin (int y1, int y2, int x, int color)
 {
-    if(scaleFactor == 1)
-        VW_Vlin(y1,y2,x,color);
-    else
-        VW_Bar(x, y1, 1, y2-y1+1, color);
+    byte *vbuf = LOCK();
+    wolf3d_vwb_vlin_on_linear_buffer(vbuf, y1, y2, x, color, curPitch, scaleFactor, (int32_t) screenWidth, (int32_t) screenHeight);
+    UNLOCK();
 }
 
 
@@ -203,12 +195,14 @@ void VWB_Vlin (int y1, int y2, int x, int color)
 
 void LatchDrawPic (unsigned x, unsigned y, unsigned picnum)
 {
-    VL_LatchToScreen (latchpics[2+picnum-LATCHPICS_LUMP_START], x*8, y);
+    if (wolf3d_latch_draw_pic_on_screen((int32_t) picnum, (int32_t) x, (int32_t) y) != 0)
+        Quit ("LatchDrawPic: Unable to draw latch pic!");
 }
 
 void LatchDrawPicScaledCoord (unsigned scx, unsigned scy, unsigned picnum)
 {
-    VL_LatchToScreenScaledCoord (latchpics[2+picnum-LATCHPICS_LUMP_START], scx*8, scy);
+    if (wolf3d_latch_draw_pic_scaled_coord_on_screen((int32_t) picnum, (int32_t) scx, (int32_t) scy) != 0)
+        Quit ("LatchDrawPicScaledCoord: Unable to draw latch pic!");
 }
 
 
@@ -232,13 +226,16 @@ void LoadLatchMem (void)
 // tile 8s
 //
     
-    surf = SDL_CreateRGBSurface(SDL_HWSURFACE, 8*8,
-        ((NUMTILE8 + 7) / 8) * 8, 8, 0, 0, 0, 0);
+    surf = latchpics[0];
     if(surf == NULL)
     {
-        Quit("Unable to create surface for tiles!");
+        surf = SDL_CreateIndexedSurface(8*8, wolf3d_latch_tile_surface_height(NUMTILE8));
+        if(surf == NULL)
+        {
+            Quit("Unable to create surface for tiles!");
+        }
+        SDL_SetGamePalette(surf, gamepal, 0, 256);
     }
-    SDL_SetColors(surf, gamepal, 0, 256);
 
     latchpics[0] = surf;
     CA_CacheGrChunk (STARTTILE8);
@@ -246,7 +243,7 @@ void LoadLatchMem (void)
 
     for (i=0;i<NUMTILE8;i++)
     {
-        VL_MemToLatch (src, 8, 8, surf, (i & 7) * 8, (i >> 3) * 8);
+        VL_MemToLatch (src, 8, 8, surf, wolf3d_latch_tile_dest_x(i), wolf3d_latch_tile_dest_y(i));
         src += 64;
     }
     UNCACHEGRCHUNK (STARTTILE8);
@@ -261,14 +258,18 @@ void LoadLatchMem (void)
     {
         width = pictable[i-STARTPICS].width;
         height = pictable[i-STARTPICS].height;
-        surf = SDL_CreateRGBSurface(SDL_HWSURFACE, width, height, 8, 0, 0, 0, 0);
+        surf = latchpics[wolf3d_latchpic_index(i, start)];
         if(surf == NULL)
         {
-            Quit("Unable to create surface for picture!");
+            surf = SDL_CreateIndexedSurface(width, height);
+            if(surf == NULL)
+            {
+                Quit("Unable to create surface for picture!");
+            }
+            SDL_SetGamePalette(surf, gamepal, 0, 256);
         }
-        SDL_SetColors(surf, gamepal, 0, 256);
 
-        latchpics[2+i-start] = surf;
+        latchpics[wolf3d_latchpic_index(i, start)] = surf;
         CA_CacheGrChunk (i);
         VL_MemToLatch (grsegs[i], width, height, surf, 0, 0);
         UNCACHEGRCHUNK(i);
@@ -292,160 +293,73 @@ void LoadLatchMem (void)
 ===================
 */
 
-// XOR masks for the pseudo-random number sequence starting with n=17 bits
-static const uint32_t rndmasks[] = {
-                    // n    XNOR from (starting at 1, not 0 as usual)
-    0x00012000,     // 17   17,14
-    0x00020400,     // 18   18,11
-    0x00040023,     // 19   19,6,2,1
-    0x00090000,     // 20   20,17
-    0x00140000,     // 21   21,19
-    0x00300000,     // 22   22,21
-    0x00420000,     // 23   23,18
-    0x00e10000,     // 24   24,23,22,17
-    0x01200000,     // 25   25,22      (this is enough for 8191x4095)
-};
-
 static unsigned int rndbits_y;
 static unsigned int rndmask;
 
 extern SDL_Color curpal[256];
 
-// Returns the number of bits needed to represent the given value
-static int log2_ceil(uint32_t x)
-{
-    int n = 0;
-    uint32_t v = 1;
-    while(v < x)
-    {
-        n++;
-        v <<= 1;
-    }
-    return n;
-}
-
 void VH_Startup()
 {
-    int rndbits_x = log2_ceil(screenWidth);
-    rndbits_y = log2_ceil(screenHeight);
+    wolf3d_configure_fizzle_state((uint32_t)screenWidth, (uint32_t)screenHeight, &rndbits_y, &rndmask);
+}
 
-    int rndbits = rndbits_x + rndbits_y;
-    if(rndbits < 17)
-        rndbits = 17;       // no problem, just a bit slower
-    else if(rndbits > 25)
-        rndbits = 25;       // fizzle fade will not fill whole screen
+extern "C" int wolf3d_legacy_vwb_draw_prop_string(const char* string)
+{
+    VWB_DrawPropString(string);
+    return 0;
+}
 
-    rndmask = rndmasks[rndbits - 17];
+extern "C" int wolf3d_legacy_vwb_draw_pic(int x, int y, int chunknum)
+{
+    VWB_DrawPic(x, y, chunknum);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vwb_draw_pic_scaled_coord(int scx, int scy, int chunknum)
+{
+    VWB_DrawPicScaledCoord(scx, scy, chunknum);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vwb_bar(int x, int y, int width, int height, int color)
+{
+    VWB_Bar(x, y, width, height, color);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vwb_plot(int x, int y, int color)
+{
+    VWB_Plot(x, y, color);
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_vwb_hlin(int x1, int x2, int y, int color)
+{
+    VWB_Hlin(x1, x2, y, color);
+    return 0;
 }
 
 boolean FizzleFade (SDL_Surface *source, int x1, int y1,
     unsigned width, unsigned height, unsigned frames, boolean abortable)
 {
-
-    unsigned x, y, frame, pixperframe;
-    int32_t  rndval, lastrndval;
-    int      first = 1;
-
-    lastrndval = 0;
-    pixperframe = width * height / frames;
-
-    IN_StartAck ();
-
-    frame = GetTimeCount();
-
-    //can't rely on screen as dest b/c crt.cpp writes over it with screenBuffer
-    //can't rely on screenBuffer as source for same reason: every flip it has to be updated
-    SDL_Surface *source_copy = SDL_ConvertSurface(source, source->format, source->flags);
-    SDL_Surface *screen_copy = SDL_ConvertSurface(screen, screen->format, screen->flags);
+    SDL_Surface *source_copy = SDL_DuplicateSurface(source);
+    SDL_Surface *screen_copy = SDL_DuplicateSurface(screen);
+    if(!source_copy || !screen_copy)
+    {
+        SDL_FreeSurface(source_copy);
+        SDL_FreeSurface(screen_copy);
+        Quit("FizzleFade: Unable to duplicate surfaces!");
+    }
 
     byte *srcptr = VL_LockSurface(source_copy);
-    do
-    {
-        if(abortable && IN_CheckAck ())
-        {
-            VL_UnlockSurface(source_copy);
-            SDL_BlitSurface(screen_copy, NULL, screenBuffer, NULL);
-            SDL_BlitSurface(screenBuffer, NULL, screen, NULL);
-            SDL_Flip(screen);
-            SDL_FreeSurface(source_copy);
-            SDL_FreeSurface(screen_copy);
-            return true;
-        }
-
-        byte *destptr = VL_LockSurface(screen_copy);
-
-        rndval = lastrndval;
-
-        // When using double buffering, we have to copy the pixels of the last AND the current frame.
-        // Only for the first frame, there is no "last frame"
-        for(int i = first; i < 2; i++)
-        {
-            for(unsigned p = 0; p < pixperframe; p++)
-            {
-                //
-                // seperate random value into x/y pair
-                //
-
-                x = rndval >> rndbits_y;
-                y = rndval & ((1 << rndbits_y) - 1);
-
-                //
-                // advance to next random element
-                //
-
-                rndval = (rndval >> 1) ^ (rndval & 1 ? 0 : rndmask);
-
-                if(x >= width || y >= height)
-                {
-                    if(rndval == 0)     // entire sequence has been completed
-                        goto finished;
-                    p--;
-                    continue;
-                }
-
-                //
-                // copy one pixel
-                //
-
-                if(screenBits == 8)
-                {
-                    *(destptr + (y1 + y) * screen->pitch + x1 + x)
-                        = *(srcptr + (y1 + y) * source->pitch + x1 + x);
-                }
-                else
-                {
-                    byte col = *(srcptr + (y1 + y) * source->pitch + x1 + x);
-                    uint32_t fullcol = SDL_MapRGB(screen->format, curpal[col].r, curpal[col].g, curpal[col].b);
-                    memcpy(destptr + (y1 + y) * screen->pitch + (x1 + x) * screen->format->BytesPerPixel,
-                        &fullcol, screen->format->BytesPerPixel);
-                }
-
-                if(rndval == 0)     // entire sequence has been completed
-                    goto finished;
-            }
-
-            if(!i || first) lastrndval = rndval;
-        }
-
-        // If there is no double buffering, we always use the "first frame" case
-        if(usedoublebuffering) first = 0;
-
-        VL_UnlockSurface(screen_copy);
-        SDL_BlitSurface(screen_copy, NULL, screenBuffer, NULL);
-        SDL_BlitSurface(screenBuffer, NULL, screen, NULL);
-        SDL_Flip(screen);
-
-        frame++;
-        Delay(frame - GetTimeCount());        // don't go too fast
-    } while (1);
-
-finished:
-    VL_UnlockSurface(source_copy);
+    byte *destptr = VL_LockSurface(screen_copy);
+    boolean aborted = wolf3d_fizzle_fade_on_locked_buffers(srcptr, (int32_t) source_copy->pitch, destptr,
+        (int32_t) screen_copy->pitch, x1, y1, (int32_t) width, (int32_t) height, (uint32_t) frames,
+        abortable ? 1 : 0, usedoublebuffering ? 1 : 0, (int32_t) rndbits_y, rndmask, (int32_t) source_copy->w,
+        (int32_t) source_copy->h, (int32_t) screen->w, (int32_t) screen->h, source_copy, screenBuffer, screen);
     VL_UnlockSurface(screen_copy);
-    SDL_BlitSurface(screen_copy, NULL, screenBuffer, NULL);
-    SDL_BlitSurface(screenBuffer, NULL, screen, NULL);
-    SDL_Flip(screen);
+    VL_UnlockSurface(source_copy);
     SDL_FreeSurface(source_copy);
     SDL_FreeSurface(screen_copy);
-    return false;
+    return aborted;
 }

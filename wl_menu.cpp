@@ -333,7 +333,8 @@ static byte *ExtScanNames[] =   // Names corresponding to ExtScanCodes
                                         };*/
 
 #else
-static const char* const ScanNames[SDLK_LAST] =
+#if 0
+static const char* const ScanNames[SDL_SCANCODE_COUNT] =
     {
         "?","?","?","?","?","?","?","?",                                //   0
         "BkSp","Tab","?","?","?","Return","?","?",                      //   8
@@ -377,6 +378,7 @@ static const char* const ScanNames[SDLK_LAST] =
         "?","?","?","?","PrtSc","?","?","?",                            // 312
         "?","?"                                                         // 320
     };
+#endif
 
 #endif
 
@@ -3585,8 +3587,10 @@ ReadAnyControl (ControlInfo * ci)
 
     if (mouseenabled && IN_IsInputGrabbed())
     {
-        int mousex, mousey, buttons;
-        buttons = SDL_GetMouseState(&mousex, &mousey);
+        float mousexf, mouseyf;
+        int buttons = (int)SDL_GetMouseState(&mousexf, &mouseyf);
+        int mousex = (int)mousexf;
+        int mousey = (int)mouseyf;
         int middlePressed = buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE);
         int rightPressed = buttons & SDL_BUTTON(SDL_BUTTON_RIGHT);
         buttons &= ~(SDL_BUTTON(SDL_BUTTON_MIDDLE) | SDL_BUTTON(SDL_BUTTON_RIGHT));
@@ -3878,7 +3882,8 @@ IN_GetScanName (ScanCode scan)
         if (*s == scan)
             return (*p);*/
 
-    return (ScanNames[scan]);
+    const char *name = SDL_GetScancodeName((SDL_Scancode)scan);
+    return (name && *name) ? name : "?";
 }
 
 
@@ -3956,6 +3961,94 @@ ShootSnd (void)
 // CHECK FOR EPISODES
 //
 ///////////////////////////////////////////////////////////////////////////
+extern "C" int wolf3d_legacy_prepare_config_dir(void)
+{
+    struct stat statbuf;
+
+    // On Linux like systems, the configdir defaults to $HOME/.chocolate_wolfenstein_3d
+#if !defined(_WIN32)
+    if(configdir[0] == 0)
+    {
+        // Set config location to home directory for multi-user support
+        char *homedir = getenv("HOME");
+        if(homedir == NULL)
+        {
+            Quit("Your $HOME directory is not defined. You must set this before playing.");
+        }
+        #define WOLFDIR "/.chocolate_wolfenstein_3d"
+        if(strlen(homedir) + sizeof(WOLFDIR) > sizeof(configdir))
+        {
+            Quit("Your $HOME directory path is too long. It cannot be used for saving games.");
+        }
+        snprintf(configdir, sizeof(configdir), "%s" WOLFDIR, homedir);
+    }
+#endif
+
+    if(configdir[0] != 0)
+    {
+        // Ensure config directory exists and create if necessary
+        if(stat(configdir, &statbuf) != 0)
+        {
+#ifdef _WIN32
+            if(_mkdir(configdir) != 0)
+#else
+            if(mkdir(configdir, 0755) != 0)
+#endif
+            {
+                Quit("The configuration directory \"%s\" could not be created.", configdir);
+            }
+        }
+    }
+
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_file_exists(const char *path)
+{
+    struct stat statbuf;
+    return stat(path, &statbuf) == 0;
+}
+
+extern "C" int wolf3d_legacy_apply_wolf3d_data_extension(const char *selected_extension, int missing_episodes)
+{
+    strcpy(extension, selected_extension);
+    numEpisodesMissing = missing_episodes;
+
+    if(!strcmp(selected_extension, "wl6"))
+    {
+        NewEmenu[2].active =
+            NewEmenu[4].active =
+            NewEmenu[6].active =
+            NewEmenu[8].active =
+            NewEmenu[10].active =
+            EpisodeSelect[1] =
+            EpisodeSelect[2] = EpisodeSelect[3] = EpisodeSelect[4] = EpisodeSelect[5] = 1;
+    }
+    else if(!strcmp(selected_extension, "wl3"))
+    {
+        NewEmenu[2].active = NewEmenu[4].active = EpisodeSelect[1] = EpisodeSelect[2] = 1;
+    }
+
+    strcpy(graphext, extension);
+    strcpy(audioext, extension);
+
+    strcat(configname, extension);
+    strcat(SaveName, extension);
+    strcat(demoname, extension);
+#ifndef GOODTIMES
+    strcat(helpfilename, extension);
+#endif
+    strcat(endfilename, extension);
+
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_no_wolf3d_data_files(void)
+{
+    Quit("NO WOLFENSTEIN 3-D DATA FILES to be found!");
+    return 1;
+}
+
 void
 CheckForEpisodes (void)
 {

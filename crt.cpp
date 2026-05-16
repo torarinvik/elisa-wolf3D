@@ -7,15 +7,9 @@
 //
 
 #include "crt.h"
-
-// Win32
-#ifdef _WIN32
-#include "SDL.h"
-#elif __linux__
-#include "SDL/SDL.h"
-#else
-#include "SDL/SDL.h"
-#endif
+#include "elisa_wolf3d_video.h"
+#include <stdint.h>
+#include <stdlib.h>
 
 static int width;
 static int height;
@@ -24,7 +18,7 @@ GLuint crtTexture;
 
 unsigned char coloredFrameBuffer[320*200*3];
 
-void CRT_Init(int _width){
+extern "C" void CRT_Init(int _width){
     width  = _width;
     height = _width * 3.0/4.0;
     
@@ -56,22 +50,24 @@ void CRT_Init(int _width){
  
     glClearColor(0, 0, 0, 0);
     glClear(GL_COLOR_BUFFER_BIT);
-    SDL_GL_SwapBuffers();
+    SDL_GL_SwapWindow(sdlWindow);
 }
 
-#include "id_vl.h"
-void CRT_DAC(void){
+extern "C" void CRT_DAC(void){
     // Grab the screen framebuffer from SDL
-    SDL_Surface *screen = screenBuffer ;
+    SDL_Surface *screen = (SDL_Surface *) wolf3d_video_get_screen_buffer_surface();
+    SDL_Palette *palette = (SDL_Palette *) wolf3d_video_get_game_palette();
+    if(!screen || !palette)
+        return;
     
     //Convert palette based framebuffer to RGB for OpenGL
-    byte* pixelPointer = coloredFrameBuffer;
+    uint8_t* pixelPointer = coloredFrameBuffer;
     for (int i=0; i < 320*200; i++) {
         unsigned char paletteIndex;
-        paletteIndex = ((byte*)screen->pixels)[i];
-        *pixelPointer++ = curpal[paletteIndex].r;
-        *pixelPointer++ = curpal[paletteIndex].g;
-        *pixelPointer++ = curpal[paletteIndex].b;
+        paletteIndex = ((uint8_t*)screen->pixels)[i];
+        *pixelPointer++ = palette->colors[paletteIndex].r;
+        *pixelPointer++ = palette->colors[paletteIndex].g;
+        *pixelPointer++ = palette->colors[paletteIndex].b;
     }
     
 
@@ -97,11 +93,11 @@ void CRT_DAC(void){
     
     
     //Flip buffer
-    SDL_GL_SwapBuffers();
+    SDL_GL_SwapWindow(sdlWindow);
 	
-	Uint8 *keystate = SDL_GetKeyState(NULL);
+	const bool *keystate = SDL_GetKeyboardState(NULL);
 	static int wasPressed = 0;
-	if ( keystate[SDLK_i] ){
+	if ( keystate[SDL_SCANCODE_I] ){
 		if (!wasPressed){
 			wasPressed = 1;
 			CRT_Screenshot();
@@ -111,7 +107,7 @@ void CRT_DAC(void){
 		wasPressed = 0;	
 }
 
-void CRT_Screenshot(void){
+extern "C" void CRT_Screenshot(void){
 
   const char* filename = "screenshot.tga" ;
 
@@ -138,7 +134,14 @@ void CRT_Screenshot(void){
  
  
    unsigned char TGAheader[12]={0,0,2,0,0,0,0,0,0,0,0,0};
-   unsigned char header[6] = { width%256,width/256,height%256,height/256,24,0};
+   unsigned char header[6] = {
+       (unsigned char)(width % 256),
+       (unsigned char)(width / 256),
+       (unsigned char)(height % 256),
+       (unsigned char)(height / 256),
+       24,
+       0
+   };
 
    // We write the headers
    fwrite(TGAheader,	sizeof(unsigned char),	12,	filePtr);

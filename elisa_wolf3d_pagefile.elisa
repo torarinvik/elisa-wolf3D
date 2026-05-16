@@ -1,0 +1,35 @@
+permission FileSystem:
+    Read
+
+error PageFileError:
+    InvalidOffset
+
+def checked_page_offset(page_offset: u32, data_start: u32, file_size: u32) -> i32 error[PageFileError] can[FileSystem.Read]:
+    can FileSystem.Read:
+        signal FileSystem.Read
+
+    if page_offset == 0.u32():
+        return 0
+
+    if page_offset < data_start or page_offset >= file_size:
+        raise PageFileError.InvalidOffset
+
+    return 0
+
+def validate_page_offset(page_offset: u32, data_start: u32, file_size: u32) -> i32 can[FileSystem.Read]:
+    can FileSystem.Read:
+        return try checked_page_offset(page_offset, data_start, file_size) else -1
+
+export func wolf3d_validate_page_offset(page_offset: u32, data_start: u32, file_size: u32) -> i32 = validate_page_offset
+
+@test
+def validate_page_offset_accepts_valid_ranges() -> void can[Abort.Panic, FileSystem.Read]:
+    can FileSystem.Read, Abort.Panic:
+        if validate_page_offset(128, 64, 1024) != 0:
+            panic("valid page offsets should pass validation")
+
+        if validate_page_offset(0, 64, 1024) != 0:
+            panic("zero offset should be accepted as the sentinel value")
+
+        if validate_page_offset(63, 64, 1024) != -1:
+            panic("offsets before the data section should be rejected")

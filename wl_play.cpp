@@ -1,6 +1,7 @@
 // WL_PLAY.C
 
 #include "wl_def.h"
+#include "elisa_wolf3d_video.h"
 #pragma hdrstop
 
 
@@ -333,14 +334,17 @@ void PollKeyboardMove (void)
 
 void PollMouseMove (void)
 {
-    int mousexmove, mouseymove;
+    float mousexf, mouseyf;
 
-    SDL_GetMouseState(&mousexmove, &mouseymove);
+    SDL_GetMouseState(&mousexf, &mouseyf);
     if(IN_IsInputGrabbed())
         IN_CenterMouse();
 
-    mousexmove -= screenWidth / 2;
-    mouseymove -= screenHeight / 2;
+    int mousexmove = (int)mousexf;
+    int mouseymove = (int)mouseyf;
+
+    mousexmove -= wolf3d_video_get_screen_width() / 2;
+    mouseymove -= wolf3d_video_get_screen_height() / 2;
 
     controlx += mousexmove * 10 / (13 - mouseadjustment);
     controly += mouseymove * 20 / (13 - mouseadjustment);
@@ -963,50 +967,20 @@ boolean palshifted;
 
 void InitRedShifts (void)
 {
-    SDL_Color *workptr, *baseptr;
-    int i, j, delta;
+    if (wolf3d_build_palette_shift_table((const uint8_t *) gamepal, (uint8_t *) redshifts,
+        NUMREDSHIFTS, REDSTEPS, 256, 0, 0, 256) != 0)
+        Quit("InitRedShifts: invalid red shift parameters!");
 
-
-//
-// fade through intermediate frames
-//
-    for (i = 1; i <= NUMREDSHIFTS; i++)
-    {
-        workptr = redshifts[i - 1];
-        baseptr = gamepal;
-
-        for (j = 0; j <= 255; j++)
-        {
-            delta = 256 - baseptr->r;
-            workptr->r = baseptr->r + delta * i / REDSTEPS;
-            delta = -baseptr->g;
-            workptr->g = baseptr->g + delta * i / REDSTEPS;
-            delta = -baseptr->b;
-            workptr->b = baseptr->b + delta * i / REDSTEPS;
-            baseptr++;
-            workptr++;
-        }
-    }
-
-    for (i = 1; i <= NUMWHITESHIFTS; i++)
-    {
-        workptr = whiteshifts[i - 1];
-        baseptr = gamepal;
-
-        for (j = 0; j <= 255; j++)
-        {
-            delta = 256 - baseptr->r;
-            workptr->r = baseptr->r + delta * i / WHITESTEPS;
-            delta = 248 - baseptr->g;
-            workptr->g = baseptr->g + delta * i / WHITESTEPS;
-            delta = 0-baseptr->b;
-            workptr->b = baseptr->b + delta * i / WHITESTEPS;
-            baseptr++;
-            workptr++;
-        }
-    }
+    if (wolf3d_build_palette_shift_table((const uint8_t *) gamepal, (uint8_t *) whiteshifts,
+        NUMWHITESHIFTS, WHITESTEPS, 256, 248, 0, 256) != 0)
+        Quit("InitRedShifts: invalid white shift parameters!");
 }
 
+extern "C" int wolf3d_legacy_init_red_shifts(void)
+{
+    InitRedShifts();
+    return 0;
+}
 
 /*
 =====================

@@ -23,6 +23,7 @@ loaded into the data segment
 #endif
 
 #include "wl_def.h"
+#include "elisa_wolf3d_video.h"
 #pragma hdrstop
 
 #define THREEBYTEGRSTARTS
@@ -1005,16 +1006,7 @@ void CA_CacheScreen (int chunk)
     CAL_HuffExpand((byte *) source, pic, expanded, grhuffman);
 
     byte *vbuf = LOCK();
-    for(int y = 0, scy = 0; y < 200; y++, scy += scaleFactor)
-    {
-        for(int x = 0, scx = 0; x < 320; x++, scx += scaleFactor)
-        {
-            byte col = pic[(y * 80 + (x >> 2)) + (x & 3) * 80 * 200];
-            for(unsigned i = 0; i < scaleFactor; i++)
-                for(unsigned j = 0; j < scaleFactor; j++)
-                    vbuf[(scy + i) * curPitch + scx + j] = col;
-        }
-    }
+    wolf3d_draw_planar_scaled_to_linear(pic, vbuf, 320, 200, 0, 0, scaleFactor, curPitch);
     UNLOCK();
     free(pic);
     free(bigbufferseg);

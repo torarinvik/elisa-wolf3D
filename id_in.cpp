@@ -18,6 +18,8 @@
 //
 
 #include "wl_def.h"
+#include "elisa_wolf3d_effects.h"
+#include "elisa_wolf3d_input.h"
 
 
 /*
@@ -37,7 +39,7 @@ boolean forcegrabmouse;
 
 
 //  Global variables
-volatile boolean    Keyboard[SDLK_LAST];
+volatile boolean    Keyboard[SDL_SCANCODE_COUNT];
 volatile boolean    Paused;
 volatile char       LastASCII;
 volatile ScanCode   LastScan;
@@ -126,14 +128,13 @@ static  Direction   DirTable[] =        // Quick lookup for total direction
 static int
 INL_GetMouseButtons(void)
 {
-    int buttons = SDL_GetMouseState(NULL, NULL);
+    wolf3d_effect_input_poll();
+    int buttons = (int)SDL_GetMouseState(NULL, NULL);
     int middlePressed = buttons & SDL_BUTTON(SDL_BUTTON_MIDDLE);
     int rightPressed = buttons & SDL_BUTTON(SDL_BUTTON_RIGHT);
     buttons &= ~(SDL_BUTTON(SDL_BUTTON_MIDDLE) | SDL_BUTTON(SDL_BUTTON_RIGHT));
-    if(middlePressed) buttons |= 1 << 2;
-    if(rightPressed) buttons |= 1 << 1;
 
-    return buttons;
+    return wolf3d_translate_mouse_buttons(buttons, middlePressed, rightPressed);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -150,6 +151,7 @@ void IN_GetJoyDelta(int *dx,int *dy)
         return;
     }
 
+    wolf3d_effect_input_poll();
     SDL_JoystickUpdate();
 
     int x = SDL_JoystickGetAxis(Joystick, 0) >> 8;
@@ -158,20 +160,8 @@ void IN_GetJoyDelta(int *dx,int *dy)
     if(param_joystickhat != -1)
     {
         uint8_t hatState = SDL_JoystickGetHat(Joystick, param_joystickhat);
-        if(hatState & SDL_HAT_RIGHT)
-            x += 127;
-        else if(hatState & SDL_HAT_LEFT)
-            x -= 127;
-        if(hatState & SDL_HAT_DOWN)
-            y += 127;
-        else if(hatState & SDL_HAT_UP)
-            y -= 127;
-
-        if(x < -128) x = -128;
-        else if(x > 127) x = 127;
-
-        if(y < -128) y = -128;
-        else if(y > 127) y = 127;
+        x = wolf3d_apply_joy_hat_axis(x, hatState & SDL_HAT_LEFT, hatState & SDL_HAT_RIGHT);
+        y = wolf3d_apply_joy_hat_axis(y, hatState & SDL_HAT_UP, hatState & SDL_HAT_DOWN);
     }
 
     *dx = x;
@@ -193,15 +183,13 @@ void IN_GetJoyFineDelta(int *dx, int *dy)
         return;
     }
 
+    wolf3d_effect_input_poll();
     SDL_JoystickUpdate();
     int x = SDL_JoystickGetAxis(Joystick, 0);
     int y = SDL_JoystickGetAxis(Joystick, 1);
 
-    if(x < -128) x = -128;
-    else if(x > 127) x = 127;
-
-    if(y < -128) y = -128;
-    else if(y > 127) y = 127;
+    x = wolf3d_clamp_joy_axis(x);
+    y = wolf3d_clamp_joy_axis(y);
 
     *dx = x;
     *dy = y;
@@ -219,6 +207,7 @@ int IN_JoyButtons()
 {
     if(!Joystick) return 0;
 
+    wolf3d_effect_input_poll();
     SDL_JoystickUpdate();
 
     int res = 0;
@@ -232,6 +221,25 @@ boolean IN_JoyPresent()
     return Joystick != NULL;
 }
 
+static void normalizeKeypadScan(ScanCode *scan)
+{
+    if(*scan == SDL_SCANCODE_KP_ENTER) *scan = SDL_SCANCODE_RETURN;
+    else if(*scan == SDL_SCANCODE_RSHIFT) *scan = SDL_SCANCODE_LSHIFT;
+    else if(*scan == SDL_SCANCODE_RALT) *scan = SDL_SCANCODE_LALT;
+    else if(*scan == SDL_SCANCODE_RCTRL) *scan = SDL_SCANCODE_LCTRL;
+    else if((SDL_GetModState() & SDL_KMOD_NUM) == 0)
+    {
+        switch(*scan)
+        {
+            case SDL_SCANCODE_KP_2: *scan = SDL_SCANCODE_DOWN; break;
+            case SDL_SCANCODE_KP_4: *scan = SDL_SCANCODE_LEFT; break;
+            case SDL_SCANCODE_KP_6: *scan = SDL_SCANCODE_RIGHT; break;
+            case SDL_SCANCODE_KP_8: *scan = SDL_SCANCODE_UP; break;
+            default: break;
+        }
+    }
+}
+
 static void processEvent(SDL_Event *event)
 {
     switch (event->type)
@@ -243,87 +251,45 @@ static void processEvent(SDL_Event *event)
         // check for keypresses
         case SDL_KEYDOWN:
         {
-            if(event->key.keysym.sym==SDLK_SCROLLOCK || event->key.keysym.sym==SDLK_F12)
+            ScanCode scan = event->key.scancode;
+            if(scan == SDL_SCANCODE_SCROLLLOCK || scan == SDL_SCANCODE_F12)
             {
                 GrabInput = !GrabInput;
-                SDL_WM_GrabInput(GrabInput ? SDL_GRAB_ON : SDL_GRAB_OFF);
+                wolf3d_effect_input_grab();
+                SDL_SetWindowKeyboardGrab(sdlWindow, GrabInput);
+                SDL_SetWindowMouseGrab(sdlWindow, GrabInput);
                 return;
             }
 
-            LastScan = event->key.keysym.sym;
-            SDLMod mod = SDL_GetModState();
+            LastScan = scan;
+            wolf3d_effect_input_poll();
+            SDL_Keymod mod = SDL_GetModState();
             if(Keyboard[sc_Alt])
             {
-                if(LastScan==SDLK_F4)
+                if(LastScan == SDL_SCANCODE_F4)
                     Quit(NULL);
             }
 
-            if(LastScan == SDLK_KP_ENTER) LastScan = SDLK_RETURN;
-            else if(LastScan == SDLK_RSHIFT) LastScan = SDLK_LSHIFT;
-            else if(LastScan == SDLK_RALT) LastScan = SDLK_LALT;
-            else if(LastScan == SDLK_RCTRL) LastScan = SDLK_LCTRL;
-            else
-            {
-                if((mod & KMOD_NUM) == 0)
-                {
-                    switch(LastScan)
-                    {
-                        case SDLK_KP2: LastScan = SDLK_DOWN; break;
-                        case SDLK_KP4: LastScan = SDLK_LEFT; break;
-                        case SDLK_KP6: LastScan = SDLK_RIGHT; break;
-                        case SDLK_KP8: LastScan = SDLK_UP; break;
-                    }
-                }
-            }
+            normalizeKeypadScan((ScanCode *)&LastScan);
 
-            int sym = LastScan;
-            if(sym >= 'a' && sym <= 'z')
-                sym -= 32;  // convert to uppercase
+            SDL_Keycode key = event->key.key;
+            if((key & SDLK_SCANCODE_MASK) == 0 && key > 0 && key < 128)
+                LastASCII = (char) key;
 
-            if(mod & (KMOD_SHIFT | KMOD_CAPS))
-            {
-                if(sym < lengthof(ShiftNames) && ShiftNames[sym])
-                    LastASCII = ShiftNames[sym];
-            }
-            else
-            {
-                if(sym < lengthof(ASCIINames) && ASCIINames[sym])
-                    LastASCII = ASCIINames[sym];
-            }
-
-			if (LastScan<SDLK_i){
-			}
-
-			if(LastScan<SDLK_LAST){
+			if(LastScan >= 0 && LastScan < SDL_SCANCODE_COUNT){
                 Keyboard[LastScan] = 1;
 			}
-            if(LastScan == SDLK_PAUSE)
+            if(LastScan == SDL_SCANCODE_PAUSE)
                 Paused = true;
             break;
         }
 
         case SDL_KEYUP:
         {
-            int key = event->key.keysym.sym;
-            if(key == SDLK_KP_ENTER) key = SDLK_RETURN;
-            else if(key == SDLK_RSHIFT) key = SDLK_LSHIFT;
-            else if(key == SDLK_RALT) key = SDLK_LALT;
-            else if(key == SDLK_RCTRL) key = SDLK_LCTRL;
-            else
-            {
-                if((SDL_GetModState() & KMOD_NUM) == 0)
-                {
-                    switch(key)
-                    {
-                        case SDLK_KP2: key = SDLK_DOWN; break;
-                        case SDLK_KP4: key = SDLK_LEFT; break;
-                        case SDLK_KP6: key = SDLK_RIGHT; break;
-                        case SDLK_KP8: key = SDLK_UP; break;
-                    }
-                }
-            }
+            ScanCode key = event->key.scancode;
+            normalizeKeypadScan(&key);
 
-			if(key<SDLK_LAST){
+			if(key >= 0 && key < SDL_SCANCODE_COUNT){
                 Keyboard[key] = 0;
 			}
             break;
@@ -332,22 +298,31 @@ static void processEvent(SDL_Event *event)
     }
 }
 
+extern "C" int wolf3d_legacy_attach_joystick(SDL_Joystick *joystick, int joyNumButtons, int joyNumHats)
+{
+    Joystick = joystick;
+    JoyNumButtons = joyNumButtons > 32 ? 32 : joyNumButtons;
+    JoyNumHats = joyNumHats;
+    return 0;
+}
+
 void IN_WaitAndProcessEvents()
 {
     SDL_Event event;
+    wolf3d_effect_input_poll();
     if(!SDL_WaitEvent(&event)) return;
     do
     {
         processEvent(&event);
     }
-    while(SDL_PollEvent(&event));
+    while((wolf3d_effect_input_poll(), SDL_PollEvent(&event)));
 }
 
 void IN_ProcessEvents()
 {
     SDL_Event event;
 
-    while (SDL_PollEvent(&event))
+    while ((wolf3d_effect_input_poll(), SDL_PollEvent(&event)))
     {
         processEvent(&event);
     }
@@ -366,26 +341,15 @@ IN_Startup(void)
         return;
 
     IN_ClearKeysDown();
-
-    if(param_joystickindex >= 0 && param_joystickindex < SDL_NumJoysticks())
-    {
-        Joystick = SDL_JoystickOpen(param_joystickindex);
-        if(Joystick)
-        {
-            JoyNumButtons = SDL_JoystickNumButtons(Joystick);
-            if(JoyNumButtons > 32) JoyNumButtons = 32;      // only up to 32 buttons are supported
-            JoyNumHats = SDL_JoystickNumHats(Joystick);
-            if(param_joystickhat < -1 || param_joystickhat >= JoyNumHats)
-                Quit("The joystickhat param must be between 0 and %i!", JoyNumHats - 1);
-        }
-    }
-
-    SDL_EventState(SDL_MOUSEMOTION, SDL_IGNORE);
+    if(Joystick && (param_joystickhat < -1 || param_joystickhat >= JoyNumHats))
+        Quit("The joystickhat param must be between 0 and %i!", JoyNumHats - 1);
 
     if(fullscreen || forcegrabmouse)
     {
         GrabInput = true;
-        SDL_WM_GrabInput(SDL_GRAB_ON);
+        wolf3d_effect_input_grab();
+        SDL_SetWindowKeyboardGrab(sdlWindow, true);
+        SDL_SetWindowMouseGrab(sdlWindow, true);
     }
 
     // I didn't find a way to ask libSDL whether a mouse is present, yet...
@@ -553,6 +517,17 @@ boolean IN_CheckAck (void)
     return false;
 }
 
+extern "C" int wolf3d_legacy_in_start_ack(void)
+{
+    IN_StartAck();
+    return 0;
+}
+
+extern "C" int wolf3d_legacy_in_check_ack(void)
+{
+    return IN_CheckAck() ? 1 : 0;
+}
+
 
 void IN_Ack (void)
 {
@@ -585,6 +560,7 @@ boolean IN_UserInput(longword delay)
         IN_ProcessEvents();
         if (IN_CheckAck())
             return true;
+        wolf3d_effect_time_delay();
         SDL_Delay(5);
     } while (GetTimeCount() - lasttime < delay);
     return(false);
@@ -614,5 +590,6 @@ bool IN_IsInputGrabbed()
 
 void IN_CenterMouse()
 {
-    SDL_WarpMouse(screenWidth / 2, screenHeight / 2);
+    wolf3d_effect_input_grab();
+    SDL_WarpMouseInWindow(sdlWindow, screenWidth / 2, screenHeight / 2);
 }

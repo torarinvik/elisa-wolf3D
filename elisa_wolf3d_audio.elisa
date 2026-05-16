@@ -1,0 +1,78 @@
+permission Audio:
+    Playback
+
+error AudioPlaybackError:
+    InvalidPosition
+
+def checked_playback_pan_for_position(pos: i32) -> i32 error[AudioPlaybackError] can[Audio.Playback]:
+    if pos < 0 or pos > 15:
+        raise AudioPlaybackError.InvalidPosition
+
+    can Audio.Playback:
+        signal Audio.Playback
+
+    return ((15 - pos) << 4) + 15
+
+def checked_playback_position(leftpos: i32, rightpos: i32) -> i32 error[AudioPlaybackError] can[Audio.Playback]:
+    if leftpos == 15 and rightpos == 15:
+        raise AudioPlaybackError.InvalidPosition
+
+    can Audio.Playback:
+        _ = try checked_playback_pan_for_position(leftpos)
+        _ = try checked_playback_pan_for_position(rightpos)
+    return 0
+
+def playback_pan_for_position(pos: i32) -> i32 can[Audio.Playback]:
+    can Audio.Playback:
+        return try checked_playback_pan_for_position(pos) else 0
+
+def validate_playback_position(leftpos: i32, rightpos: i32) -> i32 can[Audio.Playback]:
+    can Audio.Playback:
+        return try checked_playback_position(leftpos, rightpos) else -1
+
+def interpolate_u8_sample_to_s16(csample: f32, samples: u8&, size: i32) -> i16 can[Audio.Playback]:
+    can Audio.Playback:
+        signal Audio.Playback
+
+    cursample: i32 = csample.i32()
+    sf: f32 = csample - cursample.f32()
+    s0: mutable f32 = 0.0
+    s1: f32 = (samples[cursample.usize()].i32() - 128).f32()
+    s2: mutable f32 = 0.0
+
+    if cursample - 1 >= 0:
+        s0 <- (samples[(cursample - 1).usize()].i32() - 128).f32()
+    if cursample + 1 < size:
+        s2 <- (samples[(cursample + 1).usize()].i32() - 128).f32()
+
+    val: f32 = s0 * sf * (sf - 1.0) / 2.0 - s1 * (sf * sf - 1.0) + s2 * (sf + 1.0) * sf / 2.0
+    intval: mutable i32 = (val * 256.0).i32()
+
+    if intval < -32768:
+        intval <- -32768
+    elif intval > 32767:
+        intval <- 32767
+
+    return intval.i16()
+
+export func wolf3d_playback_pan_for_position(pos: i32) -> i32 = playback_pan_for_position
+export func wolf3d_validate_playback_position(leftpos: i32, rightpos: i32) -> i32 = validate_playback_position
+export func wolf3d_interpolate_u8_sample_to_s16(csample: f32, samples: u8&, size: i32) -> i16 = interpolate_u8_sample_to_s16
+
+@test
+def playback_pan_for_position_maps_edges() -> void can[Abort.Panic, Audio.Playback]:
+    can Audio.Playback, Abort.Panic:
+        if playback_pan_for_position(0) != 255:
+            panic("leftmost position should map to full right pan value")
+
+        if playback_pan_for_position(15) != 15:
+            panic("rightmost position should map to the lowest valid pan value")
+
+@test
+def validate_playback_position_detects_invalid_center() -> void can[Abort.Panic, Audio.Playback]:
+    can Audio.Playback, Abort.Panic:
+        if validate_playback_position(3, 4) != 0:
+            panic("valid playback positions should pass validation")
+
+        if validate_playback_position(15, 15) != -1:
+            panic("dual-center playback position should be rejected")

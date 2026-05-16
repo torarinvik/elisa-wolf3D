@@ -1,0 +1,75 @@
+permission Input:
+    Poll
+
+def clamp_joy_axis(value: i32) -> i32 can[Input.Poll]:
+    can Input.Poll:
+        signal Input.Poll
+
+    if value < -128:
+        return -128
+    if value > 127:
+        return 127
+    return value
+
+def apply_joy_hat_axis(value: i32, negative_pressed: i32, positive_pressed: i32) -> i32 can[Input.Poll]:
+    adjusted: mutable i32 = value
+
+    if positive_pressed != 0:
+        adjusted <- adjusted + 127
+    elif negative_pressed != 0:
+        adjusted <- adjusted - 127
+
+    can Input.Poll:
+        return clamp_joy_axis(adjusted)
+
+def translate_mouse_buttons(buttons: i32, middle_pressed: i32, right_pressed: i32) -> i32 can[Input.Poll]:
+    out: mutable i32 = buttons
+
+    if middle_pressed != 0:
+        out <- out + 4
+    if right_pressed != 0:
+        out <- out + 2
+
+    can Input.Poll:
+        signal Input.Poll
+    return out
+
+export func wolf3d_clamp_joy_axis(value: i32) -> i32 = clamp_joy_axis
+export func wolf3d_apply_joy_hat_axis(value: i32, negative_pressed: i32, positive_pressed: i32) -> i32 = apply_joy_hat_axis
+export func wolf3d_translate_mouse_buttons(buttons: i32, middle_pressed: i32, right_pressed: i32) -> i32 = translate_mouse_buttons
+
+@test
+def clamp_joy_axis_limits_extremes() -> void can[Abort.Panic, Input.Poll]:
+    can Input.Poll, Abort.Panic:
+        if clamp_joy_axis(-999) != -128:
+            panic("clamp should bound low values to -128")
+
+        if clamp_joy_axis(999) != 127:
+            panic("clamp should bound high values to 127")
+
+        if clamp_joy_axis(12) != 12:
+            panic("clamp should keep in-range values unchanged")
+
+@test
+def apply_joy_hat_axis_prefers_positive_then_negative() -> void can[Abort.Panic, Input.Poll]:
+    can Input.Poll, Abort.Panic:
+        if apply_joy_hat_axis(0, 0, 1) != 127:
+            panic("positive hat input should translate to the positive extreme")
+
+        if apply_joy_hat_axis(0, 1, 0) != -127:
+            panic("negative hat input should translate to the negative extreme")
+
+        if apply_joy_hat_axis(120, 0, 1) != 127:
+            panic("positive hat input should clamp after adjustment")
+
+@test
+def translate_mouse_buttons_maps_middle_and_right() -> void can[Abort.Panic, Input.Poll]:
+    can Input.Poll, Abort.Panic:
+        if translate_mouse_buttons(1, 1, 0) != 5:
+            panic("middle button should add the middle mouse bit")
+
+        if translate_mouse_buttons(1, 0, 1) != 3:
+            panic("right button should add the right mouse bit")
+
+        if translate_mouse_buttons(1, 1, 1) != 7:
+            panic("combined mouse buttons should map all bits")

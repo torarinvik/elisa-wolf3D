@@ -1,0 +1,12 @@
+permission FileSystem:
+    Read
+    Write
+
+permission Game:
+    Run
+    Menu
+    Session
+
+extern run_game_entry() -> i32 can[Game.Run, Game.Menu, Game.Session, FileSystem.Read, FileSystem.Write, Unsafe.RawExtern]
+
+export func main() -> i32 = run_game_entry
