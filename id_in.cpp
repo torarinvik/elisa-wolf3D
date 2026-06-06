@@ -69,7 +69,7 @@ static bool GrabInput = false;
 
 =============================================================================
 */
-byte        ASCIINames[] =      // Unshifted ASCII for scan codes       // TODO: keypad
+uint8_t        ASCIINames[] =      // Unshifted ASCII for scan codes       // TODO: keypad
 {
 //   0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
     0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,8  ,9  ,0  ,0  ,0  ,13 ,0  ,0  ,    // 0
@@ -81,7 +81,7 @@ byte        ASCIINames[] =      // Unshifted ASCII for scan codes       // TODO:
     0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,    // 6
     0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0       // 7
 };
-byte ShiftNames[] =     // Shifted ASCII for scan codes
+uint8_t ShiftNames[] =     // Shifted ASCII for scan codes
 {
 //   0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
     0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,8  ,9  ,0  ,0  ,0  ,13 ,0  ,0  ,    // 0
@@ -93,7 +93,7 @@ byte ShiftNames[] =     // Shifted ASCII for scan codes
     0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,    // 6
     0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0       // 7
 };
-byte SpecialNames[] =   // ASCII for 0xe0 prefixed codes
+uint8_t SpecialNames[] =   // ASCII for 0xe0 prefixed codes
 {
 //   0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
     0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,    // 0

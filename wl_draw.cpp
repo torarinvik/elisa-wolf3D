@@ -25,7 +25,7 @@
 =============================================================================
 */
 
-static byte *vbuf = NULL;
+static uint8_t *vbuf = NULL;
 unsigned vbufPitch = 0;
 
 int32_t    lasttimecount;
@@ -274,14 +274,14 @@ int CalcHeight()
 ===================
 */
 
-byte *postsource;
+uint8_t *postsource;
 int postx;
 
 void ScalePost()
 {
 
     int ywcount, yoffs, yw, yd, yendoffs;
-    byte col;
+    uint8_t col;
 
 
 
@@ -329,7 +329,7 @@ void ScalePost()
     }
 }
 
-void GlobalScalePost(byte *vidbuf, unsigned pitch)
+void GlobalScalePost(uint8_t *vidbuf, unsigned pitch)
 {
     vbuf = vidbuf;
     vbufPitch = pitch;
@@ -595,7 +595,7 @@ void HitVertDoor (void)
 
 //==========================================================================
 
-byte vgaCeiling[]=
+uint8_t vgaCeiling[]=
 {
 #ifndef SPEAR
  0x1d,0x1d,0x1d,0x1d,0x1d,0x1d,0x1d,0x1d,0x1d,0xbf,
@@ -621,10 +621,10 @@ byte vgaCeiling[]=
 
 void VGAClearScreen (void)
 {
-    byte ceiling=vgaCeiling[gamestate.episode*10+mapon];
+    uint8_t ceiling=vgaCeiling[gamestate.episode*10+mapon];
 
     int y;
-    byte *ptr = vbuf;
+    uint8_t *ptr = vbuf;
     
     for(y = 0; y < viewheight / 2; y++, ptr += vbufPitch)
         memset(ptr, ceiling, viewwidth);
@@ -676,14 +676,14 @@ void ScaleShape (int xcenter, int shapenum, unsigned height, uint32_t flags)
     unsigned scale,pixheight;
     unsigned starty,endy;
     word *cmdptr;
-    byte *cline;
-    byte *line;
-    byte *vmem;
+    uint8_t *cline;
+    uint8_t *line;
+    uint8_t *vmem;
     int actx,i,upperedge;
     short newstart;
     int scrstarty,screndy,lpix,rpix,pixcnt,ycnt;
     unsigned j;
-    byte col;
+    uint8_t col;
 
 
 
@@ -716,7 +716,7 @@ void ScaleShape (int xcenter, int shapenum, unsigned height, uint32_t flags)
             if(rpix>viewwidth)
                 rpix=viewwidth,i=shape->rightpix+1;
             
-            cline=(byte *)shape + *cmdptr;
+            cline=(uint8_t *)shape + *cmdptr;
             
             while(lpix<rpix)
             {
@@ -744,7 +744,7 @@ void ScaleShape (int xcenter, int shapenum, unsigned height, uint32_t flags)
                             screndy=(ycnt>>6)+upperedge;
                             if(scrstarty!=screndy && screndy>0)
                             {
-                                col=((byte *)shape)[newstart+j];
+                                col=((uint8_t *)shape)[newstart+j];
 
                                 if(scrstarty<0)
                                     scrstarty=0;
@@ -774,14 +774,14 @@ void SimpleScaleShape (int xcenter, int shapenum, unsigned height)
     unsigned scale,pixheight;
     unsigned starty,endy;
     word *cmdptr;
-    byte *cline;
-    byte *line;
+    uint8_t *cline;
+    uint8_t *line;
     int actx,i,upperedge;
     short newstart;
     int scrstarty,screndy,lpix,rpix,pixcnt,ycnt;
     unsigned j;
-    byte col;
-    byte *vmem;
+    uint8_t col;
+    uint8_t *vmem;
 
     shape = (t_compshape *) PM_GetSprite(shapenum);
 
@@ -802,7 +802,7 @@ void SimpleScaleShape (int xcenter, int shapenum, unsigned height)
         {
             if(lpix<0) lpix=0;
             if(rpix>viewwidth) rpix=viewwidth,i=shape->rightpix+1;
-            cline = (byte *)shape + *cmdptr;
+            cline = (uint8_t *)shape + *cmdptr;
             while(lpix<rpix)
             {
                 line=cline;
@@ -823,7 +823,7 @@ void SimpleScaleShape (int xcenter, int shapenum, unsigned height)
                         screndy=(ycnt>>6)+upperedge;
                         if(scrstarty!=screndy && screndy>0)
                         {
-                            col=((byte *)shape)[newstart+j];
+                            col=((uint8_t *)shape)[newstart+j];
                             if(scrstarty<0) scrstarty=0;
                             if(screndy>viewheight) screndy=viewheight,j=endy;
 
@@ -869,7 +869,7 @@ visobj_t *visptr,*visstep,*farthest;
 void DrawScaleds (void)
 {
     int      i,least,numvisable,height;
-    byte     *tilespot,*visspot;
+    uint8_t     *tilespot,*visspot;
     unsigned spotloc;
 
     statobj_t *statptr;
@@ -1176,7 +1176,7 @@ vertentry:
                 break;
             }
             if(xspot>=maparea) break;
-            tilehit=((byte *)tilemap)[xspot];
+            tilehit=((uint8_t *)tilemap)[xspot];
             if(tilehit)
             {
                 if(tilehit&0x80)
@@ -1305,7 +1305,7 @@ vertentry:
                 break;
             }
 passvert:
-            *((byte *)spotvis+xspot)=1;
+            *((uint8_t *)spotvis+xspot)=1;
             xtile+=xtilestep;
             yintercept+=ystep;
             xspot=(word)((xtile<<mapshift)+((uint32_t)yintercept>>16));
@@ -1331,7 +1331,7 @@ horizentry:
                 break;
             }
             if(yspot>=maparea) break;
-            tilehit=((byte *)tilemap)[yspot];
+            tilehit=((uint8_t *)tilemap)[yspot];
             if(tilehit)
             {
                 if(tilehit&0x80)
@@ -1460,7 +1460,7 @@ horizentry:
                 break;
             }
 passhoriz:
-            *((byte *)spotvis+yspot)=1;
+            *((uint8_t *)spotvis+yspot)=1;
             ytile+=ytilestep;
             xintercept+=xstep;
             yspot=(word)((((uint32_t)xintercept>>16)<<mapshift)+ytile);

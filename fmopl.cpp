@@ -23,7 +23,7 @@ Revision History:
 04-08-2003 Jarek Burczynski:
  - removed BFRDY hack. BFRDY is busy flag, and it should be 0 only when the chip
    handles memory read/write or during the adpcm synthesis when the chip
-   requests another byte of ADPCM data.
+   requests another uint8_t of ADPCM data.
 
 24-07-2003 Jarek Burczynski:
  - added a small hack for Y8950 status BFRDY flag (bit 3 should be set after
@@ -1205,7 +1205,7 @@ static int init_tables(void)
             logerror("\n");
     #endif
     }
-    /*logerror("FMOPL.C: TL_TAB_LEN = %i elements (%i bytes)\n",TL_TAB_LEN, (int)sizeof(tl_tab));*/
+    /*logerror("FMOPL.C: TL_TAB_LEN = %i elements (%i uint8_ts)\n",TL_TAB_LEN, (int)sizeof(tl_tab));*/
 
 
     for (i=0; i<SIN_LEN; i++)
@@ -2434,8 +2434,8 @@ int Y8950Init(int num, int clock, int rate)
         OPL_Y8950[i]->deltat->status_change_EOS_bit = 0x10;     /* status flag: set bit4 on End Of Sample */
         OPL_Y8950[i]->deltat->status_change_BRDY_bit = 0x08;    /* status flag: set bit3 on BRDY (End Of: ADPCM analysis/synthesis, memory reading/writing) */
 
-        /*OPL_Y8950[i]->deltat->write_time = 10.0 / clock;*/        /* a single byte write takes 10 cycles of main clock */
-        /*OPL_Y8950[i]->deltat->read_time  = 8.0 / clock;*/     /* a single byte read takes 8 cycles of main clock */
+        /*OPL_Y8950[i]->deltat->write_time = 10.0 / clock;*/        /* a single uint8_t write takes 10 cycles of main clock */
+        /*OPL_Y8950[i]->deltat->read_time  = 8.0 / clock;*/     /* a single uint8_t read takes 8 cycles of main clock */
         /* reset */
         Y8950ResetChip(i);
     }

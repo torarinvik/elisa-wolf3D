@@ -24,7 +24,7 @@ static else:
 =============================================================================
 """
 
-#extern byte signon[];
+#extern uint8_t signon[];
 extern signon: u8&?
 
 """
@@ -321,7 +321,7 @@ void DiskFlopAnim(int x,int y)
 }
 
 
-int32_t DoChecksum(byte *source,unsigned size,int32_t checksum)
+int32_t DoChecksum(uint8_t *source,unsigned size,int32_t checksum)
 {
     unsigned i;
 
@@ -356,7 +356,7 @@ boolean SaveTheGame(FILE *file,int x,int y)
         Quit("Error in _dos_getdiskfree call");
 
     avail = (int32_t)dfree.avail_clusters *
-                  dfree.bytes_per_sector *
+                  dfree.uint8_ts_per_sector *
                   dfree.sectors_per_cluster;
 
     size = 0;
@@ -388,15 +388,15 @@ boolean SaveTheGame(FILE *file,int x,int y)
 
     DiskFlopAnim(x,y);
     fwrite(&gamestate,sizeof(gamestate),1,file);
-    checksum = DoChecksum((byte *)&gamestate,sizeof(gamestate),checksum);
+    checksum = DoChecksum((uint8_t *)&gamestate,sizeof(gamestate),checksum);
 
     DiskFlopAnim(x,y);
     fwrite(&LevelRatios[0],sizeof(LRstruct)*LRpack,1,file);
-    checksum = DoChecksum((byte *)&LevelRatios[0],sizeof(LRstruct)*LRpack,checksum);
+    checksum = DoChecksum((uint8_t *)&LevelRatios[0],sizeof(LRstruct)*LRpack,checksum);
 
     DiskFlopAnim(x,y);
     fwrite(tilemap,sizeof(tilemap),1,file);
-    checksum = DoChecksum((byte *)tilemap,sizeof(tilemap),checksum);
+    checksum = DoChecksum((uint8_t *)tilemap,sizeof(tilemap),checksum);
     DiskFlopAnim(x,y);
 
     int i;
@@ -411,7 +411,7 @@ boolean SaveTheGame(FILE *file,int x,int y)
             else
                 actnum=(word)(uintptr_t)objptr;
             fwrite(&actnum,sizeof(actnum),1,file);
-            checksum = DoChecksum((byte *)&actnum,sizeof(actnum),checksum);
+            checksum = DoChecksum((uint8_t *)&actnum,sizeof(actnum),checksum);
         }
     }
 
@@ -442,37 +442,37 @@ boolean SaveTheGame(FILE *file,int x,int y)
     DiskFlopAnim(x,y);
     word laststatobjnum=(word) (laststatobj-statobjlist);
     fwrite(&laststatobjnum,sizeof(laststatobjnum),1,file);
-    checksum = DoChecksum((byte *)&laststatobjnum,sizeof(laststatobjnum),checksum);
+    checksum = DoChecksum((uint8_t *)&laststatobjnum,sizeof(laststatobjnum),checksum);
 
     DiskFlopAnim(x,y);
     for(i=0;i<MAXSTATS;i++)
     {
         memcpy(&nullstat,statobjlist+i,sizeof(nullstat));
-        nullstat.visspot=(byte *) ((uintptr_t) nullstat.visspot-(uintptr_t)spotvis);
+        nullstat.visspot=(uint8_t *) ((uintptr_t) nullstat.visspot-(uintptr_t)spotvis);
         fwrite(&nullstat,sizeof(nullstat),1,file);
-        checksum = DoChecksum((byte *)&nullstat,sizeof(nullstat),checksum);
+        checksum = DoChecksum((uint8_t *)&nullstat,sizeof(nullstat),checksum);
     }
 
     DiskFlopAnim(x,y);
     fwrite (doorposition,sizeof(doorposition),1,file);
-    checksum = DoChecksum((byte *)doorposition,sizeof(doorposition),checksum);
+    checksum = DoChecksum((uint8_t *)doorposition,sizeof(doorposition),checksum);
     DiskFlopAnim(x,y);
     fwrite (doorobjlist,sizeof(doorobjlist),1,file);
-    checksum = DoChecksum((byte *)doorobjlist,sizeof(doorobjlist),checksum);
+    checksum = DoChecksum((uint8_t *)doorobjlist,sizeof(doorobjlist),checksum);
 
     DiskFlopAnim(x,y);
     fwrite (&pwallstate,sizeof(pwallstate),1,file);
-    checksum = DoChecksum((byte *)&pwallstate,sizeof(pwallstate),checksum);
+    checksum = DoChecksum((uint8_t *)&pwallstate,sizeof(pwallstate),checksum);
     fwrite (&pwalltile,sizeof(pwalltile),1,file);
-    checksum = DoChecksum((byte *)&pwalltile,sizeof(pwalltile),checksum);
+    checksum = DoChecksum((uint8_t *)&pwalltile,sizeof(pwalltile),checksum);
     fwrite (&pwallx,sizeof(pwallx),1,file);
-    checksum = DoChecksum((byte *)&pwallx,sizeof(pwallx),checksum);
+    checksum = DoChecksum((uint8_t *)&pwallx,sizeof(pwallx),checksum);
     fwrite (&pwally,sizeof(pwally),1,file);
-    checksum = DoChecksum((byte *)&pwally,sizeof(pwally),checksum);
+    checksum = DoChecksum((uint8_t *)&pwally,sizeof(pwally),checksum);
     fwrite (&pwalldir,sizeof(pwalldir),1,file);
-    checksum = DoChecksum((byte *)&pwalldir,sizeof(pwalldir),checksum);
+    checksum = DoChecksum((uint8_t *)&pwalldir,sizeof(pwalldir),checksum);
     fwrite (&pwallpos,sizeof(pwallpos),1,file);
-    checksum = DoChecksum((byte *)&pwallpos,sizeof(pwallpos),checksum);
+    checksum = DoChecksum((uint8_t *)&pwallpos,sizeof(pwallpos),checksum);
 
     //
     // WRITE OUT CHECKSUM
@@ -504,18 +504,18 @@ boolean LoadTheGame(FILE *file,int x,int y)
 
     DiskFlopAnim(x,y);
     fread (&gamestate,sizeof(gamestate),1,file);
-    checksum = DoChecksum((byte *)&gamestate,sizeof(gamestate),checksum);
+    checksum = DoChecksum((uint8_t *)&gamestate,sizeof(gamestate),checksum);
 
     DiskFlopAnim(x,y);
     fread (&LevelRatios[0],sizeof(LRstruct)*LRpack,1,file);
-    checksum = DoChecksum((byte *)&LevelRatios[0],sizeof(LRstruct)*LRpack,checksum);
+    checksum = DoChecksum((uint8_t *)&LevelRatios[0],sizeof(LRstruct)*LRpack,checksum);
 
     DiskFlopAnim(x,y);
     SetupGameLevel ();
 
     DiskFlopAnim(x,y);
     fread (tilemap,sizeof(tilemap),1,file);
-    checksum = DoChecksum((byte *)tilemap,sizeof(tilemap),checksum);
+    checksum = DoChecksum((uint8_t *)tilemap,sizeof(tilemap),checksum);
 
     DiskFlopAnim(x,y);
 
@@ -525,7 +525,7 @@ boolean LoadTheGame(FILE *file,int x,int y)
         for(int j=0;j<MAPSIZE;j++)
         {
             fread (&actnum,sizeof(word),1,file);
-            checksum = DoChecksum((byte *) &actnum,sizeof(word),checksum);
+            checksum = DoChecksum((uint8_t *) &actnum,sizeof(word),checksum);
             if(actnum&0x8000)
                 actorat[i][j]=objlist+(actnum&0x7fff);
             else
@@ -558,37 +558,37 @@ boolean LoadTheGame(FILE *file,int x,int y)
     word laststatobjnum;
     fread (&laststatobjnum,sizeof(laststatobjnum),1,file);
     laststatobj=statobjlist+laststatobjnum;
-    checksum = DoChecksum((byte *)&laststatobjnum,sizeof(laststatobjnum),checksum);
+    checksum = DoChecksum((uint8_t *)&laststatobjnum,sizeof(laststatobjnum),checksum);
 
     DiskFlopAnim(x,y);
     for(i=0;i<MAXSTATS;i++)
     {
         fread(&nullstat,sizeof(nullstat),1,file);
-        checksum = DoChecksum((byte *)&nullstat,sizeof(nullstat),checksum);
-        nullstat.visspot=(byte *) ((uintptr_t)nullstat.visspot+(uintptr_t)spotvis);
+        checksum = DoChecksum((uint8_t *)&nullstat,sizeof(nullstat),checksum);
+        nullstat.visspot=(uint8_t *) ((uintptr_t)nullstat.visspot+(uintptr_t)spotvis);
         memcpy(statobjlist+i,&nullstat,sizeof(nullstat));
     }
 
     DiskFlopAnim(x,y);
     fread (doorposition,sizeof(doorposition),1,file);
-    checksum = DoChecksum((byte *)doorposition,sizeof(doorposition),checksum);
+    checksum = DoChecksum((uint8_t *)doorposition,sizeof(doorposition),checksum);
     DiskFlopAnim(x,y);
     fread (doorobjlist,sizeof(doorobjlist),1,file);
-    checksum = DoChecksum((byte *)doorobjlist,sizeof(doorobjlist),checksum);
+    checksum = DoChecksum((uint8_t *)doorobjlist,sizeof(doorobjlist),checksum);
 
     DiskFlopAnim(x,y);
     fread (&pwallstate,sizeof(pwallstate),1,file);
-    checksum = DoChecksum((byte *)&pwallstate,sizeof(pwallstate),checksum);
+    checksum = DoChecksum((uint8_t *)&pwallstate,sizeof(pwallstate),checksum);
     fread (&pwalltile,sizeof(pwalltile),1,file);
-    checksum = DoChecksum((byte *)&pwalltile,sizeof(pwalltile),checksum);
+    checksum = DoChecksum((uint8_t *)&pwalltile,sizeof(pwalltile),checksum);
     fread (&pwallx,sizeof(pwallx),1,file);
-    checksum = DoChecksum((byte *)&pwallx,sizeof(pwallx),checksum);
+    checksum = DoChecksum((uint8_t *)&pwallx,sizeof(pwallx),checksum);
     fread (&pwally,sizeof(pwally),1,file);
-    checksum = DoChecksum((byte *)&pwally,sizeof(pwally),checksum);
+    checksum = DoChecksum((uint8_t *)&pwally,sizeof(pwally),checksum);
     fread (&pwalldir,sizeof(pwalldir),1,file);
-    checksum = DoChecksum((byte *)&pwalldir,sizeof(pwalldir),checksum);
+    checksum = DoChecksum((uint8_t *)&pwalldir,sizeof(pwalldir),checksum);
     fread (&pwallpos,sizeof(pwallpos),1,file);
-    checksum = DoChecksum((byte *)&pwallpos,sizeof(pwallpos),checksum);
+    checksum = DoChecksum((uint8_t *)&pwallpos,sizeof(pwallpos),checksum);
 
     if (gamestate.secretcount)      // assign valid floorcodes under moved pushwalls
     {
@@ -1239,12 +1239,12 @@ static void InitGame()
     if (mminfo.mainmem < 257000L && !MS_CheckParm("debugmode"))
 #endif
     {
-        byte *screen;
+        uint8_t *screen;
 
         CA_CacheGrChunk (ERRORSCREEN);
         screen = grsegs[ERRORSCREEN];
         ShutdownId();
-/*        memcpy((byte *)0xb8000,screen+7+7*160,17*160);
+/*        memcpy((uint8_t *)0xb8000,screen+7+7*160,17*160);
         gotoxy (1,23);*/
         exit(1);
     }
@@ -1301,8 +1301,8 @@ static void InitGame()
         FinishSignon();
 
 #ifdef NOTYET
-    vdisp = (byte *) (0xa0000+PAGE1START);
-    vbuf = (byte *) (0xa0000+PAGE2START);
+    vdisp = (uint8_t *) (0xa0000+PAGE1START);
+    vbuf = (uint8_t *) (0xa0000+PAGE2START);
 #endif
 }
 
@@ -1397,7 +1397,7 @@ void NewViewSize (int width)
 void Quit (const char *errorStr, ...)
 {
 #ifdef NOTYET
-    byte *screen;
+    uint8_t *screen;
 #endif
     char error[256];
     if(errorStr != NULL)
@@ -1449,7 +1449,7 @@ void Quit (const char *errorStr, ...)
     if (error && *error)
     {
 #ifdef NOTYET
-        memcpy((byte *)0xb8000,screen+7,7*160);
+        memcpy((uint8_t *)0xb8000,screen+7,7*160);
         SetTextCursor(9,3);
 #endif
         puts(error);
@@ -1464,7 +1464,7 @@ void Quit (const char *errorStr, ...)
     {
 #ifdef NOTYET
         #ifndef JAPAN
-        memcpy((byte *)0xb8000,screen+7,24*160); // 24 for SPEAR/UPLOAD compatibility
+        memcpy((uint8_t *)0xb8000,screen+7,24*160); // 24 for SPEAR/UPLOAD compatibility
         #endif
         SetTextCursor(0,23);
 #endif
@@ -1880,7 +1880,7 @@ void CheckParameters(int argc, char *argv[])
             " --joystickhat <index>  Enables movement with the given coolie hat\n"
             " --samplerate <rate>    Sets the sound sample rate (given in Hz, default: %i)\n"
             " --audiobuffer <size>   Sets the size of the audio buffer (-> sound latency)\n"
-            "                        (given in bytes, default: 2048 / (44100 / samplerate))\n"
+            "                        (given in uint8_ts, default: 2048 / (44100 / samplerate))\n"
             " --ignorenumchunks      Ignores the number of chunks in VGAHEAD.*\n"
             "                        (may be useful for some broken mods)\n"
             " --configdir <dir>      Directory where config file and save games are stored\n"

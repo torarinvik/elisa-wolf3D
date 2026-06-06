@@ -305,7 +305,7 @@ static const char *ExtScanNames[] =   // Names corresponding to ExtScanCodes
 };
 
 /*#pragma warning 737 9
-static byte
+static uint8_t
                                         *ScanNames[] =          // Scan code names with single chars
                                         {
         "?","?","1","2","3","4","5","6","7","8","9","0","-","+","?","?",
@@ -317,14 +317,14 @@ static byte
         "?","?","?","?","?","?","?","?","?","?","?","?","?","?","?","?",
         "?","?","?","?","?","?","?","?","?","?","?","?","?","?","?","?"
                                         };      // DEBUG - consolidate these
-static byte ExtScanCodes[] =    // Scan codes with >1 char names
+static uint8_t ExtScanCodes[] =    // Scan codes with >1 char names
                                         {
         1,0xe,0xf,0x1d,0x2a,0x39,0x3a,0x3b,0x3c,0x3d,0x3e,
         0x3f,0x40,0x41,0x42,0x43,0x44,0x57,0x59,0x46,0x1c,0x36,
         0x37,0x38,0x47,0x49,0x4f,0x51,0x52,0x53,0x45,0x48,
         0x50,0x4b,0x4d,0x00
                                         };
-static byte *ExtScanNames[] =   // Names corresponding to ExtScanCodes
+static uint8_t *ExtScanNames[] =   // Names corresponding to ExtScanCodes
                                         {
         "Esc","BkSp","Tab","Ctrl","LShft","Space","CapsLk","F1","F2","F3","F4",
         "F5","F6","F7","F8","F9","F10","F11","F12","ScrlLk","Enter","RShft",
@@ -675,7 +675,7 @@ void
 BossKey (void)
 {
 #ifdef NOTYET
-    byte palette1[256][3];
+    uint8_t palette1[256][3];
     SD_MusicOff ();
 /*       _AX = 3;
         geninterrupt(0x10); */
@@ -703,7 +703,7 @@ void
 BossKey (void)
 {
 #ifdef NOTYET
-    byte palette1[256][3];
+    uint8_t palette1[256][3];
     SD_MusicOff ();
 /*       _AX = 3;
         geninterrupt(0x10); */

@@ -5,7 +5,7 @@ pictabletype    *pictable;
 SDL_Surface     *latchpics[NUMLATCHPICS];
 
 int     px,py;
-byte    fontcolor,backcolor;
+uint8_t    fontcolor,backcolor;
 int     fontnumber;
 
 //==========================================================================
@@ -14,19 +14,19 @@ void VWB_DrawPropString(const char* string)
 {
     fontstruct  *font;
     int         width, step, height;
-    byte        *source, *dest;
-    byte        ch;
+    uint8_t        *source, *dest;
+    uint8_t        ch;
 
-    byte *vbuf = LOCK();
+    uint8_t *vbuf = LOCK();
 
     font = (fontstruct *) grsegs[STARTFONT+fontnumber];
     height = font->height;
     dest = vbuf + scaleFactor * (py * curPitch + px);
 
-    while ((ch = (byte)*string++)!=0)
+    while ((ch = (uint8_t)*string++)!=0)
     {
         width = step = font->width[ch];
-        source = ((byte *)font)+font->location[ch];
+        source = ((uint8_t *)font)+font->location[ch];
         while (width--)
         {
             for(int i=0;i<height;i++)
@@ -56,10 +56,10 @@ void VWB_DrawPropString(const char* string)
 =================
 */
 
-void VL_MungePic (byte *source, unsigned width, unsigned height)
+void VL_MungePic (uint8_t *source, unsigned width, unsigned height)
 {
     unsigned x,y,plane,size,pwidth;
-    byte *temp, *dest, *srcline;
+    uint8_t *temp, *dest, *srcline;
 
     size = width*height;
 
@@ -69,7 +69,7 @@ void VL_MungePic (byte *source, unsigned width, unsigned height)
 //
 // copy the pic to a temp buffer
 //
-    temp=(byte *) malloc(size);
+    temp=(uint8_t *) malloc(size);
     CHECKMALLOCRESULT(temp);
     memcpy (temp,source,size);
 
@@ -97,7 +97,7 @@ void VWL_MeasureString (const char *string, word *width, word *height, fontstruc
 {
     *height = font->height;
     for (*width = 0;*string;string++)
-        *width += font->width[*((byte *)string)];   // proportional width
+        *width += font->width[*((uint8_t *)string)];   // proportional width
 }
 
 void VW_MeasurePropString (const char *string, word *width, word *height)
@@ -127,7 +127,7 @@ void VWB_DrawTile8 (int x, int y, int tile)
 
 void VWB_DrawTile8M (int x, int y, int tile)
 {
-    VL_MemToScreen (((byte *)grsegs[STARTTILE8M])+tile*64,8,8,x,y);
+    VL_MemToScreen (((uint8_t *)grsegs[STARTTILE8M])+tile*64,8,8,x,y);
 }
 
 void VWB_DrawPic (int x, int y, int chunknum)
@@ -225,7 +225,7 @@ void LatchDrawPicScaledCoord (unsigned scx, unsigned scy, unsigned picnum)
 void LoadLatchMem (void)
 {
     int i,width,height,start,end;
-    byte *src;
+    uint8_t *src;
     SDL_Surface *surf;
 
 //
@@ -357,7 +357,7 @@ boolean FizzleFade (SDL_Surface *source, int x1, int y1,
     SDL_Surface *source_copy = SDL_DuplicateSurface(source);
     SDL_Surface *screen_copy = SDL_DuplicateSurface(screen);
 
-    byte *srcptr = VL_LockSurface(source_copy);
+    uint8_t *srcptr = VL_LockSurface(source_copy);
     do
     {
         if(abortable && IN_CheckAck ())
@@ -371,7 +371,7 @@ boolean FizzleFade (SDL_Surface *source, int x1, int y1,
             return true;
         }
 
-        byte *destptr = VL_LockSurface(screen_copy);
+        uint8_t *destptr = VL_LockSurface(screen_copy);
 
         rndval = lastrndval;
 
@@ -413,7 +413,7 @@ boolean FizzleFade (SDL_Surface *source, int x1, int y1,
                 }
                 else
                 {
-                    byte col = *(srcptr + (y1 + y) * source->pitch + x1 + x);
+                    uint8_t col = *(srcptr + (y1 + y) * source->pitch + x1 + x);
                     *(destptr + (y1 + y) * screen->pitch + x1 + x) = col;
                 }
 

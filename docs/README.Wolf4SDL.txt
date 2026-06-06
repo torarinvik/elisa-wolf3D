@@ -134,7 +134,7 @@ Wolf4SDL supports the following command line options:
  --joystickhat <index>  Enables movement with the given coolie hat
  --samplerate <rate>    Sets the sound sample rate (given in Hz)
  --audiobuffer <size>   Sets the size of the audio buffer (-> sound latency)
-                        (given in bytes)
+                        (given in uint8_ts)
  --ignorenumchunks      Ignores the number of chunks in VGAHEAD.*
                         (may be useful for some broken mods)
  --configdir <dir>      Directory where config file and save games are stored

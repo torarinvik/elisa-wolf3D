@@ -25,7 +25,7 @@ loaded into the data segment
 #include "wl_def.h"
 #pragma hdrstop
 
-#define THREEBYTEGRSTARTS
+#define THREEuint8_tGRSTARTS
 
 /*
 =============================================================================
@@ -63,8 +63,8 @@ int     mapon;
 
 word    *mapsegs[MAPPLANES];
 static maptype* mapheaderseg[NUMMAPS];
-byte    *audiosegs[NUMSNDCHUNKS];
-byte    *grsegs[NUMCHUNKS];
+uint8_t    *audiosegs[NUMSNDCHUNKS];
+uint8_t    *grsegs[NUMCHUNKS];
 
 word    RLEWtag;
 
@@ -208,9 +208,9 @@ boolean CA_LoadFile (const char *filename, memptr *ptr)
 ============================================================================
 */
 
-static void CAL_HuffExpand(byte *source, byte *dest, int32_t length, huffnode *hufftable)
+static void CAL_HuffExpand(uint8_t *source, uint8_t *dest, int32_t length, huffnode *hufftable)
 {
-    byte *end;
+    uint8_t *end;
     huffnode *headptr, *huffptr;
 
     if(!length || !dest)
@@ -225,8 +225,8 @@ static void CAL_HuffExpand(byte *source, byte *dest, int32_t length, huffnode *h
 
     end=dest+length;
 
-    byte val = *source++;
-    byte mask = 1;
+    uint8_t val = *source++;
+    uint8_t mask = 1;
     word nodeval;
     huffptr = headptr;
     while(1)
@@ -244,7 +244,7 @@ static void CAL_HuffExpand(byte *source, byte *dest, int32_t length, huffnode *h
 
         if(nodeval<256)
         {
-            *dest++ = (byte) nodeval;
+            *dest++ = (uint8_t) nodeval;
             written++;
             huffptr = headptr;
             if(dest>=end) break;
@@ -269,15 +269,15 @@ static void CAL_HuffExpand(byte *source, byte *dest, int32_t length, huffnode *h
 #define NEARTAG 0xa7
 #define FARTAG  0xa8
 
-void CAL_CarmackExpand (byte *source, word *dest, int length)
+void CAL_CarmackExpand (uint8_t *source, word *dest, int length)
 {
     word ch,chhigh,count,offset;
-    byte *inptr;
+    uint8_t *inptr;
     word *copyptr, *outptr;
 
     length/=2;
 
-    inptr = (byte *) source;
+    inptr = (uint8_t *) source;
     outptr = dest;
 
     while (length>0)
@@ -288,7 +288,7 @@ void CAL_CarmackExpand (byte *source, word *dest, int length)
         {
             count = ch&0xff;
             if (!count)
-            {                               // have to insert a word containing the tag byte
+            {                               // have to insert a word containing the tag uint8_t
                 ch |= *inptr++;
                 *outptr++ = ch;
                 length--;
@@ -307,7 +307,7 @@ void CAL_CarmackExpand (byte *source, word *dest, int length)
         {
             count = ch&0xff;
             if (!count)
-            {                               // have to insert a word containing the tag byte
+            {                               // have to insert a word containing the tag uint8_t
                 ch |= *inptr++;
                 *outptr++ = ch;
                 length --;
@@ -445,7 +445,7 @@ void CAL_SetupGrFile (void)
 {
     char fname[13];
     int handle;
-    byte *compseg;
+    uint8_t *compseg;
 
 #ifdef GRHEADERLINKED
 
@@ -492,11 +492,11 @@ void CAL_SetupGrFile (void)
             "(For mod developers: perhaps you forgot to update NUMCHUNKS?)",
             fname, headersize / 3, expectedsize);
 
-    byte data[lengthof(grstarts) * 3];
+    uint8_t data[lengthof(grstarts) * 3];
     read(handle, data, sizeof(data));
     close(handle);
 
-    const byte* d = data;
+    const uint8_t* d = data;
     for (int32_t* i = grstarts; i != endof(grstarts); ++i)
     {
         const int32_t val = d[0] | d[1] << 8 | d[2] << 16;
@@ -522,10 +522,10 @@ void CAL_SetupGrFile (void)
     pictable=(pictabletype *) malloc(NUMPICS*sizeof(pictabletype));
     CHECKMALLOCRESULT(pictable);
     CAL_GetGrChunkLength(STRUCTPIC);                // position file pointer
-    compseg=(byte *) malloc(chunkcomplen);
+    compseg=(uint8_t *) malloc(chunkcomplen);
     CHECKMALLOCRESULT(compseg);
     read (grhandle,compseg,chunkcomplen);
-    CAL_HuffExpand(compseg, (byte*)pictable, NUMPICS * sizeof(pictabletype), grhuffman);
+    CAL_HuffExpand(compseg, (uint8_t*)pictable, NUMPICS * sizeof(pictabletype), grhuffman);
     free(compseg);
 }
 
@@ -738,7 +738,7 @@ int32_t CA_CacheAudioChunk (int chunk)
     if (audiosegs[chunk])
         return size;                        // already in memory
 
-    audiosegs[chunk]=(byte *) malloc(size);
+    audiosegs[chunk]=(uint8_t *) malloc(size);
     CHECKMALLOCRESULT(audiosegs[chunk]);
 
     lseek(audiohandle,pos,SEEK_SET);
@@ -761,7 +761,7 @@ void CA_CacheAdlibSoundChunk (int chunk)
     AdLibSound *sound = (AdLibSound *) malloc(size + sizeof(AdLibSound) - ORIG_ADLIBSOUND_SIZE);
     CHECKMALLOCRESULT(sound);
 
-    byte *ptr = (byte *) bufferseg;
+    uint8_t *ptr = (uint8_t *) bufferseg;
     sound->common.length = READLONGWORD(ptr);
     sound->common.priority = READWORD(ptr);
     sound->inst.mChar = *ptr++;
@@ -782,9 +782,9 @@ void CA_CacheAdlibSoundChunk (int chunk)
     sound->inst.unused[2] = *ptr++;
     sound->block = *ptr++;
 
-    read(audiohandle, sound->data, size - ORIG_ADLIBSOUND_SIZE + 1);  // + 1 because of byte data[1]
+    read(audiohandle, sound->data, size - ORIG_ADLIBSOUND_SIZE + 1);  // + 1 because of uint8_t data[1]
 
-    audiosegs[chunk]=(byte *) sound;
+    audiosegs[chunk]=(uint8_t *) sound;
 }
 
 //===========================================================================
@@ -898,9 +898,9 @@ void CAL_ExpandGrChunk (int chunk, int32_t *source)
     // allocate final space, decompress it, and free bigbuffer
     // Sprites need to have shifts made and various other junk
     //
-    grsegs[chunk]=(byte *) malloc(expanded);
+    grsegs[chunk]=(uint8_t *) malloc(expanded);
     CHECKMALLOCRESULT(grsegs[chunk]);
-    CAL_HuffExpand((byte *) source, grsegs[chunk], expanded, grhuffman);
+    CAL_HuffExpand((uint8_t *) source, grsegs[chunk], expanded, grhuffman);
 }
 
 
@@ -1000,16 +1000,16 @@ void CA_CacheScreen (int chunk)
 // allocate final space, decompress it, and free bigbuffer
 // Sprites need to have shifts made and various other junk
 //
-    byte *pic = (byte *) malloc(64000);
+    uint8_t *pic = (uint8_t *) malloc(64000);
     CHECKMALLOCRESULT(pic);
-    CAL_HuffExpand((byte *) source, pic, expanded, grhuffman);
+    CAL_HuffExpand((uint8_t *) source, pic, expanded, grhuffman);
 
-    byte *vbuf = LOCK();
+    uint8_t *vbuf = LOCK();
     for(int y = 0, scy = 0; y < 200; y++, scy += scaleFactor)
     {
         for(int x = 0, scx = 0; x < 320; x++, scx += scaleFactor)
         {
-            byte col = pic[(y * 80 + (x >> 2)) + (x & 3) * 80 * 200];
+            uint8_t col = pic[(y * 80 + (x >> 2)) + (x & 3) * 80 * 200];
             for(unsigned i = 0; i < scaleFactor; i++)
                 for(unsigned j = 0; j < scaleFactor; j++)
                     vbuf[(scy + i) * curPitch + scx + j] = col;
@@ -1073,7 +1073,7 @@ void CA_CacheMap (int mapnum)
 #ifdef CARMACIZED
         //
         // unhuffman, then unRLEW
-        // The huffman'd chunk has a two byte expanded length first
+        // The huffman'd chunk has a two uint8_t expanded length first
         // The resulting RLEW chunk also does, even though it's not really
         // needed
         //
@@ -1081,7 +1081,7 @@ void CA_CacheMap (int mapnum)
         source++;
         buffer2seg = (word *) malloc(expanded);
         CHECKMALLOCRESULT(buffer2seg);
-        CAL_CarmackExpand((byte *) source, buffer2seg,expanded);
+        CAL_CarmackExpand((uint8_t *) source, buffer2seg,expanded);
         CA_RLEWexpand(buffer2seg+1,dest,size,RLEWtag);
         free(buffer2seg);
 

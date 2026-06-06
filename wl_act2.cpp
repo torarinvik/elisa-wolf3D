@@ -3298,7 +3298,7 @@ void T_DogChase (objtype *ob)
     while (move)
     {
         //
-        // check for byte range
+        // check for uint8_t range
         //
         dx = player->x - ob->x;
         if (dx<0)

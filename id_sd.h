@@ -46,7 +46,7 @@ typedef struct
 typedef struct
 {
     SoundCommon     common;
-    byte            data[1];
+    uint8_t            data[1];
 } PCSound;
 
 //      Register addresses
@@ -65,17 +65,17 @@ typedef struct
 
 typedef struct
 {
-    byte    mChar,cChar,
+    uint8_t    mChar,cChar,
             mScale,cScale,
             mAttack,cAttack,
             mSus,cSus,
             mWave,cWave,
             nConn,
 
-            // These are only for Muse - these bytes are really unused
+            // These are only for Muse - these uint8_ts are really unused
             voice,
             mode;
-    byte    unused[3];
+    uint8_t    unused[3];
 } Instrument;
 
 #define ORIG_INSTRUMENT_SIZE 16
@@ -84,8 +84,8 @@ typedef struct
 {
     SoundCommon     common;
     Instrument      inst;
-    byte            block;
-    byte            data[1];
+    uint8_t            block;
+    uint8_t            data[1];
 } AdLibSound;
 
 #define ORIG_ADLIBSOUND_SIZE (ORIG_SOUNDCOMMON_SIZE + ORIG_INSTRUMENT_SIZE + 2)

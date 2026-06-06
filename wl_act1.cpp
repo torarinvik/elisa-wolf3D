@@ -280,7 +280,7 @@ short           doornum;
 word            doorposition[MAXDOORS];             // leading edge of door 0=closed
                                                     // 0xffff = fully open
 
-byte            areaconnect[NUMAREAS][NUMAREAS];
+uint8_t            areaconnect[NUMAREAS][NUMAREAS];
 
 boolean         areabyplayer[NUMAREAS];
 
@@ -734,7 +734,7 @@ void MoveDoors (void)
 word pwallstate;
 word pwallpos;                  // amount a pushable wall has been moved (0-63)
 word pwallx,pwally;
-byte pwalldir,pwalltile;
+uint8_t pwalldir,pwalltile;
 int dirs[4][2]={{0,-1},{1,0},{0,1},{-1,0}};
 
 /*

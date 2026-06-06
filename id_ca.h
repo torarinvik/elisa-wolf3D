@@ -24,8 +24,8 @@ typedef struct
 extern  int   mapon;
 
 extern  word *mapsegs[MAPPLANES];
-extern  byte *audiosegs[NUMSNDCHUNKS];
-extern  byte *grsegs[NUMCHUNKS];
+extern  uint8_t *audiosegs[NUMSNDCHUNKS];
+extern  uint8_t *grsegs[NUMCHUNKS];
 
 extern  char  extension[5];
 extern  char  graphext[5];

@@ -36,8 +36,8 @@ objtype *newobj, *obj, *player, *lastobj, *objfreelist, *killerobj;
 boolean noclip, ammocheat;
 int godmode, singlestep, extravbls = 0;
 
-byte tilemap[MAPSIZE][MAPSIZE]; // wall values only
-byte spotvis[MAPSIZE][MAPSIZE];
+uint8_t tilemap[MAPSIZE][MAPSIZE]; // wall values only
+uint8_t spotvis[MAPSIZE][MAPSIZE];
 objtype *actorat[MAPSIZE][MAPSIZE];
 
 //
@@ -206,7 +206,7 @@ int songs[] = {
     XFUNKIE_MUS,
     XDEATH_MUS,
     XGETYOU_MUS,                // DON'T KNOW
-    ULTIMATE_MUS,               // Trans Gr”sse
+    ULTIMATE_MUS,               // Trans Grï¿½sse
 
     DUNGEON_MUS,
     GOINGAFT_MUS,
@@ -394,7 +394,7 @@ void PollJoystickMove (void)
 void PollControls (void)
 {
     int max, min, i;
-    byte buttonbits;
+    uint8_t buttonbits;
 
     IN_ProcessEvents();
 

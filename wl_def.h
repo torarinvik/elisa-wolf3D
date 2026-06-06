@@ -54,7 +54,7 @@
     #include "f_spear.h"
 #endif
 
-typedef uint8_t byte;
+
 typedef uint16_t word;
 typedef int32_t fixed;
 typedef uint32_t longword;
@@ -708,11 +708,11 @@ typedef struct statestruct
 
 typedef struct statstruct
 {
-    byte      tilex,tiley;
+    uint8_t      tilex,tiley;
     short     shapenum;           // if shapenum == -1 the obj has been removed
-    byte      *visspot;
+    uint8_t      *visspot;
     uint32_t  flags;
-    byte      itemnumber;
+    uint8_t      itemnumber;
 } statobj_t;
 
 
@@ -729,9 +729,9 @@ typedef enum
 
 typedef struct doorstruct
 {
-    byte     tilex,tiley;
+    uint8_t     tilex,tiley;
     boolean  vertical;
-    byte     lock;
+    uint8_t     lock;
     doortype action;
     short    ticcount;
 } doorobj_t;
@@ -757,7 +757,7 @@ typedef struct objstruct
 
     fixed       x,y;
     word        tilex,tiley;
-    byte        areanumber;
+    uint8_t        areanumber;
 
     short       viewx;
     word        viewheight;
@@ -923,14 +923,14 @@ void            ShutdownId (void);
 */
 
 extern  gametype        gamestate;
-extern  byte            bordercol;
+extern  uint8_t            bordercol;
 extern  SDL_Surface     *latchpics[NUMLATCHPICS];
 extern  char            demoname[13];
 
 void    SetupGameLevel (void);
 void    GameLoop (void);
 void    DrawPlayBorder (void);
-void    DrawStatusBorder (byte color);
+void    DrawStatusBorder (uint8_t color);
 void    DrawPlayScreen (void);
 void    DrawPlayBorderSides (void);
 void    ShowActStatus();
@@ -971,8 +971,8 @@ void UpdateSoundLoc(void);
 
 #define JOYSCALE                2
 
-extern  byte            tilemap[MAPSIZE][MAPSIZE];      // wall values only
-extern  byte            spotvis[MAPSIZE][MAPSIZE];
+extern  uint8_t            tilemap[MAPSIZE][MAPSIZE];      // wall values only
+extern  uint8_t            spotvis[MAPSIZE][MAPSIZE];
 extern  objtype         *actorat[MAPSIZE][MAPSIZE];
 
 extern  objtype         *player;
@@ -1186,14 +1186,14 @@ extern  short     doornum;
 
 extern  word      doorposition[MAXDOORS];
 
-extern  byte      areaconnect[NUMAREAS][NUMAREAS];
+extern  uint8_t      areaconnect[NUMAREAS][NUMAREAS];
 
 extern  boolean   areabyplayer[NUMAREAS];
 
 extern word     pwallstate;
 extern word     pwallpos;        // amount a pushable wall has been moved (0-63)
 extern word     pwallx,pwally;
-extern byte     pwalldir,pwalltile;
+extern uint8_t     pwalldir,pwalltile;
 
 
 void InitDoorList (void);
@@ -1371,14 +1371,14 @@ static inline fixed FixedMul(fixed a, fixed b)
 #define lengthof(x) (sizeof(x) / sizeof(*(x)))
 #define endof(x)    ((x) + lengthof(x))
 
-static inline word READWORD(byte *&ptr)
+static inline word READWORD(uint8_t *&ptr)
 {
     word val = ptr[0] | ptr[1] << 8;
     ptr += 2;
     return val;
 }
 
-static inline longword READLONGWORD(byte *&ptr)
+static inline longword READLONGWORD(uint8_t *&ptr)
 {
     longword val = ptr[0] | ptr[1] << 8 | ptr[2] << 16 | ptr[3] << 24;
     ptr += 4;

@@ -34,7 +34,7 @@ typedef struct
 extern  pictabletype    *pictable;
 extern  pictabletype    *picmtable;
 
-extern  byte            fontcolor,backcolor;
+extern  uint8_t            fontcolor,backcolor;
 extern  int             fontnumber;
 extern  int             px,py;
 

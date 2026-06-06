@@ -45,8 +45,8 @@ typedef struct
     word val0x0001;
     word channels;
     longword samplerate;
-    longword bytespersec;
-    word bytespersample;
+    longword uint8_tspersec;
+    word uint8_tspersample;
     word bitspersample;
 } headchunk;
 
@@ -63,7 +63,7 @@ typedef struct
 } digiinfo;
 
 static Mix_Chunk *SoundChunks[ STARTMUSIC - STARTDIGISOUNDS];
-static byte      *SoundBuffers[STARTMUSIC - STARTDIGISOUNDS];
+static uint8_t      *SoundBuffers[STARTMUSIC - STARTDIGISOUNDS];
 
 globalsoundpos channelSoundPos[MIX_CHANNELS];
 
@@ -74,7 +74,7 @@ globalsoundpos channelSoundPos[MIX_CHANNELS];
         SDMode          SoundMode;
         SMMode          MusicMode;
         SDSMode         DigiMode;
-static  byte          **SoundTable;
+static  uint8_t          **SoundTable;
         int             DigiMap[LASTSOUND];
         int             DigiChannel[STARTMUSIC - STARTDIGISOUNDS];
 
@@ -94,12 +94,12 @@ static  boolean                 DigiPlaying;
 
 //      PC Sound variables
 
-static  byte * volatile         pcSound;
+static  uint8_t * volatile         pcSound;
 
 
 //      AdLib variables
-static  byte * volatile         alSound;
-static  byte                    alBlock;
+static  uint8_t * volatile         alSound;
+static  uint8_t                    alBlock;
 static  longword                alLengthLeft;
 static  longword                alTimeCount;
 static  Instrument              alZeroInst;
@@ -143,7 +143,7 @@ void SDL_turnOffPCSpeaker();
         "out    61h,al" \
         modify exact [al]
 
-void SDL_setPCSpeaker(byte val);
+void SDL_setPCSpeaker(uint8_t val);
 #pragma aux SDL_setPCSpeaker = \
         "in     al,61h" \
         "and    al,0fch" \
@@ -285,7 +285,7 @@ SDL_SetTimer0(word speed)
         _asm cli
 
         outp(0x43,0x36);                                // Change timer 0
-        outp(0x40,(byte)speed);
+        outp(0x40,(uint8_t)speed);
         outp(0x40,speed >> 8);
         // Kludge to handle special case for digitized PC sounds
         if (TimerDivisor == (1192030 / (TickBase * 100)))
@@ -357,7 +357,7 @@ void
 #else
 static void
 #endif
-SDL_PCPlaySample(byte *data,longword len,boolean inIRQ)
+SDL_PCPlaySample(uint8_t *data,longword len,boolean inIRQ)
 {
         if(!inIRQ)
         {
@@ -368,7 +368,7 @@ SDL_PCPlaySample(byte *data,longword len,boolean inIRQ)
         SDL_IndicatePC(true);
 
         pcLengthLeft = len;
-        pcSound = (volatile byte *)data;
+        pcSound = (volatile uint8_t *)data;
 
         if(!inIRQ)
         {
@@ -518,7 +518,7 @@ void SD_SetPosition(int channel, int leftpos, int rightpos)
     }
 }
 
-Sint16 GetSample(float csample, byte *samples, int size)
+Sint16 GetSample(float csample, uint8_t *samples, int size)
 {
     float s0=0, s1=0, s2=0;
     int cursample = (int) csample;
@@ -543,14 +543,14 @@ void SD_PrepareSound(int which)
     int page = DigiList[which].startpage;
     int size = DigiList[which].length;
 
-    byte *origsamples = PM_GetSound(page);
+    uint8_t *origsamples = PM_GetSound(page);
     if(origsamples + size >= PM_GetEnd())
         Quit("SD_PrepareSound(%i): Sound reaches out of page file!\n", which);
 
     int destsamples = (int) ((float) size * (float) param_samplerate
         / (float) ORIGSAMPLERATE);
 
-    byte *wavebuffer = (byte *) malloc(sizeof(headchunk) + sizeof(wavechunk)
+    uint8_t *wavebuffer = (uint8_t *) malloc(sizeof(headchunk) + sizeof(wavechunk)
         + destsamples * 2);     // dest are 16-bit samples
     if(wavebuffer == NULL)
         Quit("Unable to allocate wave buffer for sound %i!\n", which);
@@ -714,7 +714,7 @@ SDL_ALStopSound(void)
 static void
 SDL_AlSetFXInst(Instrument *inst)
 {
-    byte c,m;
+    uint8_t c,m;
 
     m = 0;      // modulator cell for channel 0
     c = 3;      // carrier cell for channel 0
@@ -743,7 +743,7 @@ static void
 SDL_ALPlaySound(AdLibSound *sound)
 {
     Instrument      *inst;
-    byte            *data;
+    uint8_t            *data;
 
     SDL_ALStopSound();
 
@@ -758,7 +758,7 @@ SDL_ALPlaySound(AdLibSound *sound)
     }
 
     SDL_AlSetFXInst(inst);
-    alSound = (byte *)data;
+    alSound = (uint8_t *)data;
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -953,8 +953,8 @@ SD_SetMusicMode(SMMode mode)
 }
 
 int numreadysamples = 0;
-byte *curAlSound = 0;
-byte *curAlSoundPtr = 0;
+uint8_t *curAlSound = 0;
+uint8_t *curAlSoundPtr = 0;
 longword curAlLengthLeft = 0;
 int soundTimeCounter = 5;
 int samplesPerMusicTick;
@@ -1016,7 +1016,7 @@ void SDL_IMFMusicPlayer(void *udata, Uint8 *stream, int len)
             {
                 if(sqHackTime > alTimeCount) break;
                 sqHackTime = alTimeCount + *(sqHackPtr+1);
-                alOut(*(byte *) sqHackPtr, *(((byte *) sqHackPtr)+1));
+                alOut(*(uint8_t *) sqHackPtr, *(((uint8_t *) sqHackPtr)+1));
                 sqHackPtr += 2;
                 sqHackLen -= 4;
             }
@@ -1360,8 +1360,8 @@ SD_ContinueMusic(int chunk, int startoffs)
 
         for(int i = 0; i < startoffs; i += 2)
         {
-            byte reg = *(byte *)sqHackPtr;
-            byte val = *(((byte *)sqHackPtr) + 1);
+            uint8_t reg = *(uint8_t *)sqHackPtr;
+            uint8_t val = *(((uint8_t *)sqHackPtr) + 1);
             if(reg >= 0xb1 && reg <= 0xb8) val &= 0xdf;           // disable play note flag
             else if(reg == 0xbd) val &= 0xe0;                     // disable drum flags
 

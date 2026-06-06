@@ -233,14 +233,14 @@ void ShapeTest (void)
     extern  word    NumDigi;
     extern  word    *DigiList;
     extern  int     postx;
-    extern  byte    *postsource;
+    extern  uint8_t    *postsource;
     static  char    buf[10];
 
     boolean         done;
     ScanCode        scan;
     int             i,j,k,x;
     longword        l;
-    byte            *addr;
+    uint8_t            *addr;
     soundnames      sound;
     //      PageListStruct  far *page;
 
@@ -284,7 +284,7 @@ void ShapeTest (void)
         US_PrintUnsigned(page->lastHit);*/
 
         US_Print("\n Address: ");
-        addr = (byte *) PM_GetPage(i);
+        addr = (uint8_t *) PM_GetPage(i);
         sprintf(buf,"0x%08X",(int32_t) addr);
         US_Print(buf);
 
@@ -323,14 +323,14 @@ void ShapeTest (void)
                     l += DigiList[(j * 2) + 1];
                     k += (DigiList[(j * 2) + 1] + (PMPageSize - 1)) / PMPageSize;
                 }
-                US_Print("\n Total bytes: ");
+                US_Print("\n Total uint8_ts: ");
                 US_PrintUnsigned(l);
                 US_Print("\n Total pages: ");
                 US_PrintUnsigned(k);
             }
             else
             {
-                byte *dp = addr;
+                uint8_t *dp = addr;
                 for (j = 0;j < NumDigi;j++)
                 {
                     k = (DigiList[(j * 2) + 1] + (PMPageSize - 1)) / PMPageSize;
@@ -348,7 +348,7 @@ void ShapeTest (void)
                 }
                 for (j = 0;j < PageLengths[i];j += 32)
                 {
-                    byte v = dp[j];
+                    uint8_t v = dp[j];
                     int v2 = (unsigned)v;
                     v2 -= 128;
                     v2 /= 4;
@@ -561,7 +561,7 @@ int DebugKeys (void)
     }
     else if (Keyboard[sc_L])        // L = level ratios
     {
-        byte x,start,end=LRpack;
+        uint8_t x,start,end=LRpack;
 
         if (end == 8)   // wolf3d
         {

@@ -11,7 +11,7 @@ uint32_t *PMPageData;
 size_t PMPageDataSize;
 
 // ChunksInFile+1 pointers to page starts.
-// The last pointer points one byte after the last page.
+// The last pointer points one uint8_t after the last page.
 uint8_t **PMPages;
 
 void PM_Startup()
@@ -86,7 +86,7 @@ void PM_Startup()
         {
             size_t offs = ptr - (uint8_t *) PMPageData;
 
-            // pad with zeros to make it 2-byte aligned
+            // pad with zeros to make it 2-uint8_t aligned
             if(offs & 1)
             {
                 *ptr++ = 0;
