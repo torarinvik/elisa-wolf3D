@@ -922,11 +922,11 @@ void DrawPlayScreen (void)
 void LatchNumberHERE (int x, int y, unsigned width, int32_t number)
 {
     unsigned length,c;
-    char str[20];
+    char string_buffer[20];
 
-    ltoa (number,str,10);
+    ltoa (number,string_buffer,10);
 
-    length = (unsigned) strlen (str);
+    length = (unsigned) strlen (string_buffer);
 
     while (length<width)
     {
@@ -939,7 +939,7 @@ void LatchNumberHERE (int x, int y, unsigned width, int32_t number)
 
     while (c<length)
     {
-        LatchDrawPic (x,y,str[c]-'0'+ N_0PIC);
+        LatchDrawPic (x,y,string_buffer[c]-'0'+ N_0PIC);
         x++;
         c++;
     }
@@ -1026,9 +1026,9 @@ void FinishDemoRecord (void)
     US_Print(" Demo number (0-9): ");
     VW_UpdateScreen();
 
-    if (US_LineInput (px,py,str,NULL,true,1,0))
+    if (US_LineInput (px,py,string_buffer,NULL,true,1,0))
     {
-        level = atoi (str);
+        level = atoi (string_buffer);
         if (level>=0 && level<=9)
         {
             demoname[4] = (char)('0'+level);
@@ -1071,11 +1071,11 @@ void RecordDemo (void)
 #endif
     VW_UpdateScreen();
     VW_FadeIn ();
-    esc = !US_LineInput (px,py,str,NULL,true,2,0);
+    esc = !US_LineInput (px,py,string_buffer,NULL,true,2,0);
     if (esc)
         return;
 
-    level = atoi (str);
+    level = atoi (string_buffer);
     level--;
 
     if (level >= maps || level < 0)

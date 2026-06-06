@@ -76,9 +76,9 @@ void CountObjects (void)
     total = (int)(laststatobj-&statobjlist[0]);
     US_PrintUnsigned (total);
 
-    char str[60];
-    sprintf(str,"\nlaststatobj=%.8X",(int32_t)(uintptr_t)laststatobj);
-    US_Print(str);
+    char string_buffer[60];
+    sprintf(string_buffer,"\nlaststatobj=%.8X",(int32_t)(uintptr_t)laststatobj);
+    US_Print(string_buffer);
 
     US_Print ("\nIn use statics:");
     for (i=0;i<total;i++)
@@ -435,10 +435,10 @@ int DebugKeys (void)
         PrintY+=6;
         US_Print(" Border color (0-56): ");
         VW_UpdateScreen();
-        esc = !US_LineInput (px,py,str,NULL,true,2,0);
+        esc = !US_LineInput (px,py,string_buffer,NULL,true,2,0);
         if (!esc)
         {
-            level = atoi (str);
+            level = atoi (string_buffer);
             if (level>=0 && level<=99)
             {
                 if (level<30) level += 31;
@@ -482,7 +482,7 @@ int DebugKeys (void)
 
     if (Keyboard[sc_F])             // F = facing spot
     {
-        char str[60];
+        char string_buffer[60];
         CenterWindow (14,6);
         US_Print ("x:");     US_PrintUnsigned (player->x);
         US_Print (" (");     US_PrintUnsigned (player->x%65536);
@@ -492,7 +492,7 @@ int DebugKeys (void)
         US_Print (" X:");    US_PrintUnsigned (player->tilex);
         US_Print (" Y:");    US_PrintUnsigned (player->tiley);
         US_Print ("\n1:");   US_PrintUnsigned (tilemap[player->tilex][player->tiley]);
-        sprintf(str," 2:%.8X",(unsigned)(uintptr_t)actorat[player->tilex][player->tiley]); US_Print(str);
+        sprintf(string_buffer," 2:%.8X",(unsigned)(uintptr_t)actorat[player->tilex][player->tiley]); US_Print(string_buffer);
         US_Print ("\nf 1:"); US_PrintUnsigned (player->areanumber);
         US_Print (" 2:");    US_PrintUnsigned (MAPSPOT(player->tilex,player->tiley,1));
         US_Print (" 3:");
@@ -550,10 +550,10 @@ int DebugKeys (void)
         PrintY+=6;
         US_Print("  Give Key (1-4): ");
         VW_UpdateScreen();
-        esc = !US_LineInput (px,py,str,NULL,true,1,0);
+        esc = !US_LineInput (px,py,string_buffer,NULL,true,1,0);
         if (!esc)
         {
-            level = atoi (str);
+            level = atoi (string_buffer);
             if (level>0 && level<5)
                 GiveKey(level-1);
         }
@@ -632,10 +632,10 @@ again:
         PrintY+=6;
         US_Print(" Slow Motion steps (default 14): ");
         VW_UpdateScreen();
-        esc = !US_LineInput (px,py,str,NULL,true,2,0);
+        esc = !US_LineInput (px,py,string_buffer,NULL,true,2,0);
         if (!esc)
         {
-            level = atoi (str);
+            level = atoi (string_buffer);
             if (level>=0 && level<=50)
                 singlestep = level;
         }
@@ -652,10 +652,10 @@ again:
         PrintY+=6;
         US_Print("  Add how many extra VBLs(0-8): ");
         VW_UpdateScreen();
-        esc = !US_LineInput (px,py,str,NULL,true,1,0);
+        esc = !US_LineInput (px,py,string_buffer,NULL,true,1,0);
         if (!esc)
         {
-            level = atoi (str);
+            level = atoi (string_buffer);
             if (level>=0 && level<=8)
                 extravbls = level;
         }
@@ -671,10 +671,10 @@ again:
         US_Print("  Warp to which level(1-21): ");
 #endif
         VW_UpdateScreen();
-        esc = !US_LineInput (px,py,str,NULL,true,2,0);
+        esc = !US_LineInput (px,py,string_buffer,NULL,true,2,0);
         if (!esc)
         {
-            level = atoi (str);
+            level = atoi (string_buffer);
 #ifndef SPEAR
             if (level>0 && level<11)
 #else

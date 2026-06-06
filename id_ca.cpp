@@ -1101,10 +1101,10 @@ void CA_CacheMap (int mapnum)
 
 void CA_CannotOpen(const char *string)
 {
-    char str[30];
+    char string_buffer[30];
 
-    strcpy(str,"Can't open ");
-    strcat(str,string);
-    strcat(str,"!\n");
-    Quit (str);
+    strcpy(string_buffer,"Can't open ");
+    strcat(string_buffer,string);
+    strcat(string_buffer,"!\n");
+    Quit (string_buffer);
 }

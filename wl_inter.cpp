@@ -1019,7 +1019,7 @@ DrawHighScores (void)
 {
     char buffer[16];
 #ifndef SPEAR
-    char *str;
+    char *string_buffer;
 #ifndef UPLOAD
     char buffer1[5];
 #endif
@@ -1092,8 +1092,8 @@ DrawHighScores (void)
         //
         itoa (s->completed, buffer, 10);
 #ifndef SPEAR
-        for (str = buffer; *str; str++)
-            *str = *str + (129 - '0');  // Used fixed-width numbers (129...)
+        for (string_buffer = buffer; *string_buffer; string_buffer++)
+            *string_buffer = *string_buffer + (129 - '0');  // Used fixed-width numbers (129...)
         USL_MeasureString (buffer, &w, &h);
         PrintX = (22 * 8) - w;
 #else
@@ -1123,8 +1123,8 @@ DrawHighScores (void)
         //
         itoa (s->score, buffer, 10);
 #ifndef SPEAR
-        for (str = buffer; *str; str++)
-            *str = *str + (129 - '0');  // Used fixed-width numbers (129...)
+        for (string_buffer = buffer; *string_buffer; string_buffer++)
+            *string_buffer = *string_buffer + (129 - '0');  // Used fixed-width numbers (129...)
         USL_MeasureString (buffer, &w, &h);
         PrintX = (34 * 8) - 8 - w;
 #else

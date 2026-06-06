@@ -362,11 +362,11 @@ void UpdateFace (void)
 static void LatchNumber (int x, int y, unsigned width, int32_t number)
 {
     unsigned length,c;
-    char    str[20];
+    char    string_buffer[20];
 
-    ltoa (number,str,10);
+    ltoa (number,string_buffer,10);
 
-    length = (unsigned) strlen (str);
+    length = (unsigned) strlen (string_buffer);
 
     while (length<width)
     {
@@ -379,7 +379,7 @@ static void LatchNumber (int x, int y, unsigned width, int32_t number)
 
     while (c<length)
     {
-        StatusDrawPic (x,y,str[c]-'0'+ N_0PIC);
+        StatusDrawPic (x,y,string_buffer[c]-'0'+ N_0PIC);
         x++;
         c++;
     }
