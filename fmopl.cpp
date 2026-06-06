@@ -68,7 +68,7 @@ Revision History:
 
 12-28-2001 Acho A. Tang
  - reflected Delta-T EOS status on Y8950 status port.
- - fixed subscription range of attack/decay tables
+ - uint32_t subscription range of attack/decay tables
 
 
     To do:
@@ -109,10 +109,10 @@ inline void logerror(...) {}
 #endif
 
 
-#define FREQ_SH         16  /* 16.16 fixed point (frequency calculations) */
-#define EG_SH           16  /* 16.16 fixed point (EG timing)              */
-#define LFO_SH          24  /*  8.24 fixed point (LFO calculations)       */
-#define TIMER_SH        16  /* 16.16 fixed point (timers calculations)    */
+#define FREQ_SH         16  /* 16.16 uint32_t point (frequency calculations) */
+#define EG_SH           16  /* 16.16 uint32_t point (EG timing)              */
+#define LFO_SH          24  /*  8.24 uint32_t point (LFO calculations)       */
+#define TIMER_SH        16  /* 16.16 uint32_t point (timers calculations)    */
 
 #define FREQ_MASK       ((1<<FREQ_SH)-1)
 
@@ -1302,7 +1302,7 @@ static void OPL_initalize(FM_OPL *OPL)
     for( i=0 ; i < 1024 ; i++ )
     {
         /* opn phase increment counter = 20bit */
-        OPL->fn_tab[i] = (UINT32)( (double)i * 64 * OPL->freqbase * (1<<(FREQ_SH-10)) ); /* -10 because chip works with 10.10 fixed point, while we use 16.16 */
+        OPL->fn_tab[i] = (UINT32)( (double)i * 64 * OPL->freqbase * (1<<(FREQ_SH-10)) ); /* -10 because chip works with 10.10 uint32_t point, while we use 16.16 */
 #if 0
         logerror("FMOPL.C: fn_tab[%4i] = %08x (dec=%8i)\n",
                  i, OPL->fn_tab[i]>>6, OPL->fn_tab[i]>>6 );

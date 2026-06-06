@@ -42,15 +42,15 @@ int min_wallheight;
 //
 short *pixelangle;
 int32_t finetangent[FINEANGLES/4];
-fixed sintable[ANGLES+ANGLES/4];
-fixed *costable = sintable+(ANGLES/4);
+uint32_t sintable[ANGLES+ANGLES/4];
+uint32_t *costable = sintable+(ANGLES/4);
 
 //
 // refresh variables
 //
-fixed   viewx,viewy;                    // the focal point
+uint32_t   viewx,viewy;                    // the focal point
 short   viewangle;
-fixed   viewsin,viewcos;
+uint32_t   viewsin,viewcos;
 
 void    TransformActor (objtype *ob);
 void    BuildTables (void);
@@ -124,7 +124,7 @@ uint16_t horizwall[MAXWALLTILES],vertwall[MAXWALLTILES];
 //
 void TransformActor (objtype *ob)
 {
-    fixed gx,gy,gxt,gyt,nx,ny;
+    uint32_t gx,gy,gxt,gyt,nx,ny;
 
 //
 // translate point to view centered coordinates
@@ -135,8 +135,8 @@ void TransformActor (objtype *ob)
 //
 // calculate newx
 //
-    gxt = FixedMul(gx,viewcos);
-    gyt = FixedMul(gy,viewsin);
+    gxt = uint32_tMul(gx,viewcos);
+    gyt = uint32_tMul(gy,viewsin);
     nx = gxt-gyt-ACTORSIZE;         // fudge the shape forward a bit, because
                                     // the midpoint could put parts of the shape
                                     // into an adjacent wall
@@ -144,8 +144,8 @@ void TransformActor (objtype *ob)
 //
 // calculate newy
 //
-    gxt = FixedMul(gx,viewsin);
-    gyt = FixedMul(gy,viewcos);
+    gxt = uint32_tMul(gx,viewsin);
+    gyt = uint32_tMul(gy,viewcos);
     ny = gyt+gxt;
 
 //
@@ -193,7 +193,7 @@ void TransformActor (objtype *ob)
 
 boolean TransformTile (int tx, int ty, short *dispx, short *dispheight)
 {
-    fixed gx,gy,gxt,gyt,nx,ny;
+    uint32_t gx,gy,gxt,gyt,nx,ny;
 
 //
 // translate point to view centered coordinates
@@ -204,15 +204,15 @@ boolean TransformTile (int tx, int ty, short *dispx, short *dispheight)
 //
 // calculate newx
 //
-    gxt = FixedMul(gx,viewcos);
-    gyt = FixedMul(gy,viewsin);
+    gxt = uint32_tMul(gx,viewcos);
+    gyt = uint32_tMul(gy,viewsin);
     nx = gxt-gyt-0x2000;            // 0x2000 is size of object
 
 //
 // calculate newy
 //
-    gxt = FixedMul(gx,viewsin);
-    gyt = FixedMul(gy,viewcos);
+    gxt = uint32_tMul(gx,viewsin);
+    gyt = uint32_tMul(gy,viewcos);
     ny = gyt+gxt;
 
 
@@ -250,7 +250,7 @@ boolean TransformTile (int tx, int ty, short *dispx, short *dispheight)
 
 int CalcHeight()
 {
-    fixed z = FixedMul(xintercept - viewx, viewcos) - FixedMul(yintercept - viewy, viewsin);
+    uint32_t z = uint32_tMul(xintercept - viewx, viewcos) - uint32_tMul(yintercept - viewy, viewsin);
     
     
     if(z < MINDIST)
@@ -352,7 +352,7 @@ void HitVertWall (void)
     int wallpic;
     int texture;
 
-    texture = ((yintercept+texdelta)>>TEXTUREFROMFIXEDSHIFT)&TEXTUREMASK;
+    texture = ((yintercept+texdelta)>>TEXTUREFROMuint32_tSHIFT)&TEXTUREMASK;
     if (xtilestep == -1)
     {
         texture = TEXTUREMASK-texture;
@@ -416,7 +416,7 @@ void HitHorizWall (void)
     int wallpic;
     int texture;
 
-    texture = ((xintercept+texdelta)>>TEXTUREFROMFIXEDSHIFT)&TEXTUREMASK;
+    texture = ((xintercept+texdelta)>>TEXTUREFROMuint32_tSHIFT)&TEXTUREMASK;
     if (ytilestep == -1)
         yintercept += TILEGLOBAL;
     else
@@ -479,7 +479,7 @@ void HitHorizDoor (void)
     int texture;
 
     doornum = tilehit&0x7f;
-    texture = ((xintercept-doorposition[doornum])>>TEXTUREFROMFIXEDSHIFT)&TEXTUREMASK;
+    texture = ((xintercept-doorposition[doornum])>>TEXTUREFROMuint32_tSHIFT)&TEXTUREMASK;
 
     if(lasttilehit==tilehit)
     {
@@ -542,7 +542,7 @@ void HitVertDoor (void)
     int texture;
 
     doornum = tilehit&0x7f;
-    texture = ((yintercept-doorposition[doornum])>>TEXTUREFROMFIXEDSHIFT)&TEXTUREMASK;
+    texture = ((yintercept-doorposition[doornum])>>TEXTUREFROMuint32_tSHIFT)&TEXTUREMASK;
 
     if(lasttilehit==tilehit)
     {
@@ -1111,10 +1111,10 @@ void AsmRefresh()
             xpartial=xpartialup;
             ypartial=ypartialup;
         }
-        yintercept=FixedMul(ystep,xpartial)+viewy;
+        yintercept=uint32_tMul(ystep,xpartial)+viewy;
         xtile=focaltx+xtilestep;
         xspot=(uint16_t)((xtile<<mapshift)+((uint32_t)yintercept>>16));
-        xintercept=FixedMul(xstep,ypartial)+viewx;
+        xintercept=uint32_tMul(xstep,ypartial)+viewx;
         ytile=focalty+ytilestep;
         yspot=(uint16_t)((((uint32_t)xintercept>>16)<<mapshift)+ytile);
         texdelta=0;
@@ -1498,8 +1498,8 @@ void CalcViewVariables()
     viewsin = sintable[viewangle];
     viewcos = costable[viewangle];
     //printf("%d\n",viewcos);
-    viewx = player->x - FixedMul(focallength,viewcos);
-    viewy = player->y + FixedMul(focallength,viewsin);
+    viewx = player->x - uint32_tMul(focallength,viewcos);
+    viewy = player->y + uint32_tMul(focallength,viewsin);
 
     focaltx = (short)(viewx>>TILESHIFT);
     focalty = (short)(viewy>>TILESHIFT);

@@ -982,7 +982,7 @@ void VictoryTile (void)
 */
 
 // For player movement in demos exactly as in the original Wolf3D v1.4 source code
-static fixed FixedByFracOrig(fixed a, fixed b)
+static uint32_t uint32_tByFracOrig(uint32_t a, uint32_t b)
 {
     int sign = 0;
     if(b == 65536)
@@ -997,7 +997,7 @@ static fixed FixedByFracOrig(fixed a, fixed b)
         a = -a;
         sign = !sign;
     }
-    fixed res = (fixed)(((int64_t) a * b) >> 16);
+    uint32_t res = (uint32_t)(((int64_t) a * b) >> 16);
     
     if(sign)
         res = -res;
@@ -1026,11 +1026,11 @@ void Thrust (int angle, int32_t speed)
         speed = MINDIST*2-1;
 
     xmove = DEMOCHOOSE_ORIG_SDL(
-                FixedByFracOrig(speed, costable[angle]),
-                FixedMul(speed,costable[angle]));
+                uint32_tByFracOrig(speed, costable[angle]),
+                uint32_tMul(speed,costable[angle]));
     ymove = DEMOCHOOSE_ORIG_SDL(
-                -FixedByFracOrig(speed, sintable[angle]),
-                -FixedMul(speed,sintable[angle]));
+                -uint32_tByFracOrig(speed, sintable[angle]),
+                -uint32_tMul(speed,sintable[angle]));
 
     ClipMove(player,xmove,ymove);
 

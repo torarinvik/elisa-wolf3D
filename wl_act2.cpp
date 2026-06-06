@@ -312,8 +312,8 @@ void T_Projectile (objtype *ob)
 
     speed = (int32_t)ob->speed*tics;
 
-    deltax = FixedMul(speed,costable[ob->angle]);
-    deltay = -FixedMul(speed,sintable[ob->angle]);
+    deltax = uint32_tMul(speed,costable[ob->angle]);
+    deltay = -uint32_tMul(speed,sintable[ob->angle]);
 
     if (deltax>0x10000l)
         deltax = 0x10000l;
@@ -3856,8 +3856,8 @@ void    A_StartDeathCam (objtype *ob)
     dist = 0x14000l;
     do
     {
-        xmove = FixedMul(dist,costable[player->angle]);
-        ymove = -FixedMul(dist,sintable[player->angle]);
+        xmove = uint32_tMul(dist,costable[player->angle]);
+        ymove = -uint32_tMul(dist,sintable[player->angle]);
 
         player->x = ob->x - xmove;
         player->y = ob->y - ymove;

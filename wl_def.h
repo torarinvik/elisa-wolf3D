@@ -55,8 +55,8 @@
 #endif
 
 
-typedef uint16_t uint16_t;
-typedef int32_t fixed;
+
+
 typedef uint32_t longuint16_t;
 // Win32
 #ifndef _WIN32
@@ -189,7 +189,7 @@ void Quit(const char *errorStr, ...);
 
 #define TEXTURESHIFT    6
 #define TEXTURESIZE     (1<<TEXTURESHIFT)
-#define TEXTUREFROMFIXEDSHIFT 4
+#define TEXTUREFROMuint32_tSHIFT 4
 #define TEXTUREMASK     (TEXTURESIZE*(TEXTURESIZE-1))
 
 #define SPRITESCALEFACTOR 2
@@ -755,13 +755,13 @@ typedef struct objstruct
     int32_t     distance;           // if negative, wait for that door to open
     dirtype     dir;
 
-    fixed       x,y;
+    uint32_t       x,y;
     uint16_t        tilex,tiley;
     uint8_t        areanumber;
 
     short       viewx;
     uint16_t        viewheight;
-    fixed       transx,transy;      // in global coord
+    uint32_t       transx,transy;      // in global coord
 
     short       angle;
     short       hitpoints;
@@ -869,13 +869,13 @@ extern int mapon;
 */
 
 extern  boolean  loadedgame;
-extern  fixed    focallength;
+extern  uint32_t    focallength;
 extern  int      viewscreenx, viewscreeny;
 extern  int      viewwidth;
 extern  int      viewheight;
 extern  short    centerx;
 extern  int32_t  heightnumerator;
-extern  fixed    scale;
+extern  uint32_t    scale;
 
 extern  int      dirangle[9];
 
@@ -952,7 +952,7 @@ extern  boolean         spearflag;
 // JAB
 #define PlaySoundLocTile(s,tx,ty)       PlaySoundLocGlobal(s,(((int32_t)(tx) << TILESHIFT) + (1L << (TILESHIFT - 1))),(((int32_t)ty << TILESHIFT) + (1L << (TILESHIFT - 1))))
 #define PlaySoundLocActor(s,ob)         PlaySoundLocGlobal(s,(ob)->x,(ob)->y)
-void    PlaySoundLocGlobal(uint16_t s,fixed gx,fixed gy);
+void    PlaySoundLocGlobal(uint16_t s,uint32_t gx,uint32_t gy);
 void UpdateSoundLoc(void);
 
 
@@ -1079,8 +1079,8 @@ int DebugKeys (void);
 //
 extern  short *pixelangle;
 extern  int32_t finetangent[FINEANGLES/4];
-extern  fixed sintable[];
-extern  fixed *costable;
+extern  uint32_t sintable[];
+extern  uint32_t *costable;
 extern  int *wallheight;
 extern  uint16_t horizwall[],vertwall[];
 extern  int32_t    lasttimecount;
@@ -1090,8 +1090,8 @@ extern  unsigned screenloc[3];
 
 extern  boolean fizzlein, fpscounter;
 
-extern  fixed   viewx,viewy;                    // the focal point
-extern  fixed   viewsin,viewcos;
+extern  uint32_t   viewx,viewy;                    // the focal point
+extern  uint32_t   viewsin,viewcos;
 
 void    ThreeDRefresh (void);
 void    CalcTics (void);
@@ -1325,9 +1325,9 @@ extern  void    EndText(void);
 =============================================================================
 */
 
-static inline fixed FixedMul(fixed a, fixed b)
+static inline uint32_t uint32_tMul(uint32_t a, uint32_t b)
 {
-    return (fixed)(((int64_t)a * b + 0x8000) >> 16);
+    return (uint32_t)(((int64_t)a * b + 0x8000) >> 16);
 }
 
 #ifdef PLAYDEMOLIKEORIGINAL

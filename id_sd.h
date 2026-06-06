@@ -104,7 +104,7 @@ typedef struct
 typedef struct
 {
     int valid;
-    fixed globalsoundx, globalsoundy;
+    uint32_t globalsoundx, globalsoundy;
 } globalsoundpos;
 
 extern globalsoundpos channelSoundPos[];

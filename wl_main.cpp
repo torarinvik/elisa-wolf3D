@@ -57,14 +57,14 @@ int     dirangle[9] = {0,ANGLES/8,2*ANGLES/8,3*ANGLES/8,4*ANGLES/8,
 //
 // proejection variables
 //
-fixed    focallength;
+uint32_t    focallength;
 unsigned screenofs;
 int      viewscreenx, viewscreeny;
 int      viewwidth;
 int      viewheight;
 short    centerx;
 int      shootdelta;           // pixels away from centerx a target can be
-fixed    scale;
+uint32_t    scale;
 int32_t  heightnumerator;
 
 
@@ -707,7 +707,7 @@ void BuildTables (void)
     float anglestep=(float)(PI/2/ANGLEQUAD);
     for(i=0; i<ANGLEQUAD; i++)
     {
-        fixed value=(int32_t)(GLOBAL1*sin(angle));
+        uint32_t value=(int32_t)(GLOBAL1*sin(angle));
         sintable[i]=sintable[i+ANGLES]=sintable[ANGLES/2-i]=value;
         sintable[ANGLES-i]=sintable[ANGLES/2+i]=-value;
         angle+=anglestep;
@@ -747,7 +747,7 @@ void CalcProjection (int32_t focal)
     // calculate scale value for vertical height calculations
     // and sprite x calculations
     //
-    scale = (fixed) (halfview*facedist/(VIEWGLOBAL/2));
+    scale = (uint32_t) (halfview*facedist/(VIEWGLOBAL/2));
 
     //
     // divide heightnumerator by a posts distance to get the posts height for

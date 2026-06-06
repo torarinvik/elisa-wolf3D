@@ -93,7 +93,7 @@ uint8_t ShiftNames[] =     // Shifted ASCII for scan codes
     0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,    // 6
     0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0       // 7
 };
-uint8_t SpecialNames[] =   // ASCII for 0xe0 prefixed codes
+uint8_t SpecialNames[] =   // ASCII for 0xe0 preuint32_t codes
 {
 //   0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
     0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,0  ,    // 0

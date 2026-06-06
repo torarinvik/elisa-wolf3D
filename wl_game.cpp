@@ -115,9 +115,9 @@ uint8_t lefttable[ATABLEMAX][ATABLEMAX * 2] = {
 };
 
 void
-SetSoundLoc(fixed gx,fixed gy)
+SetSoundLoc(uint32_t gx,uint32_t gy)
 {
-    fixed   xt,yt;
+    uint32_t   xt,yt;
     int     x,y;
 
 //
@@ -129,15 +129,15 @@ SetSoundLoc(fixed gx,fixed gy)
 //
 // calculate newx
 //
-    xt = FixedMul(gx,viewcos);
-    yt = FixedMul(gy,viewsin);
+    xt = uint32_tMul(gx,viewcos);
+    yt = uint32_tMul(gy,viewsin);
     x = (xt - yt) >> TILESHIFT;
 
 //
 // calculate newy
 //
-    xt = FixedMul(gx,viewsin);
-    yt = FixedMul(gy,viewcos);
+    xt = uint32_tMul(gx,viewsin);
+    yt = uint32_tMul(gy,viewcos);
     y = (yt + xt) >> TILESHIFT;
 
     if (y >= ATABLEMAX)
@@ -165,7 +165,7 @@ SetSoundLoc(fixed gx,fixed gy)
 =
 ==========================
 */
-void PlaySoundLocGlobal(uint16_t s,fixed gx,fixed gy)
+void PlaySoundLocGlobal(uint16_t s,uint32_t gx,uint32_t gy)
 {
     SetSoundLoc(gx, gy);
     SD_PositionSound(leftchannel, rightchannel);
