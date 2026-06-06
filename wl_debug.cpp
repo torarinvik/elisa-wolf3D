@@ -230,8 +230,8 @@ void ShapeTest (void)
 {
     //TODO
 #if NOTYET
-    extern  word    NumDigi;
-    extern  word    *DigiList;
+    extern  uint16_t    NumDigi;
+    extern  uint16_t    *DigiList;
     extern  int     postx;
     extern  uint8_t    *postsource;
     static  char    buf[10];
@@ -239,7 +239,7 @@ void ShapeTest (void)
     boolean         done;
     ScanCode        scan;
     int             i,j,k,x;
-    longword        l;
+    longuint16_t        l;
     uint8_t            *addr;
     soundnames      sound;
     //      PageListStruct  far *page;

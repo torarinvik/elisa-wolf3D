@@ -277,7 +277,7 @@ Every time a door opens or closes the areabyplayer matrix gets recalculated.
 doorobj_t       doorobjlist[MAXDOORS],*lastdoorobj;
 short           doornum;
 
-word            doorposition[MAXDOORS];             // leading edge of door 0=closed
+uint16_t            doorposition[MAXDOORS];             // leading edge of door 0=closed
                                                     // 0xffff = fully open
 
 uint8_t            areaconnect[NUMAREAS][NUMAREAS];
@@ -355,7 +355,7 @@ void InitDoorList (void)
 
 void SpawnDoor (int tilex, int tiley, boolean vertical, int lock)
 {
-    word *map;
+    uint16_t *map;
 
     if (doornum==MAXDOORS)
         Quit ("64+ doors on level!");
@@ -558,7 +558,7 @@ void DoorOpen (int door)
 void DoorOpening (int door)
 {
     unsigned area1,area2;
-    word *map;
+    uint16_t *map;
     int32_t position;
 
     position = doorposition[door];
@@ -611,7 +611,7 @@ void DoorOpening (int door)
         actorat[doorobjlist[door].tilex][doorobjlist[door].tiley] = 0;
     }
 
-    doorposition[door] = (word) position;
+    doorposition[door] = (uint16_t) position;
 }
 
 
@@ -626,7 +626,7 @@ void DoorOpening (int door)
 void DoorClosing (int door)
 {
     unsigned area1,area2;
-    word *map;
+    uint16_t *map;
     int32_t position;
     int tilex,tiley;
 
@@ -680,7 +680,7 @@ void DoorClosing (int door)
         }
     }
 
-    doorposition[door] = (word) position;
+    doorposition[door] = (uint16_t) position;
 }
 
 
@@ -731,9 +731,9 @@ void MoveDoors (void)
 =============================================================================
 */
 
-word pwallstate;
-word pwallpos;                  // amount a pushable wall has been moved (0-63)
-word pwallx,pwally;
+uint16_t pwallstate;
+uint16_t pwallpos;                  // amount a pushable wall has been moved (0-63)
+uint16_t pwallx,pwally;
 uint8_t pwalldir,pwalltile;
 int dirs[4][2]={{0,-1},{1,0},{0,1},{-1,0}};
 
@@ -800,7 +800,7 @@ void MovePWalls (void)
 
     oldblock = pwallstate/128;
 
-    pwallstate += (word)tics;
+    pwallstate += (uint16_t)tics;
 
     if (pwallstate/128 != oldblock)
     {

@@ -409,7 +409,7 @@ IN_ClearKeysDown(void)
 void
 IN_ReadControl(int player,ControlInfo *info)
 {
-    word        buttons;
+    uint16_t        buttons;
     int         dx,dy;
     Motion      mx,my;
 
@@ -548,9 +548,9 @@ void IN_Ack (void)
 //      button up.
 //
 ///////////////////////////////////////////////////////////////////////////
-boolean IN_UserInput(longword delay)
+boolean IN_UserInput(longuint16_t delay)
 {
-    longword    lasttime;
+    longuint16_t    lasttime;
 
     lasttime = GetTimeCount();
     IN_StartAck ();

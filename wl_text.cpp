@@ -30,7 +30,7 @@ TEXT FORMATTING COMMANDS
 #define BACKCOLOR       0x11
 
 
-#define WORDLIMIT       80
+#define uint16_tLIMIT       80
 #define FONTHEIGHT      10
 #define TOPMARGIN       16
 #define BOTTOMMARGIN    32
@@ -347,35 +347,35 @@ void HandleCtrls (void)
 /*
 =====================
 =
-= HandleWord
+= Handleuint16_t
 =
 =====================
 */
 
-void HandleWord (void)
+void Handleuint16_t (void)
 {
-    char    wword[WORDLIMIT];
-    int     wordindex;
-    word    wwidth,wheight,newpos;
+    char    wuint16_t[uint16_tLIMIT];
+    int     uint16_tindex;
+    uint16_t    wwidth,wheight,newpos;
 
 
     //
-    // copy the next word into [word]
+    // copy the next uint16_t into [uint16_t]
     //
-    wword[0] = *text++;
-    wordindex = 1;
+    wuint16_t[0] = *text++;
+    uint16_tindex = 1;
     while (*text>32)
     {
-        wword[wordindex] = *text++;
-        if (++wordindex == WORDLIMIT)
-            Quit ("PageLayout: Word limit exceeded");
+        wuint16_t[uint16_tindex] = *text++;
+        if (++uint16_tindex == uint16_tLIMIT)
+            Quit ("PageLayout: uint16_t limit exceeded");
     }
-    wword[wordindex] = 0;            // stick a null at end for C
+    wuint16_t[uint16_tindex] = 0;            // stick a null at end for C
 
     //
     // see if it fits on this line
     //
-    VW_MeasurePropString (wword,&wwidth,&wheight);
+    VW_MeasurePropString (wuint16_t,&wwidth,&wheight);
 
     while (px+wwidth > (int) rightmargin[rowon])
     {
@@ -388,7 +388,7 @@ void HandleWord (void)
     // print it
     //
     newpos = px+wwidth;
-    VWB_DrawPropString (wword);
+    VWB_DrawPropString (wuint16_t);
     px = newpos;
 
     //
@@ -406,7 +406,7 @@ void HandleWord (void)
 =
 = PageLayout
 =
-= Clears the screen, draws the pics on the page, and word wraps the text.
+= Clears the screen, draws the pics on the page, and uint16_t wraps the text.
 = Returns a pointer to the terminating command
 =
 =====================
@@ -473,7 +473,7 @@ void PageLayout (boolean shownumber)
             else if (ch <= 32)
                 HandleCtrls ();
             else
-                HandleWord ();
+                Handleuint16_t ();
 
     } while (!layoutdone);
 

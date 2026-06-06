@@ -132,7 +132,7 @@ void ReadConfig(void)
         //
         // valid config file
         //
-        word tmp;
+        uint16_t tmp;
         read(file,&tmp,sizeof(tmp));
         if(tmp!=0xfefa)
         {
@@ -250,7 +250,7 @@ void WriteConfig(void)
     const int file = open(configpath, O_CREAT | O_WRONLY | O_BINARY, 0644);
     if (file != -1)
     {
-        word tmp=0xfefa;
+        uint16_t tmp=0xfefa;
         write(file,&tmp,sizeof(tmp));
         write(file,Scores,sizeof(HighScore) * MaxScores);
 
@@ -404,12 +404,12 @@ boolean SaveTheGame(FILE *file,int x,int y)
     {
         for(int j=0;j<MAPSIZE;j++)
         {
-            word actnum;
+            uint16_t actnum;
             objtype *objptr=actorat[i][j];
             if(ISPOINTER(objptr))
-                actnum=0x8000 | (word)(objptr-objlist);
+                actnum=0x8000 | (uint16_t)(objptr-objlist);
             else
-                actnum=(word)(uintptr_t)objptr;
+                actnum=(uint16_t)(uintptr_t)objptr;
             fwrite(&actnum,sizeof(actnum),1,file);
             checksum = DoChecksum((uint8_t *)&actnum,sizeof(actnum),checksum);
         }
@@ -440,7 +440,7 @@ boolean SaveTheGame(FILE *file,int x,int y)
     fwrite(&nullobj,sizeof(nullobj),1,file);
 
     DiskFlopAnim(x,y);
-    word laststatobjnum=(word) (laststatobj-statobjlist);
+    uint16_t laststatobjnum=(uint16_t) (laststatobj-statobjlist);
     fwrite(&laststatobjnum,sizeof(laststatobjnum),1,file);
     checksum = DoChecksum((uint8_t *)&laststatobjnum,sizeof(laststatobjnum),checksum);
 
@@ -524,8 +524,8 @@ boolean LoadTheGame(FILE *file,int x,int y)
     {
         for(int j=0;j<MAPSIZE;j++)
         {
-            fread (&actnum,sizeof(word),1,file);
-            checksum = DoChecksum((uint8_t *) &actnum,sizeof(word),checksum);
+            fread (&actnum,sizeof(uint16_t),1,file);
+            checksum = DoChecksum((uint8_t *) &actnum,sizeof(uint16_t),checksum);
             if(actnum&0x8000)
                 actorat[i][j]=objlist+(actnum&0x7fff);
             else
@@ -555,7 +555,7 @@ boolean LoadTheGame(FILE *file,int x,int y)
     }
 
     DiskFlopAnim(x,y);
-    word laststatobjnum;
+    uint16_t laststatobjnum;
     fread (&laststatobjnum,sizeof(laststatobjnum),1,file);
     laststatobj=statobjlist+laststatobjnum;
     checksum = DoChecksum((uint8_t *)&laststatobjnum,sizeof(laststatobjnum),checksum);
@@ -592,7 +592,7 @@ boolean LoadTheGame(FILE *file,int x,int y)
 
     if (gamestate.secretcount)      // assign valid floorcodes under moved pushwalls
     {
-        word *map, *obj; word tile, sprite;
+        uint16_t *map, *obj; uint16_t tile, sprite;
         map = mapsegs[0]; obj = mapsegs[1];
         for (y=0;y<mapheight;y++)
             for (x=0;x<mapwidth;x++)
@@ -1217,7 +1217,7 @@ static void InitGame()
         if(SDL_GetWMInfo(&wmInfo) != -1)
         {
             HWND hwndSDL = wmInfo.window;
-            DWORD style = GetWindowLong(hwndSDL, GWL_STYLE) & ~WS_SYSMENU;
+            Duint16_t style = GetWindowLong(hwndSDL, GWL_STYLE) & ~WS_SYSMENU;
             SetWindowLong(hwndSDL, GWL_STYLE, style);
             SetWindowPos(hwndSDL, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
         }

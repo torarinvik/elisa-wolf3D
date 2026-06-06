@@ -81,7 +81,7 @@ int lastgamemusicoffset = 0;
 //===========================================================================
 
 
-void CenterWindow (word w, word h);
+void CenterWindow (uint16_t w, uint16_t h);
 void InitObjList (void);
 void RemoveObj (objtype * gone);
 void PollControls (void);
@@ -532,7 +532,7 @@ void PollControls (void)
 #define MAXX    320
 #define MAXY    160
 
-void CenterWindow (word w, word h)
+void CenterWindow (uint16_t w, uint16_t h)
 {
     US_DrawWindow (((MAXX / 8) - w) / 2, ((MAXY / 8) - h) / 2, w, h);
 }

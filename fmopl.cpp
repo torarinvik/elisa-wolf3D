@@ -1123,7 +1123,7 @@ INLINE void OPL_CALC_RH( OPL_CH *CH, unsigned int noise )
         /* Noise bit XOR'es phase by 0x100 */
         /* when noisebit = 0 pass the phase from calculation above */
         /* when noisebit = 1 phase ^= 0x100; */
-        /* in other words: phase ^= (noisebit<<8); */
+        /* in other uint16_ts: phase ^= (noisebit<<8); */
         if (noise)
             phase ^= 0x100;
 

@@ -37,13 +37,13 @@ loaded into the data segment
 
 typedef struct
 {
-    word bit0,bit1;       // 0-255 is a character, > is a pointer to a node
+    uint16_t bit0,bit1;       // 0-255 is a character, > is a pointer to a node
 } huffnode;
 
 
 typedef struct
 {
-    word RLEWtag;
+    uint16_t RLEWtag;
     int32_t headeroffsets[100];
 } mapfiletype;
 
@@ -61,12 +61,12 @@ static int32_t bufferseg[BUFFERSIZE/4];
 
 int     mapon;
 
-word    *mapsegs[MAPPLANES];
+uint16_t    *mapsegs[MAPPLANES];
 static maptype* mapheaderseg[NUMMAPS];
 uint8_t    *audiosegs[NUMSNDCHUNKS];
 uint8_t    *grsegs[NUMCHUNKS];
 
-word    RLEWtag;
+uint16_t    RLEWtag;
 
 int     numEpisodesMissing = 0;
 
@@ -227,7 +227,7 @@ static void CAL_HuffExpand(uint8_t *source, uint8_t *dest, int32_t length, huffn
 
     uint8_t val = *source++;
     uint8_t mask = 1;
-    word nodeval;
+    uint16_t nodeval;
     huffptr = headptr;
     while(1)
     {
@@ -269,11 +269,11 @@ static void CAL_HuffExpand(uint8_t *source, uint8_t *dest, int32_t length, huffn
 #define NEARTAG 0xa7
 #define FARTAG  0xa8
 
-void CAL_CarmackExpand (uint8_t *source, word *dest, int length)
+void CAL_CarmackExpand (uint8_t *source, uint16_t *dest, int length)
 {
-    word ch,chhigh,count,offset;
+    uint16_t ch,chhigh,count,offset;
     uint8_t *inptr;
-    word *copyptr, *outptr;
+    uint16_t *copyptr, *outptr;
 
     length/=2;
 
@@ -282,13 +282,13 @@ void CAL_CarmackExpand (uint8_t *source, word *dest, int length)
 
     while (length>0)
     {
-        ch = READWORD(inptr);
+        ch = READuint16_t(inptr);
         chhigh = ch>>8;
         if (chhigh == NEARTAG)
         {
             count = ch&0xff;
             if (!count)
-            {                               // have to insert a word containing the tag uint8_t
+            {                               // have to insert a uint16_t containing the tag uint8_t
                 ch |= *inptr++;
                 *outptr++ = ch;
                 length--;
@@ -307,14 +307,14 @@ void CAL_CarmackExpand (uint8_t *source, word *dest, int length)
         {
             count = ch&0xff;
             if (!count)
-            {                               // have to insert a word containing the tag uint8_t
+            {                               // have to insert a uint16_t containing the tag uint8_t
                 ch |= *inptr++;
                 *outptr++ = ch;
                 length --;
             }
             else
             {
-                offset = READWORD(inptr);
+                offset = READuint16_t(inptr);
                 copyptr = dest + offset;
                 length -= count;
                 if(length<0) return;
@@ -338,11 +338,11 @@ void CAL_CarmackExpand (uint8_t *source, word *dest, int length)
 ======================
 */
 
-int32_t CA_RLEWCompress (word *source, int32_t length, word *dest, word rlewtag)
+int32_t CA_RLEWCompress (uint16_t *source, int32_t length, uint16_t *dest, uint16_t rlewtag)
 {
-    word value,count;
+    uint16_t value,count;
     unsigned i;
-    word *start,*end;
+    uint16_t *start,*end;
 
     start = dest;
 
@@ -372,7 +372,7 @@ int32_t CA_RLEWCompress (word *source, int32_t length, word *dest, word rlewtag)
         else
         {
             //
-            // send word without compressing
+            // send uint16_t without compressing
             //
             for (i=1;i<=count;i++)
                 *dest++ = value;
@@ -393,10 +393,10 @@ int32_t CA_RLEWCompress (word *source, int32_t length, word *dest, word rlewtag)
 ======================
 */
 
-void CA_RLEWexpand (word *source, word *dest, int32_t length, word rlewtag)
+void CA_RLEWexpand (uint16_t *source, uint16_t *dest, int32_t length, uint16_t rlewtag)
 {
-    word value,count,i;
-    word *end=dest+length/2;
+    uint16_t value,count,i;
+    uint16_t *end=dest+length/2;
 
 //
 // expand it
@@ -606,7 +606,7 @@ void CAL_SetupMapFile (void)
 //
     for (i=0;i<MAPPLANES;i++)
     {
-        mapsegs[i]=(word *) malloc(maparea*2);
+        mapsegs[i]=(uint16_t *) malloc(maparea*2);
         CHECKMALLOCRESULT(mapsegs[i]);
     }
 }
@@ -762,8 +762,8 @@ void CA_CacheAdlibSoundChunk (int chunk)
     CHECKMALLOCRESULT(sound);
 
     uint8_t *ptr = (uint8_t *) bufferseg;
-    sound->common.length = READLONGWORD(ptr);
-    sound->common.priority = READWORD(ptr);
+    sound->common.length = READLONGuint16_t(ptr);
+    sound->common.priority = READuint16_t(ptr);
     sound->inst.mChar = *ptr++;
     sound->inst.cChar = *ptr++;
     sound->inst.mScale = *ptr++;
@@ -889,7 +889,7 @@ void CAL_ExpandGrChunk (int chunk, int32_t *source)
     else
     {
         //
-        // everything else has an explicit size longword
+        // everything else has an explicit size longuint16_t
         //
         expanded = *source++;
     }
@@ -1036,12 +1036,12 @@ void CA_CacheMap (int mapnum)
 {
     int32_t   pos,compressed;
     int       plane;
-    word     *dest;
+    uint16_t     *dest;
     memptr    bigbufferseg;
     unsigned  size;
-    word     *source;
+    uint16_t     *source;
 #ifdef CARMACIZED
-    word     *buffer2seg;
+    uint16_t     *buffer2seg;
     int32_t   expanded;
 #endif
 
@@ -1061,12 +1061,12 @@ void CA_CacheMap (int mapnum)
 
         lseek(maphandle,pos,SEEK_SET);
         if (compressed<=BUFFERSIZE)
-            source = (word *) bufferseg;
+            source = (uint16_t *) bufferseg;
         else
         {
             bigbufferseg=malloc(compressed);
             CHECKMALLOCRESULT(bigbufferseg);
-            source = (word *) bigbufferseg;
+            source = (uint16_t *) bigbufferseg;
         }
 
         read(maphandle,source,compressed);
@@ -1079,7 +1079,7 @@ void CA_CacheMap (int mapnum)
         //
         expanded = *source;
         source++;
-        buffer2seg = (word *) malloc(expanded);
+        buffer2seg = (uint16_t *) malloc(expanded);
         CHECKMALLOCRESULT(buffer2seg);
         CAL_CarmackExpand((uint8_t *) source, buffer2seg,expanded);
         CA_RLEWexpand(buffer2seg+1,dest,size,RLEWtag);

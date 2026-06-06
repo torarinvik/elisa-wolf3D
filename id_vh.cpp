@@ -93,14 +93,14 @@ void VL_MungePic (uint8_t *source, unsigned width, unsigned height)
     free(temp);
 }
 
-void VWL_MeasureString (const char *string, word *width, word *height, fontstruct *font)
+void VWL_MeasureString (const char *string, uint16_t *width, uint16_t *height, fontstruct *font)
 {
     *height = font->height;
     for (*width = 0;*string;string++)
         *width += font->width[*((uint8_t *)string)];   // proportional width
 }
 
-void VW_MeasurePropString (const char *string, word *width, word *height)
+void VW_MeasurePropString (const char *string, uint16_t *width, uint16_t *height)
 {
     VWL_MeasureString(string,width,height,(fontstruct *)grsegs[STARTFONT+fontnumber]);
 }

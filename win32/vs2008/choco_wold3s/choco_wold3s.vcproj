@@ -5,7 +5,7 @@
 	Name="choco_wold3d"
 	ProjectGUID="{C895AC6E-7364-4865-9609-7BE6CABD7841}"
 	RootNamespace="choco_wold3s"
-	Keyword="Win32Proj"
+	Keyuint16_t="Win32Proj"
 	TargetFrameworkVersion="196613"
 	>
 	<Platforms>

@@ -55,7 +55,7 @@
 #define STR_MISC3       "How many eyelets are on B.J.'s"
 #define STR_MISC4       "boots? (see page 2)"
 
-#define STR_MISC5       "The word \"minister\" appears in"
+#define STR_MISC5       "The uint16_t \"minister\" appears in"
 #define STR_MISC6       "what gray shape on page 2?"
 
 #define STR_MISC7       "How many bullets does B.J. have"

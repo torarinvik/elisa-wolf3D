@@ -128,7 +128,7 @@ typedef struct      {
                                     downleft,   down,   downright;
                     } KeyboardDef;
 typedef struct      {
-                        word        joyMinX,joyMinY,
+                        uint16_t        joyMinX,joyMinY,
                                     threshMinX,threshMinY,
                                     threshMaxX,threshMaxY,
                                     joyMaxX,joyMaxY,
@@ -154,13 +154,13 @@ extern           boolean    forcegrabmouse;
 extern  void        IN_Startup(void),IN_Shutdown(void);
 extern  void        IN_ClearKeysDown(void);
 extern  void        IN_ReadControl(int,ControlInfo *);
-extern  void        IN_GetJoyAbs(word joy,word *xp,word *yp);
-extern  void        IN_SetupJoy(word joy,word minx,word maxx,
-                                word miny,word maxy);
+extern  void        IN_GetJoyAbs(uint16_t joy,uint16_t *xp,uint16_t *yp);
+extern  void        IN_SetupJoy(uint16_t joy,uint16_t minx,uint16_t maxx,
+                                uint16_t miny,uint16_t maxy);
 extern  void        IN_StopDemo(void),IN_FreeDemoBuffer(void),
                     IN_Ack(void);
-extern  boolean     IN_UserInput(longword delay);
-extern  word        IN_GetJoyButtonsDB(word joy);
+extern  boolean     IN_UserInput(longuint16_t delay);
+extern  uint16_t        IN_GetJoyButtonsDB(uint16_t joy);
 extern  const char *IN_GetScanName(ScanCode);
 
 void    IN_WaitAndProcessEvents();

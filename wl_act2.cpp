@@ -850,8 +850,8 @@ statetype s_gretelshoot8        = {false,SPR_GRETEL_SHOOT1,10,NULL,NULL,&s_grete
 
 void SpawnStand (enemy_t which, int tilex, int tiley, int dir)
 {
-    word *map;
-    word tile;
+    uint16_t *map;
+    uint16_t tile;
 
     switch (which)
     {
@@ -1255,8 +1255,8 @@ statetype s_transshoot8         = {false,SPR_TRANS_SHOOT1,10,NULL,NULL,&s_transc
 
 void SpawnTrans (int tilex, int tiley)
 {
-    //        word *map;
-    //        word tile;
+    //        uint16_t *map;
+    //        uint16_t tile;
 
     if (SoundBlasterPresent && DigiMode != sds_Off)
         s_transdie01.tictime = 105;
@@ -3864,10 +3864,10 @@ void    A_StartDeathCam (objtype *ob)
         dist += 0x1000;
 
     } while (!CheckPosition (player));
-    plux = (word)(player->x >> UNSIGNEDSHIFT);                      // scale to fit in unsigned
-    pluy = (word)(player->y >> UNSIGNEDSHIFT);
-    player->tilex = (word)(player->x >> TILESHIFT);         // scale to tile values
-    player->tiley = (word)(player->y >> TILESHIFT);
+    plux = (uint16_t)(player->x >> UNSIGNEDSHIFT);                      // scale to fit in unsigned
+    pluy = (uint16_t)(player->y >> UNSIGNEDSHIFT);
+    player->tilex = (uint16_t)(player->x >> TILESHIFT);         // scale to tile values
+    player->tiley = (uint16_t)(player->y >> TILESHIFT);
 
     //
     // go back to the game

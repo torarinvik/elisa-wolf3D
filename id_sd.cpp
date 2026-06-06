@@ -38,22 +38,22 @@
 typedef struct
 {
     char RIFF[4];
-    longword filelenminus8;
+    longuint16_t filelenminus8;
     char WAVE[4];
     char fmt_[4];
-    longword formatlen;
-    word val0x0001;
-    word channels;
-    longword samplerate;
-    longword uint8_tspersec;
-    word uint8_tspersample;
-    word bitspersample;
+    longuint16_t formatlen;
+    uint16_t val0x0001;
+    uint16_t channels;
+    longuint16_t samplerate;
+    longuint16_t uint8_tspersec;
+    uint16_t uint8_tspersample;
+    uint16_t bitspersample;
 } headchunk;
 
 typedef struct
 {
     char chunkid[4];
-    longword chunklength;
+    longuint16_t chunklength;
 } wavechunk;
 
 typedef struct
@@ -83,12 +83,12 @@ static  boolean                 SD_Started;
 static  boolean                 nextsoundpos;
 static  soundnames              SoundNumber;
 static  soundnames              DigiNumber;
-static  word                    SoundPriority;
-static  word                    DigiPriority;
+static  uint16_t                    SoundPriority;
+static  uint16_t                    DigiPriority;
 static  int                     LeftPosition;
 static  int                     RightPosition;
 
-        word                    NumDigi;
+        uint16_t                    NumDigi;
 static  digiinfo               *DigiList;
 static  boolean                 DigiPlaying;
 
@@ -100,17 +100,17 @@ static  uint8_t * volatile         pcSound;
 //      AdLib variables
 static  uint8_t * volatile         alSound;
 static  uint8_t                    alBlock;
-static  longword                alLengthLeft;
-static  longword                alTimeCount;
+static  longuint16_t                alLengthLeft;
+static  longuint16_t                alTimeCount;
 static  Instrument              alZeroInst;
 
 //      Sequencer variables
 static  volatile boolean        sqActive;
-static  word                   *sqHack;
-static  word                   *sqHackPtr;
+static  uint16_t                   *sqHack;
+static  uint16_t                   *sqHackPtr;
 static  int                     sqHackLen;
 static  int                     sqHackSeqLen;
-static  longword                sqHackTime;
+static  longuint16_t                sqHackTime;
 
 
 static void SDL_SoundFinished(void)
@@ -122,7 +122,7 @@ static void SDL_SoundFinished(void)
 
 #ifdef NOTYET
 
-void SDL_turnOnPCSpeaker(word timerval);
+void SDL_turnOnPCSpeaker(uint16_t timerval);
 #pragma aux SDL_turnOnPCSpeaker = \
         "mov    al,0b6h" \
         "out    43h,al" \
@@ -201,9 +201,9 @@ void inline SDL_DoFast()
         // [adlib music and soundsource stuff removed...]
 
         TimerCount+=TimerDivisor;
-        if(*((word *)&TimerCount+1))
+        if(*((uint16_t *)&TimerCount+1))
         {
-                *((word *)&TimerCount+1)=0;
+                *((uint16_t *)&TimerCount+1)=0;
                 t0OldService();
         }
         else
@@ -258,9 +258,9 @@ void __interrupt SDL_t0SlowAsmService(void)
         SDL_DoFX();
 
         TimerCount+=TimerDivisor;
-        if(*((word *)&TimerCount+1))
+        if(*((uint16_t *)&TimerCount+1))
         {
-                *((word *)&TimerCount+1)=0;
+                *((uint16_t *)&TimerCount+1)=0;
                 t0OldService();
         }
         else
@@ -278,7 +278,7 @@ void SDL_IndicatePC(boolean ind)
 //
 ///////////////////////////////////////////////////////////////////////////
 static void
-SDL_SetTimer0(word speed)
+SDL_SetTimer0(uint16_t speed)
 {
 #ifndef TPROF   // If using Borland's profiling, don't screw with the timer
 //      _asm pushfd
@@ -307,7 +307,7 @@ SDL_SetTimer0(word speed)
 //
 ///////////////////////////////////////////////////////////////////////////
 static void
-SDL_SetIntsPerSec(word ints)
+SDL_SetIntsPerSec(uint16_t ints)
 {
         TimerRate = ints;
         SDL_SetTimer0(1192030 / ints);
@@ -316,7 +316,7 @@ SDL_SetIntsPerSec(word ints)
 static void
 SDL_SetTimerSpeed(void)
 {
-        word    rate;
+        uint16_t    rate;
         void (_interrupt *isr)(void);
 
         if ((DigiMode == sds_PC) && DigiPlaying)
@@ -357,7 +357,7 @@ void
 #else
 static void
 #endif
-SDL_PCPlaySample(uint8_t *data,longword len,boolean inIRQ)
+SDL_PCPlaySample(uint8_t *data,longuint16_t len,boolean inIRQ)
 {
         if(!inIRQ)
         {
@@ -556,8 +556,8 @@ void SD_PrepareSound(int which)
         Quit("Unable to allocate wave buffer for sound %i!\n", which);
 
     headchunk head = {{'R','I','F','F'}, 0, {'W','A','V','E'},
-        {'f','m','t',' '}, 0x10, 0x0001, 1, (longword)param_samplerate, (longword)(param_samplerate*2), 2, 16};
-    wavechunk dhead = {{'d', 'a', 't', 'a'}, (longword)(destsamples*2)};
+        {'f','m','t',' '}, 0x10, 0x0001, 1, (longuint16_t)param_samplerate, (longuint16_t)(param_samplerate*2), 2, 16};
+    wavechunk dhead = {{'d', 'a', 't', 'a'}, (longuint16_t)(destsamples*2)};
     head.filelenminus8 = sizeof(head) + destsamples*2;  // (sizeof(dhead)-8 = 0)
     memcpy(wavebuffer, &head, sizeof(head));
     memcpy(wavebuffer+sizeof(head), &dhead, sizeof(dhead));
@@ -579,7 +579,7 @@ void SD_PrepareSound(int which)
         sizeof(headchunk) + sizeof(wavechunk) + destsamples * 2), 1);
 }
 
-int SD_PlayDigitized(word which,int leftpos,int rightpos)
+int SD_PlayDigitized(uint16_t which,int leftpos,int rightpos)
 {
     if (!DigiMode)
         return 0;
@@ -646,8 +646,8 @@ void
 SDL_SetupDigi(void)
 {
     // Correct padding enforced by PM_Startup()
-    word *soundInfoPage = (word *) (void *) PM_GetPage(ChunksInFile-1);
-    NumDigi = (word) PM_GetPageSize(ChunksInFile - 1) / 4;
+    uint16_t *soundInfoPage = (uint16_t *) (void *) PM_GetPage(ChunksInFile-1);
+    NumDigi = (uint16_t) PM_GetPageSize(ChunksInFile - 1) / 4;
 
     DigiList = (digiinfo *) malloc(NumDigi * sizeof(digiinfo));
     int i;
@@ -881,7 +881,7 @@ boolean
 SD_SetSoundMode(SDMode mode)
 {
     boolean result = false;
-    word    tableoffset;
+    uint16_t    tableoffset;
 
     SD_StopSound();
 
@@ -955,7 +955,7 @@ SD_SetMusicMode(SMMode mode)
 int numreadysamples = 0;
 uint8_t *curAlSound = 0;
 uint8_t *curAlSoundPtr = 0;
-longword curAlLengthLeft = 0;
+longuint16_t curAlLengthLeft = 0;
 int soundTimeCounter = 5;
 int samplesPerMusicTick;
 
@@ -1220,7 +1220,7 @@ SD_PlaySound(soundnames sound)
 //              no sound is playing
 //
 ///////////////////////////////////////////////////////////////////////////
-word
+uint16_t
 SD_SoundPlaying(void)
 {
     boolean result = false;
@@ -1299,7 +1299,7 @@ SD_MusicOn(void)
 int
 SD_MusicOff(void)
 {
-    word    i;
+    uint16_t    i;
 
     sqActive = false;
     switch (MusicMode)
@@ -1327,7 +1327,7 @@ SD_StartMusic(int chunk)
     if (MusicMode == smm_AdLib)
     {
         int32_t chunkLen = CA_CacheAudioChunk(chunk);
-        sqHack = (word *)(void *) audiosegs[chunk];     // alignment is correct
+        sqHack = (uint16_t *)(void *) audiosegs[chunk];     // alignment is correct
         if(*sqHack == 0) sqHackLen = sqHackSeqLen = chunkLen;
         else sqHackLen = sqHackSeqLen = *sqHack++;
         sqHackPtr = sqHack;
@@ -1345,7 +1345,7 @@ SD_ContinueMusic(int chunk, int startoffs)
     if (MusicMode == smm_AdLib)
     {
         int32_t chunkLen = CA_CacheAudioChunk(chunk);
-        sqHack = (word *)(void *) audiosegs[chunk];     // alignment is correct
+        sqHack = (uint16_t *)(void *) audiosegs[chunk];     // alignment is correct
         if(*sqHack == 0) sqHackLen = sqHackSeqLen = chunkLen;
         else sqHackLen = sqHackSeqLen = *sqHack++;
         sqHackPtr = sqHack;

@@ -30,8 +30,8 @@ typedef enum
 
 typedef struct
 {
-    longword        length;
-    word            priority;
+    longuint16_t        length;
+    uint16_t            priority;
 } SoundCommon;
 
 #define ORIG_SOUNDCOMMON_SIZE 6
@@ -97,8 +97,8 @@ typedef struct
 
 typedef struct
 {
-    word    length;
-    word    values[1];
+    uint16_t    length;
+    uint16_t    values[1];
 } MusicGroup;
 
 typedef struct
@@ -146,11 +146,11 @@ extern  int     SD_MusicOff(void);
 extern  boolean SD_MusicPlaying(void);
 extern  boolean SD_SetSoundMode(SDMode mode);
 extern  boolean SD_SetMusicMode(SMMode mode);
-extern  word    SD_SoundPlaying(void);
+extern  uint16_t    SD_SoundPlaying(void);
 
 extern  void    SD_SetDigiDevice(SDSMode);
 extern  void    SD_PrepareSound(int which);
-extern  int     SD_PlayDigitized(word which,int leftpos,int rightpos);
+extern  int     SD_PlayDigitized(uint16_t which,int leftpos,int rightpos);
 extern  void    SD_StopDigitized(void);
 
 #endif

@@ -1024,7 +1024,7 @@ DrawHighScores (void)
     char buffer1[5];
 #endif
 #endif
-    word i, w, h;
+    uint16_t i, w, h;
     HighScore *s;
 
 #ifndef SPEAR
@@ -1181,9 +1181,9 @@ DrawHighScores (void)
 */
 
 void
-CheckHighScore (int32_t score, word other)
+CheckHighScore (int32_t score, uint16_t other)
 {
-    word i, j;
+    uint16_t i, j;
     int n;
     HighScore myscore;
 
@@ -1364,7 +1364,7 @@ char bossstrs[4][24] = {
     "TRANS GROSSE"
 };
 
-char WordStr[5][20] = {
+char uint16_tStr[5][20] = {
     "New Game",
     "Sound...F4",
     "Control...F6",
@@ -1372,7 +1372,7 @@ char WordStr[5][20] = {
     "Quit...F10"
 };
 
-char WordCorrect[5][2] = { "3", "4", "4", "5", "5" };
+char uint16_tCorrect[5][2] = { "3", "4", "4", "5", "5" };
 
 char MemberStr[10][40] = {
     STR_COPY15,
@@ -1473,9 +1473,9 @@ CopyProtection (void)
     int enemypicked[4] = { 0, 0, 0, 0 };
     int bosses[4] = { BOSSPIC1PIC, BOSSPIC2PIC, BOSSPIC3PIC, BOSSPIC4PIC };
     int whichpicked[4] = { 0, 0, 0, 0 };
-    int whichone, quiztype, whichmem, whichword;
+    int whichone, quiztype, whichmem, whichuint16_t;
     int memberpicked[5] = { 0, 0, 0, 0, 0 };
-    int wordpicked[5] = { 0, 0, 0, 0, 0 };
+    int uint16_tpicked[5] = { 0, 0, 0, 0, 0 };
 
     char inputbuffer[20];
     char message[80];
@@ -1569,14 +1569,14 @@ CopyProtection (void)
             //
             case checkmanual:
             {
-                while (wordpicked[whichword = US_RndT () % 5]);
-                wordpicked[whichword] = 1;
+                while (uint16_tpicked[whichuint16_t = US_RndT () % 5]);
+                uint16_tpicked[whichuint16_t] = 1;
                 US_CPrint (STR_CHECKMAN);
                 SETFONTCOLOR (PRINTCOLOR, 15);
                 PrintY += 25;
                 US_CPrint (STR_MAN1);
                 US_CPrint (STR_MAN2);
-                sprintf(message, STR_MAN3 " \"%s\" " STR_MAN4, WordStr[whichword]);
+                sprintf(message, STR_MAN3 " \"%s\" " STR_MAN4, uint16_tStr[whichuint16_t]);
                 US_CPrint (message);
                 VW_UpdateScreen ();
                 VW_FadeIn ();
@@ -1588,7 +1588,7 @@ CopyProtection (void)
                 PrintY = TYPEBOX_Y;
                 US_LineInput (PrintX, PrintY, inputbuffer, 0, true, 6, 100);
 
-                match = 1 - (strcasecmp (inputbuffer, WordCorrect[whichword]) != 0);
+                match = 1 - (strcasecmp (inputbuffer, uint16_tCorrect[whichuint16_t]) != 0);
                 match += BackDoor (inputbuffer);
                 break;
             }

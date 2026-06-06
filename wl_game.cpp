@@ -165,7 +165,7 @@ SetSoundLoc(fixed gx,fixed gy)
 =
 ==========================
 */
-void PlaySoundLocGlobal(word s,fixed gx,fixed gy)
+void PlaySoundLocGlobal(uint16_t s,fixed gx,fixed gy)
 {
     SetSoundLoc(gx, gy);
     SD_PositionSound(leftchannel, rightchannel);
@@ -216,7 +216,7 @@ static void ScanInfoPlane(void)
 {
     unsigned x,y;
     int      tile;
-    word     *start;
+    uint16_t     *start;
 
     start = mapsegs[1];
     for (y=0;y<mapheight;y++)
@@ -621,8 +621,8 @@ static void ScanInfoPlane(void)
 void SetupGameLevel (void)
 {
     int  x,y;
-    word *map;
-    word tile;
+    uint16_t *map;
+    uint16_t tile;
 
 
     if (!loadedgame)
@@ -1156,7 +1156,7 @@ void PlayDemo (int demonumber)
     NewGame (1,0);
     gamestate.mapon = *demoptr++;
     gamestate.difficulty = gd_hard;
-    length = READWORD(*(uint8_t **)&demoptr);
+    length = READuint16_t(*(uint8_t **)&demoptr);
     // TODO: Seems like the original demo format supports 16 MB demos
     //       But T_DEM00 and T_DEM01 of Wolf have a 0xd8 as third length size...
     demoptr++;

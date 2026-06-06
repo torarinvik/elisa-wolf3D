@@ -74,21 +74,21 @@ int     lasttexture;
 // ray tracing variables
 //
 short    focaltx,focalty,viewtx,viewty;
-longword xpartialup,xpartialdown,ypartialup,ypartialdown;
+longuint16_t xpartialup,xpartialdown,ypartialup,ypartialdown;
 
 short   midangle,angle;
 
-word    tilehit;
+uint16_t    tilehit;
 int     pixx;
 
 short   xtile,ytile;
 short   xtilestep,ytilestep;
 int32_t    xintercept,yintercept;
-word    xstep,ystep;
-word    xspot,yspot;
+uint16_t    xstep,ystep;
+uint16_t    xspot,yspot;
 int     texdelta;
 
-word horizwall[MAXWALLTILES],vertwall[MAXWALLTILES];
+uint16_t horizwall[MAXWALLTILES],vertwall[MAXWALLTILES];
 
 
 /*
@@ -160,12 +160,12 @@ void TransformActor (objtype *ob)
         return;
     }
 
-    ob->viewx = (word)(centerx + ny*scale/nx);
+    ob->viewx = (uint16_t)(centerx + ny*scale/nx);
 
 //
 // calculate height (heightnumerator/(nx>>8))
 //
-    ob->viewheight = (word)(heightnumerator/(nx>>8));
+    ob->viewheight = (uint16_t)(heightnumerator/(nx>>8));
 }
 
 //==========================================================================
@@ -675,7 +675,7 @@ void ScaleShape (int xcenter, int shapenum, unsigned height, uint32_t flags)
     t_compshape *shape;
     unsigned scale,pixheight;
     unsigned starty,endy;
-    word *cmdptr;
+    uint16_t *cmdptr;
     uint8_t *cline;
     uint8_t *line;
     uint8_t *vmem;
@@ -696,7 +696,7 @@ void ScaleShape (int xcenter, int shapenum, unsigned height, uint32_t flags)
     actx=xcenter-scale;
     upperedge=viewheight/2-scale;
 
-    cmdptr=(word *) shape->dataofs;
+    cmdptr=(uint16_t *) shape->dataofs;
 
     for(i=shape->leftpix,pixcnt=i*pixheight,rpix=(pixcnt>>6)+actx;i<=shape->rightpix;i++,cmdptr++)
     {
@@ -723,11 +723,11 @@ void ScaleShape (int xcenter, int shapenum, unsigned height, uint32_t flags)
                 if(wallheight[lpix]<=(int)height)
                 {
                     line=cline;
-                    while((endy = READWORD(line)) != 0)
+                    while((endy = READuint16_t(line)) != 0)
                     {
                         endy >>= 1;
-                        newstart = READWORD(line);
-                        starty = READWORD(line) >> 1;
+                        newstart = READuint16_t(line);
+                        starty = READuint16_t(line) >> 1;
                         j=starty;
                         ycnt=j*pixheight;
                         screndy=(ycnt>>6)+upperedge;
@@ -773,7 +773,7 @@ void SimpleScaleShape (int xcenter, int shapenum, unsigned height)
     t_compshape   *shape;
     unsigned scale,pixheight;
     unsigned starty,endy;
-    word *cmdptr;
+    uint16_t *cmdptr;
     uint8_t *cline;
     uint8_t *line;
     int actx,i,upperedge;
@@ -806,11 +806,11 @@ void SimpleScaleShape (int xcenter, int shapenum, unsigned height)
             while(lpix<rpix)
             {
                 line=cline;
-                while((endy = READWORD(line)) != 0)
+                while((endy = READuint16_t(line)) != 0)
                 {
                     endy >>= 1;
-                    newstart = READWORD(line);
-                    starty = READWORD(line) >> 1;
+                    newstart = READuint16_t(line);
+                    starty = READuint16_t(line) >> 1;
                     j=starty;
                     ycnt=j*pixheight;
                     screndy=(ycnt>>6)+upperedge;
@@ -1067,7 +1067,7 @@ void CalcTics (void)
 void AsmRefresh()
 {
     int32_t xstep,ystep;
-    longword xpartial,ypartial;
+    longuint16_t xpartial,ypartial;
     boolean playerInPushwallBackTile = tilemap[focaltx][focalty] == 64;
 
     for(pixx=0;pixx<viewwidth;pixx++)
@@ -1113,10 +1113,10 @@ void AsmRefresh()
         }
         yintercept=FixedMul(ystep,xpartial)+viewy;
         xtile=focaltx+xtilestep;
-        xspot=(word)((xtile<<mapshift)+((uint32_t)yintercept>>16));
+        xspot=(uint16_t)((xtile<<mapshift)+((uint32_t)yintercept>>16));
         xintercept=FixedMul(xstep,ypartial)+viewx;
         ytile=focalty+ytilestep;
-        yspot=(word)((((uint32_t)xintercept>>16)<<mapshift)+ytile);
+        yspot=(uint16_t)((((uint32_t)xintercept>>16)<<mapshift)+ytile);
         texdelta=0;
 
         // Special treatment when player is in back tile of pushwall
@@ -1163,7 +1163,7 @@ void AsmRefresh()
             if(ytilestep==-1 && (yintercept>>16)<=ytile) goto horizentry;
             if(ytilestep==1 && (yintercept>>16)>=ytile) goto horizentry;
 vertentry:
-            if((uint32_t)yintercept>mapheight*65536-1 || (word)xtile>=mapwidth)
+            if((uint32_t)yintercept>mapheight*65536-1 || (uint16_t)xtile>=mapwidth)
             {
                 if(xtile<0) xintercept=0, xtile=0;
                 else if(xtile>=mapwidth) xintercept=mapwidth<<TILESHIFT, xtile=mapwidth-1;
@@ -1184,7 +1184,7 @@ vertentry:
                     int32_t yintbuf=yintercept+(ystep>>1);
                     if((yintbuf>>16)!=(yintercept>>16))
                         goto passvert;
-                    if((word)yintbuf<doorposition[tilehit&0x7f])
+                    if((uint16_t)yintbuf<doorposition[tilehit&0x7f])
                         goto passvert;
                     yintercept=yintbuf;
                     xintercept=(xtile<<TILESHIFT)|0x8000;
@@ -1240,13 +1240,13 @@ vertentry:
                         {
                             int pwallposi = pwallpos;
                             if(pwalldir==di_north) pwallposi = 64-pwallpos;
-                            if(pwalldir==di_south && (word)yintercept<(pwallposi<<10)
-                                || pwalldir==di_north && (word)yintercept>(pwallposi<<10))
+                            if(pwalldir==di_south && (uint16_t)yintercept<(pwallposi<<10)
+                                || pwalldir==di_north && (uint16_t)yintercept>(pwallposi<<10))
                             {
                                 if(((uint32_t)yintercept>>16)==pwally && xtile==pwallx)
                                 {
-                                    if(pwalldir==di_south && (int32_t)((word)yintercept)+ystep<(pwallposi<<10)
-                                            || pwalldir==di_north && (int32_t)((word)yintercept)+ystep>(pwallposi<<10))
+                                    if(pwalldir==di_south && (int32_t)((uint16_t)yintercept)+ystep<(pwallposi<<10)
+                                            || pwalldir==di_north && (int32_t)((uint16_t)yintercept)+ystep>(pwallposi<<10))
                                         goto passvert;
 
                                     if(pwalldir==di_south)
@@ -1279,8 +1279,8 @@ vertentry:
                                 }
                                 else
                                 {
-                                    if(pwalldir==di_south && (int32_t)((word)yintercept)+ystep>(pwallposi<<10)
-                                            || pwalldir==di_north && (int32_t)((word)yintercept)+ystep<(pwallposi<<10))
+                                    if(pwalldir==di_south && (int32_t)((uint16_t)yintercept)+ystep>(pwallposi<<10)
+                                            || pwalldir==di_north && (int32_t)((uint16_t)yintercept)+ystep<(pwallposi<<10))
                                         goto passvert;
 
                                     if(pwalldir==di_south)
@@ -1308,7 +1308,7 @@ passvert:
             *((uint8_t *)spotvis+xspot)=1;
             xtile+=xtilestep;
             yintercept+=ystep;
-            xspot=(word)((xtile<<mapshift)+((uint32_t)yintercept>>16));
+            xspot=(uint16_t)((xtile<<mapshift)+((uint32_t)yintercept>>16));
         }
         while(1);
         continue;
@@ -1318,7 +1318,7 @@ passvert:
             if(xtilestep==-1 && (xintercept>>16)<=xtile) goto vertentry;
             if(xtilestep==1 && (xintercept>>16)>=xtile) goto vertentry;
 horizentry:
-            if((uint32_t)xintercept>mapwidth*65536-1 || (word)ytile>=mapheight)
+            if((uint32_t)xintercept>mapwidth*65536-1 || (uint16_t)ytile>=mapheight)
             {
                 if(ytile<0) yintercept=0, ytile=0;
                 else if(ytile>=mapheight) yintercept=mapheight<<TILESHIFT, ytile=mapheight-1;
@@ -1339,7 +1339,7 @@ horizentry:
                     int32_t xintbuf=xintercept+(xstep>>1);
                     if((xintbuf>>16)!=(xintercept>>16))
                         goto passhoriz;
-                    if((word)xintbuf<doorposition[tilehit&0x7f])
+                    if((uint16_t)xintbuf<doorposition[tilehit&0x7f])
                         goto passhoriz;
                     xintercept=xintbuf;
                     yintercept=(ytile<<TILESHIFT)+0x8000;
@@ -1395,13 +1395,13 @@ horizentry:
                         {
                             int pwallposi = pwallpos;
                             if(pwalldir==di_west) pwallposi = 64-pwallpos;
-                            if(pwalldir==di_east && (word)xintercept<(pwallposi<<10)
-                                    || pwalldir==di_west && (word)xintercept>(pwallposi<<10))
+                            if(pwalldir==di_east && (uint16_t)xintercept<(pwallposi<<10)
+                                    || pwalldir==di_west && (uint16_t)xintercept>(pwallposi<<10))
                             {
                                 if(((uint32_t)xintercept>>16)==pwallx && ytile==pwally)
                                 {
-                                    if(pwalldir==di_east && (int32_t)((word)xintercept)+xstep<(pwallposi<<10)
-                                            || pwalldir==di_west && (int32_t)((word)xintercept)+xstep>(pwallposi<<10))
+                                    if(pwalldir==di_east && (int32_t)((uint16_t)xintercept)+xstep<(pwallposi<<10)
+                                            || pwalldir==di_west && (int32_t)((uint16_t)xintercept)+xstep>(pwallposi<<10))
                                         goto passhoriz;
 
                                     if(pwalldir==di_east)
@@ -1434,8 +1434,8 @@ horizentry:
                                 }
                                 else
                                 {
-                                    if(pwalldir==di_east && (int32_t)((word)xintercept)+xstep>(pwallposi<<10)
-                                            || pwalldir==di_west && (int32_t)((word)xintercept)+xstep<(pwallposi<<10))
+                                    if(pwalldir==di_east && (int32_t)((uint16_t)xintercept)+xstep>(pwallposi<<10)
+                                            || pwalldir==di_west && (int32_t)((uint16_t)xintercept)+xstep<(pwallposi<<10))
                                         goto passhoriz;
 
                                     if(pwalldir==di_east)
@@ -1463,7 +1463,7 @@ passhoriz:
             *((uint8_t *)spotvis+yspot)=1;
             ytile+=ytilestep;
             xintercept+=xstep;
-            yspot=(word)((((uint32_t)xintercept>>16)<<mapshift)+ytile);
+            yspot=(uint16_t)((((uint32_t)xintercept>>16)<<mapshift)+ytile);
         }
         while(1);
     }

@@ -55,9 +55,9 @@
 #endif
 
 
-typedef uint16_t word;
+typedef uint16_t uint16_t;
 typedef int32_t fixed;
-typedef uint32_t longword;
+typedef uint32_t longuint16_t;
 // Win32
 #ifndef _WIN32
 typedef int8_t boolean;
@@ -756,11 +756,11 @@ typedef struct objstruct
     dirtype     dir;
 
     fixed       x,y;
-    word        tilex,tiley;
+    uint16_t        tilex,tiley;
     uint8_t        areanumber;
 
     short       viewx;
-    word        viewheight;
+    uint16_t        viewheight;
     fixed       transx,transy;      // in global coord
 
     short       angle;
@@ -857,7 +857,7 @@ typedef enum
 } exit_t;
 
 
-extern word *mapsegs[MAPPLANES];
+extern uint16_t *mapsegs[MAPPLANES];
 extern int mapon;
 
 /*
@@ -952,7 +952,7 @@ extern  boolean         spearflag;
 // JAB
 #define PlaySoundLocTile(s,tx,ty)       PlaySoundLocGlobal(s,(((int32_t)(tx) << TILESHIFT) + (1L << (TILESHIFT - 1))),(((int32_t)ty << TILESHIFT) + (1L << (TILESHIFT - 1))))
 #define PlaySoundLocActor(s,ob)         PlaySoundLocGlobal(s,(ob)->x,(ob)->y)
-void    PlaySoundLocGlobal(word s,fixed gx,fixed gy);
+void    PlaySoundLocGlobal(uint16_t s,fixed gx,fixed gy);
 void UpdateSoundLoc(void);
 
 
@@ -1015,7 +1015,7 @@ void    InitActorList (void);
 void    GetNewActor (void);
 void    PlayLoop (void);
 
-void    CenterWindow(word w,word h);
+void    CenterWindow(uint16_t w,uint16_t h);
 
 void    InitRedShifts (void);
 void    FinishPaletteShifts (void);
@@ -1048,7 +1048,7 @@ extern  int         singlestep, extravbls;
 void IntroScreen (void);
 void PG13(void);
 void DrawHighScores(void);
-void CheckHighScore (int32_t score,word other);
+void CheckHighScore (int32_t score,uint16_t other);
 void Victory (void);
 void LevelCompleted (void);
 void ClearSplitVWB (void);
@@ -1082,7 +1082,7 @@ extern  int32_t finetangent[FINEANGLES/4];
 extern  fixed sintable[];
 extern  fixed *costable;
 extern  int *wallheight;
-extern  word horizwall[],vertwall[];
+extern  uint16_t horizwall[],vertwall[];
 extern  int32_t    lasttimecount;
 extern  int32_t    frameon;
 
@@ -1098,8 +1098,8 @@ void    CalcTics (void);
 
 typedef struct
 {
-    word leftpix,rightpix;
-    word dataofs[64];
+    uint16_t leftpix,rightpix;
+    uint16_t dataofs[64];
 // table data after dataofs[rightpix-leftpix+1]
 } t_compshape;
 
@@ -1142,7 +1142,7 @@ boolean CheckSight (objtype *ob);
 
 extern  short    anglefrac;
 extern  int      facecount, facetimes;
-extern  word     plux,pluy;         // player coordinates scaled to unsigned
+extern  uint16_t     plux,pluy;         // player coordinates scaled to unsigned
 extern  int32_t  thrustspeed;
 extern  objtype  *LastAttacker;
 
@@ -1184,15 +1184,15 @@ extern  doorobj_t doorobjlist[MAXDOORS];
 extern  doorobj_t *lastdoorobj;
 extern  short     doornum;
 
-extern  word      doorposition[MAXDOORS];
+extern  uint16_t      doorposition[MAXDOORS];
 
 extern  uint8_t      areaconnect[NUMAREAS][NUMAREAS];
 
 extern  boolean   areabyplayer[NUMAREAS];
 
-extern word     pwallstate;
-extern word     pwallpos;        // amount a pushable wall has been moved (0-63)
-extern word     pwallx,pwally;
+extern uint16_t     pwallstate;
+extern uint16_t     pwallpos;        // amount a pushable wall has been moved (0-63)
+extern uint16_t     pwallx,pwally;
 extern uint8_t     pwalldir,pwalltile;
 
 
@@ -1371,16 +1371,16 @@ static inline fixed FixedMul(fixed a, fixed b)
 #define lengthof(x) (sizeof(x) / sizeof(*(x)))
 #define endof(x)    ((x) + lengthof(x))
 
-static inline word READWORD(uint8_t *&ptr)
+static inline uint16_t READuint16_t(uint8_t *&ptr)
 {
-    word val = ptr[0] | ptr[1] << 8;
+    uint16_t val = ptr[0] | ptr[1] << 8;
     ptr += 2;
     return val;
 }
 
-static inline longword READLONGWORD(uint8_t *&ptr)
+static inline longuint16_t READLONGuint16_t(uint8_t *&ptr)
 {
-    longword val = ptr[0] | ptr[1] << 8 | ptr[2] << 16 | ptr[3] << 24;
+    longuint16_t val = ptr[0] | ptr[1] << 8 | ptr[2] << 16 | ptr[3] << 24;
     ptr += 4;
     return val;
 }

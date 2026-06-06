@@ -29,15 +29,15 @@
 #endif
 
 //  Global variables
-        word        PrintX,PrintY;
-        word        WindowX,WindowY,WindowW,WindowH;
+        uint16_t        PrintX,PrintY;
+        uint16_t        WindowX,WindowY,WindowW,WindowH;
 
 //  Internal variables
 #define ConfigVersion   1
 
 static  boolean     US_Started;
 
-        void        (*USL_MeasureString)(const char *,word *,word *) = VW_MeasurePropString;
+        void        (*USL_MeasureString)(const char *,uint16_t *,uint16_t *) = VW_MeasurePropString;
         void        (*USL_DrawString)(const char *) = VWB_DrawPropString;
 
         SaveGame    Games[MaxSaveGames];
@@ -119,7 +119,7 @@ US_Shutdown(void)
 //
 ///////////////////////////////////////////////////////////////////////////
 void
-US_SetPrintRoutines(void (*measure)(const char *,word *,word *),
+US_SetPrintRoutines(void (*measure)(const char *,uint16_t *,uint16_t *),
     void (*print)(const char *))
 {
     USL_MeasureString = measure;
@@ -139,7 +139,7 @@ US_Print(const char *sorg)
     char *sstart = strdup(sorg);
     char *s = sstart;
     char *se;
-    word w,h;
+    uint16_t w,h;
 
     while (*s)
     {
@@ -174,7 +174,7 @@ US_Print(const char *sorg)
 //
 ///////////////////////////////////////////////////////////////////////////
 void
-US_PrintUnsigned(longword n)
+US_PrintUnsigned(longuint16_t n)
 {
     char    buffer[32];
     sprintf(buffer, "%lu", n);
@@ -203,7 +203,7 @@ US_PrintSigned(int32_t n)
 void
 USL_PrintInCenter(const char *s,Rect r)
 {
-    word    w,h,
+    uint16_t    w,h,
             rw,rh;
 
     USL_MeasureString(s,&w,&h);
@@ -242,7 +242,7 @@ US_PrintCentered(const char *s)
 void
 US_CPrintLine(const char *s)
 {
-    word    w,h;
+    uint16_t    w,h;
 
     USL_MeasureString(s,&w,&h);
 
@@ -345,10 +345,10 @@ US_ClearWindow(void)
 //
 ///////////////////////////////////////////////////////////////////////////
 void
-US_DrawWindow(word x,word y,word w,word h)
+US_DrawWindow(uint16_t x,uint16_t y,uint16_t w,uint16_t h)
 {
    
-    word    i,
+    uint16_t    i,
             sx,sy,sw,sh;
 
     WindowX = x * 8;
@@ -419,12 +419,12 @@ US_RestoreWindow(WindowRec *win)
 //
 ///////////////////////////////////////////////////////////////////////////
 static void
-USL_XORICursor(int x,int y,const char *s,word cursor)
+USL_XORICursor(int x,int y,const char *s,uint16_t cursor)
 {
     static  boolean status;     // VGA doesn't XOR...
     char    buf[MaxString];
     int     temp;
-    word    w,h;
+    uint16_t    w,h;
 
     strcpy(buf,s);
     buf[cursor] = '\0';
@@ -482,10 +482,10 @@ US_LineInput(int x,int y,char *buf,const char *def,boolean escok,
     char        c;
     char        s[MaxString],olds[MaxString];
     int         cursor,len;
-    word        i,
+    uint16_t        i,
                 w,h,
                 temp;
-    longword    curtime, lasttime, lastdirtime, lastbuttontime, lastdirmovetime;
+    longuint16_t    curtime, lasttime, lastdirtime, lastbuttontime, lastdirmovetime;
     ControlInfo ci;
     Direction   lastdir = dir_None;
 
