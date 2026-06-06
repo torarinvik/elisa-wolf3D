@@ -9,3 +9,5 @@ xcuserdata
 Debug
 Release
 Backup
+/build
+/WOLF3D
