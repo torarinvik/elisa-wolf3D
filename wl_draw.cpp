@@ -30,7 +30,7 @@ unsigned vbufPitch = 0;
 
 int32_t    lasttimecount;
 int32_t    frameon;
-boolean fpscounter;
+int8_t fpscounter;
 
 int fps_frames=0, fps_time=0, fps=0;
 
@@ -191,7 +191,7 @@ void TransformActor (objtype *ob)
 ========================
 */
 
-boolean TransformTile (int tx, int ty, short *dispx, short *dispheight)
+int8_t TransformTile (int tx, int ty, short *dispx, short *dispheight)
 {
     uint32_t gx,gy,gxt,gyt,nx,ny;
 
@@ -1068,7 +1068,7 @@ void AsmRefresh()
 {
     int32_t xstep,ystep;
     longuint16_t xpartial,ypartial;
-    boolean playerInPushwallBackTile = tilemap[focaltx][focalty] == 64;
+    int8_t playerInPushwallBackTile = tilemap[focaltx][focalty] == 64;
 
     for(pixx=0;pixx<viewwidth;pixx++)
     {
@@ -1498,8 +1498,8 @@ void CalcViewVariables()
     viewsin = sintable[viewangle];
     viewcos = costable[viewangle];
     //printf("%d\n",viewcos);
-    viewx = player->x - uint32_tMul(focallength,viewcos);
-    viewy = player->y + uint32_tMul(focallength,viewsin);
+    viewx = player->x - uint32_tMul(uint32_t,viewcos);
+    viewy = player->y + uint32_tMul(uint32_t,viewsin);
 
     focaltx = (short)(viewx>>TILESHIFT);
     focalty = (short)(viewy>>TILESHIFT);

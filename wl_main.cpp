@@ -35,8 +35,8 @@ extern uint8_t signon[];
 */
 
 
-#define FOCALLENGTH     (0x5700l)               // in global coordinates
-//#define FOCALLENGTH     (0x0200l)               // in global coordinates
+#define uint32_t     (0x5700l)               // in global coordinates
+//#define uint32_t     (0x0200l)               // in global coordinates
 #define VIEWGLOBAL      0x10000                 // globals visable flush to wall
 
 #define VIEWWIDTH       256                     // size of view window
@@ -57,7 +57,7 @@ int     dirangle[9] = {0,ANGLES/8,2*ANGLES/8,3*ANGLES/8,4*ANGLES/8,
 //
 // proejection variables
 //
-uint32_t    focallength;
+uint32_t    uint32_t;
 unsigned screenofs;
 int      viewscreenx, viewscreeny;
 int      viewwidth;
@@ -70,8 +70,8 @@ int32_t  heightnumerator;
 
 void    Quit (const char *error,...);
 
-boolean startgame;
-boolean loadedgame;
+int8_t startgame;
+int8_t loadedgame;
 int     mouseadjustment;
 
 char    configdir[256] = "";
@@ -80,8 +80,8 @@ char    configname[13] = "config.";
 //
 // Command line parameter variables
 //
-boolean param_debugmode = false;
-boolean param_nowait = false;
+int8_t param_debugmode = false;
+int8_t param_nowait = false;
 int     param_difficulty = 1;           // default is "normal"
 int     param_tedlevel = -1;            // default is not to start a level
 int     param_joystickindex = 0;
@@ -92,8 +92,8 @@ int     param_samplerate = 44100;
 int     param_audiobuffer = 2048 / (44100 / param_samplerate);
 
 int     param_mission = 0;
-boolean param_goodtimes = false;
-boolean param_ignorenumchunks = false;
+int8_t param_goodtimes = false;
+int8_t param_ignorenumchunks = false;
 
 /*
 =============================================================================
@@ -147,9 +147,9 @@ void ReadConfig(void)
 
         read(file,&mouseenabled,sizeof(mouseenabled));
         read(file,&joystickenabled,sizeof(joystickenabled));
-        boolean dummyJoypadEnabled;
+        int8_t dummyJoypadEnabled;
         read(file,&dummyJoypadEnabled,sizeof(dummyJoypadEnabled));
-        boolean dummyJoystickProgressive;
+        int8_t dummyJoystickProgressive;
         read(file,&dummyJoystickProgressive,sizeof(dummyJoystickProgressive));
         int dummyJoystickPort = 0;
         read(file,&dummyJoystickPort,sizeof(dummyJoystickPort));
@@ -260,9 +260,9 @@ void WriteConfig(void)
 
         write(file,&mouseenabled,sizeof(mouseenabled));
         write(file,&joystickenabled,sizeof(joystickenabled));
-        boolean dummyJoypadEnabled = false;
+        int8_t dummyJoypadEnabled = false;
         write(file,&dummyJoypadEnabled,sizeof(dummyJoypadEnabled));
-        boolean dummyJoystickProgressive = false;
+        int8_t dummyJoystickProgressive = false;
         write(file,&dummyJoystickProgressive,sizeof(dummyJoystickProgressive));
         int dummyJoystickPort = 0;
         write(file,&dummyJoystickPort,sizeof(dummyJoystickPort));
@@ -343,7 +343,7 @@ int32_t DoChecksum(uint8_t *source,unsigned size,int32_t checksum)
 extern statetype s_grdstand;
 extern statetype s_player;
 
-boolean SaveTheGame(FILE *file,int x,int y)
+int8_t SaveTheGame(FILE *file,int x,int y)
 {
 //    struct diskfree_t dfree;
 //    int32_t avail,size,checksum;
@@ -494,7 +494,7 @@ boolean SaveTheGame(FILE *file,int x,int y)
 ==================
 */
 
-boolean LoadTheGame(FILE *file,int x,int y)
+int8_t LoadTheGame(FILE *file,int x,int y)
 {
     int32_t checksum,oldchecksum;
     objtype nullobj;
@@ -725,7 +725,7 @@ void BuildTables (void)
 =
 = CalcProjection
 =
-= Uses focallength
+= Uses uint32_t
 =
 ====================
 */
@@ -739,7 +739,7 @@ void CalcProjection (int32_t focal)
     int     halfview;
     double  facedist;
 
-    focallength = focal;
+    uint32_t = focal;
     facedist = focal+MINDIST;
     halfview = viewwidth/2;                                 // half view in pixels
 
@@ -1182,7 +1182,7 @@ void DoJukebox(void)
 static void InitGame()
 {
 #ifndef SPEARDEMO
-    boolean didjukebox=false;
+    int8_t didjukebox=false;
 #endif
 
     // initialize SDL
@@ -1316,7 +1316,7 @@ static void InitGame()
 ==========================
 */
 
-boolean SetViewSize (unsigned width, unsigned height)
+int8_t SetViewSize (unsigned width, unsigned height)
 {
     viewwidth = width&~15;                  // must be divisable by 16
     viewheight = height&~1;                 // must be even
@@ -1334,7 +1334,7 @@ boolean SetViewSize (unsigned width, unsigned height)
 //
 // calculate trace angles and projection constants
 //
-    CalcProjection (FOCALLENGTH);
+    CalcProjection (uint32_t);
 
     return true;
 }

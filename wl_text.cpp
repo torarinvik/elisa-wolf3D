@@ -62,7 +62,7 @@ static int     picx;
 static int     picy;
 static int     picnum;
 static int     picdelay;
-static boolean layoutdone;
+static int8_t layoutdone;
 
 //===========================================================================
 
@@ -412,7 +412,7 @@ void Handleuint16_t (void)
 =====================
 */
 
-void PageLayout (boolean shownumber)
+void PageLayout (int8_t shownumber)
 {
     int     i,oldfontcolor;
     char    ch;
@@ -628,7 +628,7 @@ void ShowArticle (char *article)
     };
 #endif
     unsigned    oldfontnumber;
-    boolean     newpage,firstpage;
+    int8_t     newpage,firstpage;
     ControlInfo ci;
 
 #ifdef JAPAN
@@ -762,7 +762,7 @@ void HelpScreens (void)
     int     artnum;
     char    *text;
 #ifndef ARTSEXTERN
-    memptr  layout;
+    void*  layout;
 #endif
 
 
@@ -808,7 +808,7 @@ void EndText (void)
     int     artnum;
     char    *text;
 #ifndef ARTSEXTERN
-    memptr  layout;
+    void*  layout;
 #endif
 
     ClearMemory ();

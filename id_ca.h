@@ -33,8 +33,8 @@ extern  char  audioext[5];
 
 //===========================================================================
 
-boolean CA_LoadFile (const char *filename, memptr *ptr);
-boolean CA_WriteFile (const char *filename, void *ptr, int32_t length);
+int8_t CA_LoadFile (const char *filename, void* *ptr);
+int8_t CA_WriteFile (const char *filename, void *ptr, int32_t length);
 
 int32_t CA_RLEWCompress (uint16_t *source, int32_t length, uint16_t *dest, uint16_t rlewtag);
 

@@ -110,7 +110,7 @@ typedef struct
 extern globalsoundpos channelSoundPos[];
 
 // Global variables
-extern  boolean         AdLibPresent,
+extern  int8_t         AdLibPresent,
                         SoundBlasterPresent,
                         SoundPositioned;
 extern  SDMode          SoundMode;
@@ -132,7 +132,7 @@ extern  void    SD_Startup(void),
 
 extern  int     SD_GetChannelForDigi(int which);
 extern  void    SD_PositionSound(int leftvol,int rightvol);
-extern  boolean SD_PlaySound(soundnames sound);
+extern  int8_t SD_PlaySound(soundnames sound);
 extern  void    SD_SetPosition(int channel, int leftvol,int rightvol);
 extern  void    SD_StopSound(void),
                 SD_WaitSoundDone(void);
@@ -143,9 +143,9 @@ extern  void    SD_MusicOn(void),
                 SD_FadeOutMusic(void);
 extern  int     SD_MusicOff(void);
 
-extern  boolean SD_MusicPlaying(void);
-extern  boolean SD_SetSoundMode(SDMode mode);
-extern  boolean SD_SetMusicMode(SMMode mode);
+extern  int8_t SD_MusicPlaying(void);
+extern  int8_t SD_SetSoundMode(SDMode mode);
+extern  int8_t SD_SetMusicMode(SMMode mode);
 extern  uint16_t    SD_SoundPlaying(void);
 
 extern  void    SD_SetDigiDevice(SDSMode);

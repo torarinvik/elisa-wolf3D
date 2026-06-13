@@ -34,7 +34,7 @@ typedef struct
 {
     char    signature[4];
     uint16_t    *oldtest;
-    boolean present;
+    int8_t present;
     char    name[MaxGameName + 1];
 } SaveGame;
 
@@ -47,7 +47,7 @@ typedef struct
         px,py;
 } WindowRec;    // Record used to save & restore screen windows
 
-extern  boolean     ingame,     // Set by game code if a game is in progress
+extern  int8_t     ingame,     // Set by game code if a game is in progress
                     loadedgame; // Set if the current game was loaded
 extern  uint16_t        PrintX,PrintY;  // Current printing location in the window
 extern  uint16_t        WindowX,WindowY,// Current location of window
@@ -56,7 +56,7 @@ extern  uint16_t        WindowX,WindowY,// Current location of window
 extern  void        (*USL_MeasureString)(const char *,uint16_t *,uint16_t *);
 extern void         (*USL_DrawString)(const char *);
 
-extern  boolean     (*USL_SaveGame)(int),(*USL_LoadGame)(int);
+extern  int8_t     (*USL_SaveGame)(int),(*USL_LoadGame)(int);
 extern  void        (*USL_ResetGame)(void);
 extern  SaveGame    Games[MaxSaveGames];
 extern  HighScore   Scores[];
@@ -88,8 +88,8 @@ void            US_StartCursor(void),
                 US_ShutCursor(void);
 void            US_CheckHighScore(int32_t score,uint16_t other);
 void            US_DisplayHighScores(int which);
-extern  boolean US_UpdateCursor(void);
-boolean         US_LineInput(int x,int y,char *buf,const char *def,boolean escok,
+extern  int8_t US_UpdateCursor(void);
+int8_t         US_LineInput(int x,int y,char *buf,const char *def,int8_t escok,
                              int maxchars,int maxwidth);
 
 void            USL_PrintInCenter(const char *s,Rect r);

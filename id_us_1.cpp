@@ -35,7 +35,7 @@
 //  Internal variables
 #define ConfigVersion   1
 
-static  boolean     US_Started;
+static  int8_t     US_Started;
 
         void        (*USL_MeasureString)(const char *,uint16_t *,uint16_t *) = VW_MeasurePropString;
         void        (*USL_DrawString)(const char *) = VWB_DrawPropString;
@@ -421,7 +421,7 @@ US_RestoreWindow(WindowRec *win)
 static void
 USL_XORICursor(int x,int y,const char *s,uint16_t cursor)
 {
-    static  boolean status;     // VGA doesn't XOR...
+    static  int8_t status;     // VGA doesn't XOR...
     char    buf[MaxString];
     int     temp;
     uint16_t    w,h;
@@ -471,11 +471,11 @@ char USL_RotateChar(char ch, int dir)
 //      returned
 //
 ///////////////////////////////////////////////////////////////////////////
-boolean
-US_LineInput(int x,int y,char *buf,const char *def,boolean escok,
+int8_t
+US_LineInput(int x,int y,char *buf,const char *def,int8_t escok,
                 int maxchars,int maxwidth)
 {
-    boolean     redraw,
+    int8_t     redraw,
                 cursorvis,cursormoved,
                 done,result, checkkey;
     ScanCode    sc;

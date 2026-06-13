@@ -282,7 +282,7 @@ uint16_t            doorposition[MAXDOORS];             // leading edge of door 
 
 uint8_t            areaconnect[NUMAREAS][NUMAREAS];
 
-boolean         areabyplayer[NUMAREAS];
+int8_t         areabyplayer[NUMAREAS];
 
 
 /*
@@ -353,7 +353,7 @@ void InitDoorList (void)
 ===============
 */
 
-void SpawnDoor (int tilex, int tiley, boolean vertical, int lock)
+void SpawnDoor (int tilex, int tiley, int8_t vertical, int lock)
 {
     uint16_t *map;
 

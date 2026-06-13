@@ -950,7 +950,7 @@ done:   itoa (kr, tempstr, 10);
 =================
 */
 
-boolean
+int8_t
 PreloadUpdate (unsigned current, unsigned total)
 {
     unsigned w = WindowW - scaleFactor * 10;
@@ -1705,7 +1705,7 @@ CopyProtection (void)
             }
 
 /*                        for (i=0;i<NUMSOUNDS;i++,start++)
-                                MM_FreePtr ((memptr *)&audiosegs[start]); */
+                                MM_FreePtr ((void* *)&audiosegs[start]); */
             return;
         }
     }

@@ -236,7 +236,7 @@ void ShapeTest (void)
     extern  uint8_t    *postsource;
     static  char    buf[10];
 
-    boolean         done;
+    int8_t         done;
     ScanCode        scan;
     int             i,j,k,x;
     longuint16_t        l;
@@ -426,7 +426,7 @@ void ShapeTest (void)
 
 int DebugKeys (void)
 {
-    boolean esc;
+    int8_t esc;
     int level;
 
     if (Keyboard[sc_B])             // B = border color
@@ -772,7 +772,7 @@ void OverheadRefresh (void)
 
 void ViewMap (void)
 {
-    boolean         button0held;
+    int8_t         button0held;
 
     viewtype = actoratview;
     //      button0held = false;

@@ -1,9 +1,9 @@
-// WL_MAIN.C
+#WL_MAIN.C
 
 static if _WIN32:
-    #include <io.h>
+    include "io.h"
 static else:
-    #include <unistd.h>
+    include "unistd.h"
 
 
 #include "wl_def.h"
@@ -37,7 +37,7 @@ extern signon: u8&?
 
 
 
-const FOCALLENGTH: u8 = 0x5700l               // in global coordinates
+const uint32_t: u8 = 0x5700l               // in global coordinates
 const VIEWGLOBAL: u8 = 0x10000                 // globals visable flush to wall
 const VIEWWIDTH: u8 = 256                     // size of view window
 const VIEWHEIGHT: u8 = 144
@@ -50,38 +50,39 @@ const VIEWHEIGHT: u8 = 144
 """
 
 global mutable string_buffer: u8[80]
+const dirangle: i32[9] = [0,ANGLES/8,2*ANGLES/8,3*ANGLES/8,4*ANGLES/8,
+                       5*ANGLES/8,6*ANGLES/8,7*ANGLES/8,ANGLES]
 
-int     dirangle[9] = {0,ANGLES/8,2*ANGLES/8,3*ANGLES/8,4*ANGLES/8,
-                       5*ANGLES/8,6*ANGLES/8,7*ANGLES/8,ANGLES};
+#
+# projection variables
+#
 
-//
-// proejection variables
-//
-uint32_t    focallength;
-unsigned screenofs;
-int      viewscreenx, viewscreeny;
-int      viewwidth;
-int      viewheight;
-short    centerx;
-int      shootdelta;           // pixels away from centerx a target can be
-uint32_t    scale;
-int32_t  heightnumerator;
+global mutable screenofs: i32 = 0
+global mutable viewscreenx: i32 = 0
+global mutable viewscreeny: i32 = 0
+global mutable viewwidth: i32 = 0
+global mutable viewheight: i32 = 0
+global mutable centerx: i16 = 0
+global mutable shootdelta: i32 = 0
+global mutable scale: u32 = 0
+global mutable heightnumerator: i32 = 0
 
 
-void    Quit (const char *error,...);
+#void    Quit (const char *error,...);
 
-boolean startgame;
-boolean loadedgame;
-int     mouseadjustment;
 
-char    configdir[256] = "";
-char    configname[13] = "config.";
+global mutable startgame: i8 = 0
+global mutable loadedgame: i8 = 0
+global mutable mouseadjustment: i32 = 0
+
+global mutable configdir: char[256] = "";
+global mutable configname: char[13] = "config.";
 
 //
 // Command line parameter variables
 //
-boolean param_debugmode = false;
-boolean param_nowait = false;
+int8_t param_debugmode = false;
+int8_t param_nowait = false;
 int     param_difficulty = 1;           // default is "normal"
 int     param_tedlevel = -1;            // default is not to start a level
 int     param_joystickindex = 0;
@@ -92,8 +93,8 @@ int     param_samplerate = 44100;
 int     param_audiobuffer = 2048 / (44100 / param_samplerate);
 
 int     param_mission = 0;
-boolean param_goodtimes = false;
-boolean param_ignorenumchunks = false;
+int8_t param_goodtimes = false;
+int8_t param_ignorenumchunks = false;
 
 /*
 =============================================================================
@@ -147,9 +148,9 @@ void ReadConfig(void)
 
         read(file,&mouseenabled,sizeof(mouseenabled));
         read(file,&joystickenabled,sizeof(joystickenabled));
-        boolean dummyJoypadEnabled;
+        int8_t dummyJoypadEnabled;
         read(file,&dummyJoypadEnabled,sizeof(dummyJoypadEnabled));
-        boolean dummyJoystickProgressive;
+        int8_t dummyJoystickProgressive;
         read(file,&dummyJoystickProgressive,sizeof(dummyJoystickProgressive));
         int dummyJoystickPort = 0;
         read(file,&dummyJoystickPort,sizeof(dummyJoystickPort));
@@ -260,9 +261,9 @@ void WriteConfig(void)
 
         write(file,&mouseenabled,sizeof(mouseenabled));
         write(file,&joystickenabled,sizeof(joystickenabled));
-        boolean dummyJoypadEnabled = false;
+        int8_t dummyJoypadEnabled = false;
         write(file,&dummyJoypadEnabled,sizeof(dummyJoypadEnabled));
-        boolean dummyJoystickProgressive = false;
+        int8_t dummyJoystickProgressive = false;
         write(file,&dummyJoystickProgressive,sizeof(dummyJoystickProgressive));
         int dummyJoystickPort = 0;
         write(file,&dummyJoystickPort,sizeof(dummyJoystickPort));
@@ -343,7 +344,7 @@ int32_t DoChecksum(uint8_t *source,unsigned size,int32_t checksum)
 extern statetype s_grdstand;
 extern statetype s_player;
 
-boolean SaveTheGame(FILE *file,int x,int y)
+int8_t SaveTheGame(FILE *file,int x,int y)
 {
 //    struct diskfree_t dfree;
 //    int32_t avail,size,checksum;
@@ -494,7 +495,7 @@ boolean SaveTheGame(FILE *file,int x,int y)
 ==================
 */
 
-boolean LoadTheGame(FILE *file,int x,int y)
+int8_t LoadTheGame(FILE *file,int x,int y)
 {
     int32_t checksum,oldchecksum;
     objtype nullobj;
@@ -682,42 +683,41 @@ void ShutdownId (void)
 ==================
 */
 
-const float radtoint = (float)(FINEANGLES/2/PI);
+const radtoint: f32 = (float)(FINEANGLES/2/PI);
 
-void BuildTables (void)
-{
-    //
-    // calculate fine tangents
-    //
+def BuildTables() -> void:
 
-    int i;
-    for(i=0;i<FINEANGLES/8;i++)
-    {
-        double tang=tan((i+0.5)/radtoint);
-        finetangent[i]=(int32_t)(tang*GLOBAL1);
-        finetangent[FINEANGLES/4-1-i]=(int32_t)((1/tang)*GLOBAL1);
-    }
+    #
+    # calculate fine tangents
+    #
+
+    for i in 0..FINEANGLES/8:
+        tang: f64 = tan((i+0.5)/radtoint)
+        finetangent[i] = int32_t(tang*GLOBAL1)
+        finetangent[FINEANGLES/4-1-i] = ((1/tang)*GLOBAL1).cast[i32]
 
     //
     // costable overlays sintable with a quarter phase shift
     // ANGLES is assumed to be divisable by four
     //
 
-    float angle=0;
-    float anglestep=(float)(PI/2/ANGLEQUAD);
-    for(i=0; i<ANGLEQUAD; i++)
-    {
-        uint32_t value=(int32_t)(GLOBAL1*sin(angle));
-        sintable[i]=sintable[i+ANGLES]=sintable[ANGLES/2-i]=value;
-        sintable[ANGLES-i]=sintable[ANGLES/2+i]=-value;
-        angle+=anglestep;
-    }
-    sintable[ANGLEQUAD] = 65536;
-    sintable[3*ANGLEQUAD] = -65536;
+    angle: mutable f32=0
+    anglestep: mutable f32 =(float)(PI/2/ANGLEQUAD)
+    for i in 0..ANGLEQUAD:
+        value: i32 = (GLOBAL1*sin(angle)).cast[i32]
+        sintable[i] <- value
+        sintable[i+ANGLES] <- value
+        sintable[ANGLES/2-i] <- value
+        sintable[ANGLES-i] <- -value
+        sintable[ANGLES/2+i] <- -value
+        angle <- angle + anglestep
 
-}
+    sintable[ANGLEQUAD] <- 65536
+    sintable[3*ANGLEQUAD] <- -65536
 
-//===========================================================================
+
+
+#===========================================================================
 
 
 /*
@@ -725,7 +725,7 @@ void BuildTables (void)
 =
 = CalcProjection
 =
-= Uses focallength
+= Uses uint32_t
 =
 ====================
 */
@@ -739,7 +739,7 @@ void CalcProjection (int32_t focal)
     int     halfview;
     double  facedist;
 
-    focallength = focal;
+    uint32_t = focal;
     facedist = focal+MINDIST;
     halfview = viewwidth/2;                                 // half view in pixels
 
@@ -1182,7 +1182,7 @@ void DoJukebox(void)
 static void InitGame()
 {
 #ifndef SPEARDEMO
-    boolean didjukebox=false;
+    int8_t didjukebox=false;
 #endif
 
     // initialize SDL
@@ -1316,7 +1316,7 @@ static void InitGame()
 ==========================
 */
 
-boolean SetViewSize (unsigned width, unsigned height)
+int8_t SetViewSize (unsigned width, unsigned height)
 {
     viewwidth = width&~15;                  // must be divisable by 16
     viewheight = height&~1;                 // must be even
@@ -1334,7 +1334,7 @@ boolean SetViewSize (unsigned width, unsigned height)
 //
 // calculate trace angles and projection constants
 //
-    CalcProjection (FOCALLENGTH);
+    CalcProjection (uint32_t);
 
     return true;
 }

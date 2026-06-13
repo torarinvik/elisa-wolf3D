@@ -152,7 +152,7 @@ void CAL_GetGrChunkLength (int chunk)
 ==========================
 */
 
-boolean CA_WriteFile (const char *filename, void *ptr, int32_t length)
+int8_t CA_WriteFile (const char *filename, void *ptr, int32_t length)
 {
     const int handle = open(filename, O_CREAT | O_WRONLY | O_BINARY, 0644);
     if (handle == -1)
@@ -179,7 +179,7 @@ boolean CA_WriteFile (const char *filename, void *ptr, int32_t length)
 ==========================
 */
 
-boolean CA_LoadFile (const char *filename, memptr *ptr)
+int8_t CA_LoadFile (const char *filename, void* *ptr)
 {
     int32_t size;
 
@@ -596,7 +596,7 @@ void CAL_SetupMapFile (void)
         mapheaderseg[i]=(maptype *) malloc(sizeof(maptype));
         CHECKMALLOCRESULT(mapheaderseg[i]);
         lseek(maphandle,pos,SEEK_SET);
-        read (maphandle,(memptr)mapheaderseg[i],sizeof(maptype));
+        read (maphandle,(void*)mapheaderseg[i],sizeof(maptype));
     }
 
     free(tinf);
@@ -974,7 +974,7 @@ void CA_CacheGrChunk (int chunk)
 void CA_CacheScreen (int chunk)
 {
     int32_t    pos,compressed,expanded;
-    memptr  bigbufferseg;
+    void*  bigbufferseg;
     int32_t    *source;
     int             next;
 
@@ -1037,7 +1037,7 @@ void CA_CacheMap (int mapnum)
     int32_t   pos,compressed;
     int       plane;
     uint16_t     *dest;
-    memptr    bigbufferseg;
+    void*    bigbufferseg;
     unsigned  size;
     uint16_t     *source;
 #ifdef CARMACIZED

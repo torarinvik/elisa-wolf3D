@@ -29,14 +29,14 @@
 =============================================================================
 */
 
-boolean         ingame,fizzlein;
+int8_t         ingame,fizzlein;
 gametype        gamestate;
 uint8_t            bordercol=VIEWCOLOR;        // color of the Change View/Ingame border
 
 #ifdef SPEAR
 int32_t         spearx,speary;
 unsigned        spearangle;
-boolean         spearflag;
+int8_t         spearflag;
 #endif
 
 
@@ -1346,7 +1346,7 @@ void Died (void)
 
 void GameLoop (void)
 {
-    boolean died;
+    int8_t died;
 #ifdef MYPROFILE
     clock_t start,end;
 #endif

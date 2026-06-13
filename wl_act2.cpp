@@ -269,7 +269,7 @@ void A_Smoke (objtype *ob)
 
 #define PROJSIZE        0x2000
 
-boolean ProjectileTryMove (objtype *ob)
+int8_t ProjectileTryMove (objtype *ob)
 {
     int      xl,yl,xh,yh,x,y;
     objtype *check;
@@ -1458,7 +1458,7 @@ void T_Will (objtype *ob)
 {
     int32_t move;
     int     dx,dy,dist;
-    boolean dodge;
+    int8_t dodge;
 
     dodge = false;
     dx = abs(ob->tilex - player->tilex);
@@ -2379,7 +2379,7 @@ void T_Schabb (objtype *ob)
 {
     int32_t move;
     int     dx,dy,dist;
-    boolean dodge;
+    int8_t dodge;
 
     dodge = false;
     dx = abs(ob->tilex - player->tilex);
@@ -2471,7 +2471,7 @@ void T_Gift (objtype *ob)
 {
     int32_t move;
     int     dx,dy,dist;
-    boolean dodge;
+    int8_t dodge;
 
     dodge = false;
     dx = abs(ob->tilex - player->tilex);
@@ -2563,7 +2563,7 @@ void T_Fat (objtype *ob)
 {
     int32_t move;
     int     dx,dy,dist;
-    boolean dodge;
+    int8_t dodge;
 
     dodge = false;
     dx = abs(ob->tilex - player->tilex);
@@ -3068,7 +3068,7 @@ void T_Chase (objtype *ob)
 {
     int32_t move,target;
     int     dx,dy,dist,chance;
-    boolean dodge;
+    int8_t dodge;
 
     if (gamestate.victoryflag)
         return;
@@ -3747,7 +3747,7 @@ void T_BJDone (objtype *)
 ===============
 */
 
-boolean CheckPosition (objtype *ob)
+int8_t CheckPosition (objtype *ob)
 {
     int     x,y,xl,yl,xh,yh;
     objtype *check;

@@ -55,14 +55,11 @@
 #endif
 
 
-
-
-typedef uint32_t longuint16_t;
 // Win32
 #ifndef _WIN32
-typedef int8_t boolean;
+typedef int8_t int8_t;
 #endif
-typedef void * memptr;
+typedef void * void*;
 
 typedef struct
 {
@@ -692,7 +689,7 @@ typedef void (* statefunc) (void *);
 
 typedef struct statestruct
 {
-    boolean rotate;
+    int8_t rotate;
     short   shapenum;           // a shapenum of -1 means get from ob->temp1
     short   tictime;
     void    (*think) (void *),(*action) (void *);
@@ -730,7 +727,7 @@ typedef enum
 typedef struct doorstruct
 {
     uint8_t     tilex,tiley;
-    boolean  vertical;
+    int8_t  vertical;
     uint8_t     lock;
     doortype action;
     short    ticcount;
@@ -838,7 +835,7 @@ typedef struct
                 secrettotal,treasuretotal,killtotal;
     int32_t     TimeCount;
     int32_t     killx,killy;
-    boolean     victoryflag;            // set during victory animations
+    int8_t     victoryflag;            // set during victory animations
 } gametype;
 
 
@@ -868,8 +865,8 @@ extern int mapon;
 =============================================================================
 */
 
-extern  boolean  loadedgame;
-extern  uint32_t    focallength;
+extern  int8_t  loadedgame;
+extern  uint32_t    uint32_t;
 extern  int      viewscreenx, viewscreeny;
 extern  int      viewwidth;
 extern  int      viewheight;
@@ -883,7 +880,7 @@ extern  int      mouseadjustment;
 extern  int      shootdelta;
 extern  unsigned screenofs;
 
-extern  boolean  startgame;
+extern  int8_t  startgame;
 extern  char     string_buffer[80];
 extern  char     configdir[256];
 extern  char     configname[13];
@@ -891,8 +888,8 @@ extern  char     configname[13];
 //
 // Command line parameter variables
 //
-extern  boolean  param_debugmode;
-extern  boolean  param_nowait;
+extern  int8_t  param_debugmode;
+extern  int8_t  param_nowait;
 extern  int      param_difficulty;
 extern  int      param_tedlevel;
 extern  int      param_joystickindex;
@@ -900,16 +897,16 @@ extern  int      param_joystickhat;
 extern  int      param_samplerate;
 extern  int      param_audiobuffer;
 extern  int      param_mission;
-extern  boolean  param_goodtimes;
-extern  boolean  param_ignorenumchunks;
+extern  int8_t  param_goodtimes;
+extern  int8_t  param_ignorenumchunks;
 
 
 void            NewGame (int difficulty,int episode);
 void            CalcProjection (int32_t focal);
 void            NewViewSize (int width);
-boolean         SetViewSize (unsigned width, unsigned height);
-boolean         LoadTheGame(FILE *file,int x,int y);
-boolean         SaveTheGame(FILE *file,int x,int y);
+int8_t         SetViewSize (unsigned width, unsigned height);
+int8_t         LoadTheGame(FILE *file,int x,int y);
+int8_t         SaveTheGame(FILE *file,int x,int y);
 void            ShowViewSize (int width);
 void            ShutdownId (void);
 
@@ -942,7 +939,7 @@ void    RecordDemo (void);
 #ifdef SPEAR
 extern  int32_t            spearx,speary;
 extern  unsigned        spearangle;
-extern  boolean         spearflag;
+extern  int8_t         spearflag;
 #endif
 
 
@@ -986,11 +983,11 @@ extern  int             lastgamemusicoffset;
 // current user input
 //
 extern  int         controlx,controly;              // range from -100 to 100
-extern  boolean     buttonstate[NUMBUTTONS];
+extern  int8_t     buttonstate[NUMBUTTONS];
 extern  objtype     objlist[MAXACTORS];
-extern  boolean     buttonheld[NUMBUTTONS];
+extern  int8_t     buttonheld[NUMBUTTONS];
 extern  exit_t      playstate;
-extern  boolean     madenoise;
+extern  int8_t     madenoise;
 extern  statobj_t   statobjlist[MAXSTATS];
 extern  statobj_t   *laststatobj;
 extern  objtype     *newobj,*killerobj;
@@ -998,14 +995,14 @@ extern  doorobj_t   doorobjlist[MAXDOORS];
 extern  doorobj_t   *lastdoorobj;
 extern  int         godmode;
 
-extern  boolean     demorecord,demoplayback;
+extern  int8_t     demorecord,demoplayback;
 extern  int8_t      *demoptr, *lastdemoptr;
-extern  memptr      demobuffer;
+extern  void*      demobuffer;
 
 //
 // control info
 //
-extern  boolean     mouseenabled,joystickenabled;
+extern  int8_t     mouseenabled,joystickenabled;
 extern  int         dirscan[4];
 extern  int         buttonscan[NUMBUTTONS];
 extern  int         buttonmouse[4];
@@ -1034,7 +1031,7 @@ extern  int32_t     funnyticount;           // FOR FUNNY BJ FACE
 
 extern  objtype     *objfreelist;     // *obj,*player,*lastobj,
 
-extern  boolean     noclip,ammocheat;
+extern  int8_t     noclip,ammocheat;
 extern  int         singlestep, extravbls;
 
 /*
@@ -1088,7 +1085,7 @@ extern  int32_t    frameon;
 
 extern  unsigned screenloc[3];
 
-extern  boolean fizzlein, fpscounter;
+extern  int8_t fizzlein, fpscounter;
 
 extern  uint32_t   viewx,viewy;                    // the focal point
 extern  uint32_t   viewsin,viewcos;
@@ -1119,18 +1116,18 @@ void    InitHitRect (objtype *ob, unsigned radius);
 void    SpawnNewObj (unsigned tilex, unsigned tiley, statetype *state);
 void    NewState (objtype *ob, statetype *state);
 
-boolean TryWalk (objtype *ob);
+int8_t TryWalk (objtype *ob);
 void    SelectChaseDir (objtype *ob);
 void    SelectDodgeDir (objtype *ob);
 void    SelectRunDir (objtype *ob);
 void    MoveObj (objtype *ob, int32_t move);
-boolean SightPlayer (objtype *ob);
+int8_t SightPlayer (objtype *ob);
 
 void    KillActor (objtype *ob);
 void    DamageActor (objtype *ob, unsigned damage);
 
-boolean CheckLine (objtype *ob);
-boolean CheckSight (objtype *ob);
+int8_t CheckLine (objtype *ob);
+int8_t CheckSight (objtype *ob);
 
 /*
 =============================================================================
@@ -1188,7 +1185,7 @@ extern  uint16_t      doorposition[MAXDOORS];
 
 extern  uint8_t      areaconnect[NUMAREAS][NUMAREAS];
 
-extern  boolean   areabyplayer[NUMAREAS];
+extern  int8_t   areabyplayer[NUMAREAS];
 
 extern uint16_t     pwallstate;
 extern uint16_t     pwallpos;        // amount a pushable wall has been moved (0-63)
@@ -1199,7 +1196,7 @@ extern uint8_t     pwalldir,pwalltile;
 void InitDoorList (void);
 void InitStaticList (void);
 void SpawnStatic (int tilex, int tiley, int type);
-void SpawnDoor (int tilex, int tiley, boolean vertical, int lock);
+void SpawnDoor (int tilex, int tiley, int8_t vertical, int lock);
 void MoveDoors (void);
 void MovePWalls (void);
 void OpenDoor (int door);
