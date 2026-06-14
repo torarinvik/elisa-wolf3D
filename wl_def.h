@@ -54,12 +54,15 @@
     #include "f_spear.h"
 #endif
 
-
+typedef uint8_t byte;
+typedef uint16_t word;
+typedef int32_t fixed;
+typedef uint32_t longword;
 // Win32
 #ifndef _WIN32
-typedef int8_t int8_t;
+typedef int8_t boolean;
 #endif
-typedef void * void*;
+typedef void * memptr;
 
 typedef struct
 {
@@ -186,7 +189,7 @@ void Quit(const char *errorStr, ...);
 
 #define TEXTURESHIFT    6
 #define TEXTURESIZE     (1<<TEXTURESHIFT)
-#define TEXTUREFROMuint32_tSHIFT 4
+#define TEXTUREFROMFIXEDSHIFT 4
 #define TEXTUREMASK     (TEXTURESIZE*(TEXTURESIZE-1))
 
 #define SPRITESCALEFACTOR 2
@@ -689,7 +692,7 @@ typedef void (* statefunc) (void *);
 
 typedef struct statestruct
 {
-    int8_t rotate;
+    boolean rotate;
     short   shapenum;           // a shapenum of -1 means get from ob->temp1
     short   tictime;
     void    (*think) (void *),(*action) (void *);
@@ -705,11 +708,11 @@ typedef struct statestruct
 
 typedef struct statstruct
 {
-    uint8_t      tilex,tiley;
+    byte      tilex,tiley;
     short     shapenum;           // if shapenum == -1 the obj has been removed
-    uint8_t      *visspot;
+    byte      *visspot;
     uint32_t  flags;
-    uint8_t      itemnumber;
+    byte      itemnumber;
 } statobj_t;
 
 
@@ -726,9 +729,9 @@ typedef enum
 
 typedef struct doorstruct
 {
-    uint8_t     tilex,tiley;
-    int8_t  vertical;
-    uint8_t     lock;
+    byte     tilex,tiley;
+    boolean  vertical;
+    byte     lock;
     doortype action;
     short    ticcount;
 } doorobj_t;
@@ -752,13 +755,13 @@ typedef struct objstruct
     int32_t     distance;           // if negative, wait for that door to open
     dirtype     dir;
 
-    uint32_t       x,y;
-    uint16_t        tilex,tiley;
-    uint8_t        areanumber;
+    fixed       x,y;
+    word        tilex,tiley;
+    byte        areanumber;
 
     short       viewx;
-    uint16_t        viewheight;
-    uint32_t       transx,transy;      // in global coord
+    word        viewheight;
+    fixed       transx,transy;      // in global coord
 
     short       angle;
     short       hitpoints;
@@ -835,7 +838,7 @@ typedef struct
                 secrettotal,treasuretotal,killtotal;
     int32_t     TimeCount;
     int32_t     killx,killy;
-    int8_t     victoryflag;            // set during victory animations
+    boolean     victoryflag;            // set during victory animations
 } gametype;
 
 
@@ -854,7 +857,7 @@ typedef enum
 } exit_t;
 
 
-extern uint16_t *mapsegs[MAPPLANES];
+extern word *mapsegs[MAPPLANES];
 extern int mapon;
 
 /*
@@ -865,14 +868,14 @@ extern int mapon;
 =============================================================================
 */
 
-extern  int8_t  loadedgame;
-extern  uint32_t    uint32_t;
+extern  boolean  loadedgame;
+extern  fixed    focallength;
 extern  int      viewscreenx, viewscreeny;
 extern  int      viewwidth;
 extern  int      viewheight;
 extern  short    centerx;
 extern  int32_t  heightnumerator;
-extern  uint32_t    scale;
+extern  fixed    scale;
 
 extern  int      dirangle[9];
 
@@ -880,16 +883,16 @@ extern  int      mouseadjustment;
 extern  int      shootdelta;
 extern  unsigned screenofs;
 
-extern  int8_t  startgame;
-extern  char     string_buffer[80];
+extern  boolean  startgame;
+extern  char     str[80];
 extern  char     configdir[256];
 extern  char     configname[13];
 
 //
 // Command line parameter variables
 //
-extern  int8_t  param_debugmode;
-extern  int8_t  param_nowait;
+extern  boolean  param_debugmode;
+extern  boolean  param_nowait;
 extern  int      param_difficulty;
 extern  int      param_tedlevel;
 extern  int      param_joystickindex;
@@ -897,16 +900,16 @@ extern  int      param_joystickhat;
 extern  int      param_samplerate;
 extern  int      param_audiobuffer;
 extern  int      param_mission;
-extern  int8_t  param_goodtimes;
-extern  int8_t  param_ignorenumchunks;
+extern  boolean  param_goodtimes;
+extern  boolean  param_ignorenumchunks;
 
 
 void            NewGame (int difficulty,int episode);
 void            CalcProjection (int32_t focal);
 void            NewViewSize (int width);
-int8_t         SetViewSize (unsigned width, unsigned height);
-int8_t         LoadTheGame(FILE *file,int x,int y);
-int8_t         SaveTheGame(FILE *file,int x,int y);
+boolean         SetViewSize (unsigned width, unsigned height);
+boolean         LoadTheGame(FILE *file,int x,int y);
+boolean         SaveTheGame(FILE *file,int x,int y);
 void            ShowViewSize (int width);
 void            ShutdownId (void);
 
@@ -920,14 +923,14 @@ void            ShutdownId (void);
 */
 
 extern  gametype        gamestate;
-extern  uint8_t            bordercol;
+extern  byte            bordercol;
 extern  SDL_Surface     *latchpics[NUMLATCHPICS];
 extern  char            demoname[13];
 
 void    SetupGameLevel (void);
 void    GameLoop (void);
 void    DrawPlayBorder (void);
-void    DrawStatusBorder (uint8_t color);
+void    DrawStatusBorder (byte color);
 void    DrawPlayScreen (void);
 void    DrawPlayBorderSides (void);
 void    ShowActStatus();
@@ -939,7 +942,7 @@ void    RecordDemo (void);
 #ifdef SPEAR
 extern  int32_t            spearx,speary;
 extern  unsigned        spearangle;
-extern  int8_t         spearflag;
+extern  boolean         spearflag;
 #endif
 
 
@@ -949,7 +952,7 @@ extern  int8_t         spearflag;
 // JAB
 #define PlaySoundLocTile(s,tx,ty)       PlaySoundLocGlobal(s,(((int32_t)(tx) << TILESHIFT) + (1L << (TILESHIFT - 1))),(((int32_t)ty << TILESHIFT) + (1L << (TILESHIFT - 1))))
 #define PlaySoundLocActor(s,ob)         PlaySoundLocGlobal(s,(ob)->x,(ob)->y)
-void    PlaySoundLocGlobal(uint16_t s,uint32_t gx,uint32_t gy);
+void    PlaySoundLocGlobal(word s,fixed gx,fixed gy);
 void UpdateSoundLoc(void);
 
 
@@ -968,8 +971,8 @@ void UpdateSoundLoc(void);
 
 #define JOYSCALE                2
 
-extern  uint8_t            tilemap[MAPSIZE][MAPSIZE];      // wall values only
-extern  uint8_t            spotvis[MAPSIZE][MAPSIZE];
+extern  byte            tilemap[MAPSIZE][MAPSIZE];      // wall values only
+extern  byte            spotvis[MAPSIZE][MAPSIZE];
 extern  objtype         *actorat[MAPSIZE][MAPSIZE];
 
 extern  objtype         *player;
@@ -983,11 +986,11 @@ extern  int             lastgamemusicoffset;
 // current user input
 //
 extern  int         controlx,controly;              // range from -100 to 100
-extern  int8_t     buttonstate[NUMBUTTONS];
+extern  boolean     buttonstate[NUMBUTTONS];
 extern  objtype     objlist[MAXACTORS];
-extern  int8_t     buttonheld[NUMBUTTONS];
+extern  boolean     buttonheld[NUMBUTTONS];
 extern  exit_t      playstate;
-extern  int8_t     madenoise;
+extern  boolean     madenoise;
 extern  statobj_t   statobjlist[MAXSTATS];
 extern  statobj_t   *laststatobj;
 extern  objtype     *newobj,*killerobj;
@@ -995,14 +998,14 @@ extern  doorobj_t   doorobjlist[MAXDOORS];
 extern  doorobj_t   *lastdoorobj;
 extern  int         godmode;
 
-extern  int8_t     demorecord,demoplayback;
+extern  boolean     demorecord,demoplayback;
 extern  int8_t      *demoptr, *lastdemoptr;
-extern  void*      demobuffer;
+extern  memptr      demobuffer;
 
 //
 // control info
 //
-extern  int8_t     mouseenabled,joystickenabled;
+extern  boolean     mouseenabled,joystickenabled;
 extern  int         dirscan[4];
 extern  int         buttonscan[NUMBUTTONS];
 extern  int         buttonmouse[4];
@@ -1012,7 +1015,7 @@ void    InitActorList (void);
 void    GetNewActor (void);
 void    PlayLoop (void);
 
-void    CenterWindow(uint16_t w,uint16_t h);
+void    CenterWindow(word w,word h);
 
 void    InitRedShifts (void);
 void    FinishPaletteShifts (void);
@@ -1031,7 +1034,7 @@ extern  int32_t     funnyticount;           // FOR FUNNY BJ FACE
 
 extern  objtype     *objfreelist;     // *obj,*player,*lastobj,
 
-extern  int8_t     noclip,ammocheat;
+extern  boolean     noclip,ammocheat;
 extern  int         singlestep, extravbls;
 
 /*
@@ -1045,7 +1048,7 @@ extern  int         singlestep, extravbls;
 void IntroScreen (void);
 void PG13(void);
 void DrawHighScores(void);
-void CheckHighScore (int32_t score,uint16_t other);
+void CheckHighScore (int32_t score,word other);
 void Victory (void);
 void LevelCompleted (void);
 void ClearSplitVWB (void);
@@ -1076,27 +1079,27 @@ int DebugKeys (void);
 //
 extern  short *pixelangle;
 extern  int32_t finetangent[FINEANGLES/4];
-extern  uint32_t sintable[];
-extern  uint32_t *costable;
+extern  fixed sintable[];
+extern  fixed *costable;
 extern  int *wallheight;
-extern  uint16_t horizwall[],vertwall[];
+extern  word horizwall[],vertwall[];
 extern  int32_t    lasttimecount;
 extern  int32_t    frameon;
 
 extern  unsigned screenloc[3];
 
-extern  int8_t fizzlein, fpscounter;
+extern  boolean fizzlein, fpscounter;
 
-extern  uint32_t   viewx,viewy;                    // the focal point
-extern  uint32_t   viewsin,viewcos;
+extern  fixed   viewx,viewy;                    // the focal point
+extern  fixed   viewsin,viewcos;
 
 void    ThreeDRefresh (void);
 void    CalcTics (void);
 
 typedef struct
 {
-    uint16_t leftpix,rightpix;
-    uint16_t dataofs[64];
+    word leftpix,rightpix;
+    word dataofs[64];
 // table data after dataofs[rightpix-leftpix+1]
 } t_compshape;
 
@@ -1116,18 +1119,18 @@ void    InitHitRect (objtype *ob, unsigned radius);
 void    SpawnNewObj (unsigned tilex, unsigned tiley, statetype *state);
 void    NewState (objtype *ob, statetype *state);
 
-int8_t TryWalk (objtype *ob);
+boolean TryWalk (objtype *ob);
 void    SelectChaseDir (objtype *ob);
 void    SelectDodgeDir (objtype *ob);
 void    SelectRunDir (objtype *ob);
 void    MoveObj (objtype *ob, int32_t move);
-int8_t SightPlayer (objtype *ob);
+boolean SightPlayer (objtype *ob);
 
 void    KillActor (objtype *ob);
 void    DamageActor (objtype *ob, unsigned damage);
 
-int8_t CheckLine (objtype *ob);
-int8_t CheckSight (objtype *ob);
+boolean CheckLine (objtype *ob);
+boolean CheckSight (objtype *ob);
 
 /*
 =============================================================================
@@ -1139,7 +1142,7 @@ int8_t CheckSight (objtype *ob);
 
 extern  short    anglefrac;
 extern  int      facecount, facetimes;
-extern  uint16_t     plux,pluy;         // player coordinates scaled to unsigned
+extern  word     plux,pluy;         // player coordinates scaled to unsigned
 extern  int32_t  thrustspeed;
 extern  objtype  *LastAttacker;
 
@@ -1181,22 +1184,22 @@ extern  doorobj_t doorobjlist[MAXDOORS];
 extern  doorobj_t *lastdoorobj;
 extern  short     doornum;
 
-extern  uint16_t      doorposition[MAXDOORS];
+extern  word      doorposition[MAXDOORS];
 
-extern  uint8_t      areaconnect[NUMAREAS][NUMAREAS];
+extern  byte      areaconnect[NUMAREAS][NUMAREAS];
 
-extern  int8_t   areabyplayer[NUMAREAS];
+extern  boolean   areabyplayer[NUMAREAS];
 
-extern uint16_t     pwallstate;
-extern uint16_t     pwallpos;        // amount a pushable wall has been moved (0-63)
-extern uint16_t     pwallx,pwally;
-extern uint8_t     pwalldir,pwalltile;
+extern word     pwallstate;
+extern word     pwallpos;        // amount a pushable wall has been moved (0-63)
+extern word     pwallx,pwally;
+extern byte     pwalldir,pwalltile;
 
 
 void InitDoorList (void);
 void InitStaticList (void);
 void SpawnStatic (int tilex, int tiley, int type);
-void SpawnDoor (int tilex, int tiley, int8_t vertical, int lock);
+void SpawnDoor (int tilex, int tiley, boolean vertical, int lock);
 void MoveDoors (void);
 void MovePWalls (void);
 void OpenDoor (int door);
@@ -1322,9 +1325,9 @@ extern  void    EndText(void);
 =============================================================================
 */
 
-static inline uint32_t uint32_tMul(uint32_t a, uint32_t b)
+static inline fixed FixedMul(fixed a, fixed b)
 {
-    return (uint32_t)(((int64_t)a * b + 0x8000) >> 16);
+    return (fixed)(((int64_t)a * b + 0x8000) >> 16);
 }
 
 #ifdef PLAYDEMOLIKEORIGINAL
@@ -1368,16 +1371,16 @@ static inline uint32_t uint32_tMul(uint32_t a, uint32_t b)
 #define lengthof(x) (sizeof(x) / sizeof(*(x)))
 #define endof(x)    ((x) + lengthof(x))
 
-static inline uint16_t READuint16_t(uint8_t *&ptr)
+static inline word READWORD(byte *&ptr)
 {
-    uint16_t val = ptr[0] | ptr[1] << 8;
+    word val = ptr[0] | ptr[1] << 8;
     ptr += 2;
     return val;
 }
 
-static inline longuint16_t READLONGuint16_t(uint8_t *&ptr)
+static inline longword READLONGWORD(byte *&ptr)
 {
-    longuint16_t val = ptr[0] | ptr[1] << 8 | ptr[2] << 16 | ptr[3] << 24;
+    longword val = ptr[0] | ptr[1] << 8 | ptr[2] << 16 | ptr[3] << 24;
     ptr += 4;
     return val;
 }

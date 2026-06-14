@@ -11,7 +11,7 @@ uint32_t *PMPageData;
 size_t PMPageDataSize;
 
 // ChunksInFile+1 pointers to page starts.
-// The last pointer points one uint8_t after the last page.
+// The last pointer points one byte after the last page.
 uint8_t **PMPages;
 
 void PM_Startup()
@@ -24,19 +24,19 @@ void PM_Startup()
         CA_CannotOpen(fname);
 
     ChunksInFile = 0;
-    fread(&ChunksInFile, sizeof(uint16_t), 1, file);
+    fread(&ChunksInFile, sizeof(word), 1, file);
     PMSpriteStart = 0;
-    fread(&PMSpriteStart, sizeof(uint16_t), 1, file);
+    fread(&PMSpriteStart, sizeof(word), 1, file);
     PMSoundStart = 0;
-    fread(&PMSoundStart, sizeof(uint16_t), 1, file);
+    fread(&PMSoundStart, sizeof(word), 1, file);
 
     uint32_t* pageOffsets = (uint32_t *) malloc((ChunksInFile + 1) * sizeof(int32_t));
     CHECKMALLOCRESULT(pageOffsets);
     fread(pageOffsets, sizeof(uint32_t), ChunksInFile, file);
 
-    uint16_t *pageLengths = (uint16_t *) malloc(ChunksInFile * sizeof(uint16_t));
+    word *pageLengths = (word *) malloc(ChunksInFile * sizeof(word));
     CHECKMALLOCRESULT(pageLengths);
-    fread(pageLengths, sizeof(uint16_t), ChunksInFile, file);
+    fread(pageLengths, sizeof(word), ChunksInFile, file);
 
     fseek(file, 0, SEEK_END);
     long fileSize = ftell(file);
@@ -86,7 +86,7 @@ void PM_Startup()
         {
             size_t offs = ptr - (uint8_t *) PMPageData;
 
-            // pad with zeros to make it 2-uint8_t aligned
+            // pad with zeros to make it 2-byte aligned
             if(offs & 1)
             {
                 *ptr++ = 0;

@@ -34,7 +34,7 @@ typedef struct
 extern  pictabletype    *pictable;
 extern  pictabletype    *picmtable;
 
-extern  uint8_t            fontcolor,backcolor;
+extern  byte            fontcolor,backcolor;
 extern  int             fontnumber;
 extern  int             px,py;
 
@@ -82,7 +82,7 @@ void VH_UpdateScreen();
 #define VW_FadeIn()         VL_FadeIn(0,255,gamepal,30);
 #define VW_FadeOut()        VL_FadeOut(0,255,0,0,0,30);
 #define VW_ScreenToScreen   VL_ScreenToScreen
-void    VW_MeasurePropString (const char *string, uint16_t *width, uint16_t *height);
+void    VW_MeasurePropString (const char *string, word *width, word *height);
 
 #define LatchDrawChar(x,y,p) VL_LatchToScreen(latchpics[0],((p)&7)*8,((p)>>3)*8*64,8,8,x,y)
 #define LatchDrawTile(x,y,p) VL_LatchToScreen(latchpics[1],(p)*64,0,16,16,x,y)
@@ -92,8 +92,8 @@ void    LatchDrawPicScaledCoord (unsigned scx, unsigned scy, unsigned picnum);
 void    LoadLatchMem (void);
 
 void    VH_Startup();
-int8_t FizzleFade (SDL_Surface *source, int x1, int y1,
-    unsigned width, unsigned height, unsigned frames, int8_t abortable);
+boolean FizzleFade (SDL_Surface *source, int x1, int y1,
+    unsigned width, unsigned height, unsigned frames, boolean abortable);
 
 #define NUMLATCHPICS    100
 extern  SDL_Surface *latchpics[NUMLATCHPICS];

@@ -11,7 +11,7 @@ extern int PMSoundStart;
 extern bool PMSoundInfoPagePadded;
 
 // ChunksInFile+1 pointers to page starts.
-// The last pointer points one uint8_t after the last page.
+// The last pointer points one byte after the last page.
 extern uint8_t **PMPages;
 
 void PM_Startup();
@@ -36,7 +36,7 @@ static inline uint8_t *PM_GetEnd()
     return PMPages[ChunksInFile];
 }
 
-static inline uint8_t *PM_GetTexture(int wallpic)
+static inline byte *PM_GetTexture(int wallpic)
 {
     return PM_GetPage(wallpic);
 }
@@ -47,7 +47,7 @@ static inline uint16_t *PM_GetSprite(int shapenum)
     return (uint16_t *) (void *) PM_GetPage(PMSpriteStart + shapenum);
 }
 
-static inline uint8_t *PM_GetSound(int soundpagenum)
+static inline byte *PM_GetSound(int soundpagenum)
 {
     return PM_GetPage(PMSoundStart + soundpagenum);
 }

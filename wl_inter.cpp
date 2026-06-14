@@ -950,7 +950,7 @@ done:   itoa (kr, tempstr, 10);
 =================
 */
 
-int8_t
+boolean
 PreloadUpdate (unsigned current, unsigned total)
 {
     unsigned w = WindowW - scaleFactor * 10;
@@ -1019,12 +1019,12 @@ DrawHighScores (void)
 {
     char buffer[16];
 #ifndef SPEAR
-    char *string_buffer;
+    char *str;
 #ifndef UPLOAD
     char buffer1[5];
 #endif
 #endif
-    uint16_t i, w, h;
+    word i, w, h;
     HighScore *s;
 
 #ifndef SPEAR
@@ -1092,8 +1092,8 @@ DrawHighScores (void)
         //
         itoa (s->completed, buffer, 10);
 #ifndef SPEAR
-        for (string_buffer = buffer; *string_buffer; string_buffer++)
-            *string_buffer = *string_buffer + (129 - '0');  // Used uint32_t-width numbers (129...)
+        for (str = buffer; *str; str++)
+            *str = *str + (129 - '0');  // Used fixed-width numbers (129...)
         USL_MeasureString (buffer, &w, &h);
         PrintX = (22 * 8) - w;
 #else
@@ -1123,8 +1123,8 @@ DrawHighScores (void)
         //
         itoa (s->score, buffer, 10);
 #ifndef SPEAR
-        for (string_buffer = buffer; *string_buffer; string_buffer++)
-            *string_buffer = *string_buffer + (129 - '0');  // Used uint32_t-width numbers (129...)
+        for (str = buffer; *str; str++)
+            *str = *str + (129 - '0');  // Used fixed-width numbers (129...)
         USL_MeasureString (buffer, &w, &h);
         PrintX = (34 * 8) - 8 - w;
 #else
@@ -1181,9 +1181,9 @@ DrawHighScores (void)
 */
 
 void
-CheckHighScore (int32_t score, uint16_t other)
+CheckHighScore (int32_t score, word other)
 {
-    uint16_t i, j;
+    word i, j;
     int n;
     HighScore myscore;
 
@@ -1364,7 +1364,7 @@ char bossstrs[4][24] = {
     "TRANS GROSSE"
 };
 
-char uint16_tStr[5][20] = {
+char WordStr[5][20] = {
     "New Game",
     "Sound...F4",
     "Control...F6",
@@ -1372,7 +1372,7 @@ char uint16_tStr[5][20] = {
     "Quit...F10"
 };
 
-char uint16_tCorrect[5][2] = { "3", "4", "4", "5", "5" };
+char WordCorrect[5][2] = { "3", "4", "4", "5", "5" };
 
 char MemberStr[10][40] = {
     STR_COPY15,
@@ -1473,9 +1473,9 @@ CopyProtection (void)
     int enemypicked[4] = { 0, 0, 0, 0 };
     int bosses[4] = { BOSSPIC1PIC, BOSSPIC2PIC, BOSSPIC3PIC, BOSSPIC4PIC };
     int whichpicked[4] = { 0, 0, 0, 0 };
-    int whichone, quiztype, whichmem, whichuint16_t;
+    int whichone, quiztype, whichmem, whichword;
     int memberpicked[5] = { 0, 0, 0, 0, 0 };
-    int uint16_tpicked[5] = { 0, 0, 0, 0, 0 };
+    int wordpicked[5] = { 0, 0, 0, 0, 0 };
 
     char inputbuffer[20];
     char message[80];
@@ -1569,14 +1569,14 @@ CopyProtection (void)
             //
             case checkmanual:
             {
-                while (uint16_tpicked[whichuint16_t = US_RndT () % 5]);
-                uint16_tpicked[whichuint16_t] = 1;
+                while (wordpicked[whichword = US_RndT () % 5]);
+                wordpicked[whichword] = 1;
                 US_CPrint (STR_CHECKMAN);
                 SETFONTCOLOR (PRINTCOLOR, 15);
                 PrintY += 25;
                 US_CPrint (STR_MAN1);
                 US_CPrint (STR_MAN2);
-                sprintf(message, STR_MAN3 " \"%s\" " STR_MAN4, uint16_tStr[whichuint16_t]);
+                sprintf(message, STR_MAN3 " \"%s\" " STR_MAN4, WordStr[whichword]);
                 US_CPrint (message);
                 VW_UpdateScreen ();
                 VW_FadeIn ();
@@ -1588,7 +1588,7 @@ CopyProtection (void)
                 PrintY = TYPEBOX_Y;
                 US_LineInput (PrintX, PrintY, inputbuffer, 0, true, 6, 100);
 
-                match = 1 - (strcasecmp (inputbuffer, uint16_tCorrect[whichuint16_t]) != 0);
+                match = 1 - (strcasecmp (inputbuffer, WordCorrect[whichword]) != 0);
                 match += BackDoor (inputbuffer);
                 break;
             }
@@ -1705,7 +1705,7 @@ CopyProtection (void)
             }
 
 /*                        for (i=0;i<NUMSOUNDS;i++,start++)
-                                MM_FreePtr ((void* *)&audiosegs[start]); */
+                                MM_FreePtr ((memptr *)&audiosegs[start]); */
             return;
         }
     }

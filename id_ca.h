@@ -14,8 +14,8 @@
 typedef struct
 {
     int32_t planestart[3];
-    uint16_t    planelength[3];
-    uint16_t    width,height;
+    word    planelength[3];
+    word    width,height;
     char    name[16];
 } maptype;
 
@@ -23,9 +23,9 @@ typedef struct
 
 extern  int   mapon;
 
-extern  uint16_t *mapsegs[MAPPLANES];
-extern  uint8_t *audiosegs[NUMSNDCHUNKS];
-extern  uint8_t *grsegs[NUMCHUNKS];
+extern  word *mapsegs[MAPPLANES];
+extern  byte *audiosegs[NUMSNDCHUNKS];
+extern  byte *grsegs[NUMCHUNKS];
 
 extern  char  extension[5];
 extern  char  graphext[5];
@@ -33,12 +33,12 @@ extern  char  audioext[5];
 
 //===========================================================================
 
-int8_t CA_LoadFile (const char *filename, void* *ptr);
-int8_t CA_WriteFile (const char *filename, void *ptr, int32_t length);
+boolean CA_LoadFile (const char *filename, memptr *ptr);
+boolean CA_WriteFile (const char *filename, void *ptr, int32_t length);
 
-int32_t CA_RLEWCompress (uint16_t *source, int32_t length, uint16_t *dest, uint16_t rlewtag);
+int32_t CA_RLEWCompress (word *source, int32_t length, word *dest, word rlewtag);
 
-void CA_RLEWexpand (uint16_t *source, uint16_t *dest, int32_t length, uint16_t rlewtag);
+void CA_RLEWexpand (word *source, word *dest, int32_t length, word rlewtag);
 
 void CA_Startup (void);
 void CA_Shutdown (void);

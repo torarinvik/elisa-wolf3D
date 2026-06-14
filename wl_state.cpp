@@ -42,15 +42,15 @@ static const dirtype diagonal[9][9] =
 void    SpawnNewObj (unsigned tilex, unsigned tiley, statetype *state);
 void    NewState (objtype *ob, statetype *state);
 
-int8_t TryWalk (objtype *ob);
+boolean TryWalk (objtype *ob);
 void    MoveObj (objtype *ob, int32_t move);
 
 void    KillActor (objtype *ob);
 void    DamageActor (objtype *ob, unsigned damage);
 
-int8_t CheckLine (objtype *ob);
+boolean CheckLine (objtype *ob);
 void    FirstSighting (objtype *ob);
-int8_t CheckSight (objtype *ob);
+boolean CheckSight (objtype *ob);
 
 /*
 =============================================================================
@@ -201,7 +201,7 @@ void NewState (objtype *ob, statetype *state)
 }
 
 
-int8_t TryWalk (objtype *ob)
+boolean TryWalk (objtype *ob)
 {
     int       doornum = -1;
     uintptr_t temp;
@@ -850,8 +850,8 @@ void KillActor (objtype *ob)
 {
     int     tilex,tiley;
 
-    tilex = ob->tilex = (uint16_t)(ob->x >> TILESHIFT);         // drop item on center
-    tiley = ob->tiley = (uint16_t)(ob->y >> TILESHIFT);
+    tilex = ob->tilex = (word)(ob->x >> TILESHIFT);         // drop item on center
+    tiley = ob->tiley = (word)(ob->y >> TILESHIFT);
 
     switch (ob->obclass)
     {
@@ -1069,7 +1069,7 @@ void DamageActor (objtype *ob, unsigned damage)
 =====================
 */
 
-int8_t CheckLine (objtype *ob)
+boolean CheckLine (objtype *ob)
 {
     int         x1,y1,xt1,yt1,x2,y2,xt2,yt2;
     int         x,y;
@@ -1216,7 +1216,7 @@ int8_t CheckLine (objtype *ob)
 
 #define MINSIGHT        0x18000l
 
-int8_t CheckSight (objtype *ob)
+boolean CheckSight (objtype *ob)
 {
     int32_t deltax,deltay;
 
@@ -1453,7 +1453,7 @@ void FirstSighting (objtype *ob)
 ===============
 */
 
-int8_t SightPlayer (objtype *ob)
+boolean SightPlayer (objtype *ob)
 {
     if (ob->flags & FL_ATTACKMODE)
         Quit ("An actor in ATTACKMODE called SightPlayer!");

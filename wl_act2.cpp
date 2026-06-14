@@ -269,7 +269,7 @@ void A_Smoke (objtype *ob)
 
 #define PROJSIZE        0x2000
 
-int8_t ProjectileTryMove (objtype *ob)
+boolean ProjectileTryMove (objtype *ob)
 {
     int      xl,yl,xh,yh,x,y;
     objtype *check;
@@ -312,8 +312,8 @@ void T_Projectile (objtype *ob)
 
     speed = (int32_t)ob->speed*tics;
 
-    deltax = uint32_tMul(speed,costable[ob->angle]);
-    deltay = -uint32_tMul(speed,sintable[ob->angle]);
+    deltax = FixedMul(speed,costable[ob->angle]);
+    deltay = -FixedMul(speed,sintable[ob->angle]);
 
     if (deltax>0x10000l)
         deltax = 0x10000l;
@@ -850,8 +850,8 @@ statetype s_gretelshoot8        = {false,SPR_GRETEL_SHOOT1,10,NULL,NULL,&s_grete
 
 void SpawnStand (enemy_t which, int tilex, int tiley, int dir)
 {
-    uint16_t *map;
-    uint16_t tile;
+    word *map;
+    word tile;
 
     switch (which)
     {
@@ -1255,8 +1255,8 @@ statetype s_transshoot8         = {false,SPR_TRANS_SHOOT1,10,NULL,NULL,&s_transc
 
 void SpawnTrans (int tilex, int tiley)
 {
-    //        uint16_t *map;
-    //        uint16_t tile;
+    //        word *map;
+    //        word tile;
 
     if (SoundBlasterPresent && DigiMode != sds_Off)
         s_transdie01.tictime = 105;
@@ -1458,7 +1458,7 @@ void T_Will (objtype *ob)
 {
     int32_t move;
     int     dx,dy,dist;
-    int8_t dodge;
+    boolean dodge;
 
     dodge = false;
     dx = abs(ob->tilex - player->tilex);
@@ -2379,7 +2379,7 @@ void T_Schabb (objtype *ob)
 {
     int32_t move;
     int     dx,dy,dist;
-    int8_t dodge;
+    boolean dodge;
 
     dodge = false;
     dx = abs(ob->tilex - player->tilex);
@@ -2471,7 +2471,7 @@ void T_Gift (objtype *ob)
 {
     int32_t move;
     int     dx,dy,dist;
-    int8_t dodge;
+    boolean dodge;
 
     dodge = false;
     dx = abs(ob->tilex - player->tilex);
@@ -2563,7 +2563,7 @@ void T_Fat (objtype *ob)
 {
     int32_t move;
     int     dx,dy,dist;
-    int8_t dodge;
+    boolean dodge;
 
     dodge = false;
     dx = abs(ob->tilex - player->tilex);
@@ -3068,7 +3068,7 @@ void T_Chase (objtype *ob)
 {
     int32_t move,target;
     int     dx,dy,dist,chance;
-    int8_t dodge;
+    boolean dodge;
 
     if (gamestate.victoryflag)
         return;
@@ -3298,7 +3298,7 @@ void T_DogChase (objtype *ob)
     while (move)
     {
         //
-        // check for uint8_t range
+        // check for byte range
         //
         dx = player->x - ob->x;
         if (dx<0)
@@ -3430,9 +3430,9 @@ void T_Path (objtype *ob)
 
         if (ob->tilex>MAPSIZE || ob->tiley>MAPSIZE)
         {
-            sprintf (string_buffer, "T_Path hit a wall at %u,%u, dir %u",
+            sprintf (str, "T_Path hit a wall at %u,%u, dir %u",
                 ob->tilex,ob->tiley,ob->dir);
-            Quit (string_buffer);
+            Quit (str);
         }
 
         ob->x = ((int32_t)ob->tilex<<TILESHIFT)+TILEGLOBAL/2;
@@ -3747,7 +3747,7 @@ void T_BJDone (objtype *)
 ===============
 */
 
-int8_t CheckPosition (objtype *ob)
+boolean CheckPosition (objtype *ob)
 {
     int     x,y,xl,yl,xh,yh;
     objtype *check;
@@ -3856,18 +3856,18 @@ void    A_StartDeathCam (objtype *ob)
     dist = 0x14000l;
     do
     {
-        xmove = uint32_tMul(dist,costable[player->angle]);
-        ymove = -uint32_tMul(dist,sintable[player->angle]);
+        xmove = FixedMul(dist,costable[player->angle]);
+        ymove = -FixedMul(dist,sintable[player->angle]);
 
         player->x = ob->x - xmove;
         player->y = ob->y - ymove;
         dist += 0x1000;
 
     } while (!CheckPosition (player));
-    plux = (uint16_t)(player->x >> UNSIGNEDSHIFT);                      // scale to fit in unsigned
-    pluy = (uint16_t)(player->y >> UNSIGNEDSHIFT);
-    player->tilex = (uint16_t)(player->x >> TILESHIFT);         // scale to tile values
-    player->tiley = (uint16_t)(player->y >> TILESHIFT);
+    plux = (word)(player->x >> UNSIGNEDSHIFT);                      // scale to fit in unsigned
+    pluy = (word)(player->y >> UNSIGNEDSHIFT);
+    player->tilex = (word)(player->x >> TILESHIFT);         // scale to tile values
+    player->tiley = (word)(player->y >> TILESHIFT);
 
     //
     // go back to the game

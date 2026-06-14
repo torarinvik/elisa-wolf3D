@@ -30,8 +30,8 @@ typedef enum
 
 typedef struct
 {
-    longuint16_t        length;
-    uint16_t            priority;
+    longword        length;
+    word            priority;
 } SoundCommon;
 
 #define ORIG_SOUNDCOMMON_SIZE 6
@@ -46,7 +46,7 @@ typedef struct
 typedef struct
 {
     SoundCommon     common;
-    uint8_t            data[1];
+    byte            data[1];
 } PCSound;
 
 //      Register addresses
@@ -65,17 +65,17 @@ typedef struct
 
 typedef struct
 {
-    uint8_t    mChar,cChar,
+    byte    mChar,cChar,
             mScale,cScale,
             mAttack,cAttack,
             mSus,cSus,
             mWave,cWave,
             nConn,
 
-            // These are only for Muse - these uint8_ts are really unused
+            // These are only for Muse - these bytes are really unused
             voice,
             mode;
-    uint8_t    unused[3];
+    byte    unused[3];
 } Instrument;
 
 #define ORIG_INSTRUMENT_SIZE 16
@@ -84,8 +84,8 @@ typedef struct
 {
     SoundCommon     common;
     Instrument      inst;
-    uint8_t            block;
-    uint8_t            data[1];
+    byte            block;
+    byte            data[1];
 } AdLibSound;
 
 #define ORIG_ADLIBSOUND_SIZE (ORIG_SOUNDCOMMON_SIZE + ORIG_INSTRUMENT_SIZE + 2)
@@ -97,20 +97,20 @@ typedef struct
 
 typedef struct
 {
-    uint16_t    length;
-    uint16_t    values[1];
+    word    length;
+    word    values[1];
 } MusicGroup;
 
 typedef struct
 {
     int valid;
-    uint32_t globalsoundx, globalsoundy;
+    fixed globalsoundx, globalsoundy;
 } globalsoundpos;
 
 extern globalsoundpos channelSoundPos[];
 
 // Global variables
-extern  int8_t         AdLibPresent,
+extern  boolean         AdLibPresent,
                         SoundBlasterPresent,
                         SoundPositioned;
 extern  SDMode          SoundMode;
@@ -132,7 +132,7 @@ extern  void    SD_Startup(void),
 
 extern  int     SD_GetChannelForDigi(int which);
 extern  void    SD_PositionSound(int leftvol,int rightvol);
-extern  int8_t SD_PlaySound(soundnames sound);
+extern  boolean SD_PlaySound(soundnames sound);
 extern  void    SD_SetPosition(int channel, int leftvol,int rightvol);
 extern  void    SD_StopSound(void),
                 SD_WaitSoundDone(void);
@@ -143,14 +143,14 @@ extern  void    SD_MusicOn(void),
                 SD_FadeOutMusic(void);
 extern  int     SD_MusicOff(void);
 
-extern  int8_t SD_MusicPlaying(void);
-extern  int8_t SD_SetSoundMode(SDMode mode);
-extern  int8_t SD_SetMusicMode(SMMode mode);
-extern  uint16_t    SD_SoundPlaying(void);
+extern  boolean SD_MusicPlaying(void);
+extern  boolean SD_SetSoundMode(SDMode mode);
+extern  boolean SD_SetMusicMode(SMMode mode);
+extern  word    SD_SoundPlaying(void);
 
 extern  void    SD_SetDigiDevice(SDSMode);
 extern  void    SD_PrepareSound(int which);
-extern  int     SD_PlayDigitized(uint16_t which,int leftpos,int rightpos);
+extern  int     SD_PlayDigitized(word which,int leftpos,int rightpos);
 extern  void    SD_StopDigitized(void);
 
 #endif

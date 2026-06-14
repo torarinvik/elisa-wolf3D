@@ -30,7 +30,7 @@ TEXT FORMATTING COMMANDS
 #define BACKCOLOR       0x11
 
 
-#define uint16_tLIMIT       80
+#define WORDLIMIT       80
 #define FONTHEIGHT      10
 #define TOPMARGIN       16
 #define BOTTOMMARGIN    32
@@ -62,7 +62,7 @@ static int     picx;
 static int     picy;
 static int     picnum;
 static int     picdelay;
-static int8_t layoutdone;
+static boolean layoutdone;
 
 //===========================================================================
 
@@ -347,35 +347,35 @@ void HandleCtrls (void)
 /*
 =====================
 =
-= Handleuint16_t
+= HandleWord
 =
 =====================
 */
 
-void Handleuint16_t (void)
+void HandleWord (void)
 {
-    char    wuint16_t[uint16_tLIMIT];
-    int     uint16_tindex;
-    uint16_t    wwidth,wheight,newpos;
+    char    wword[WORDLIMIT];
+    int     wordindex;
+    word    wwidth,wheight,newpos;
 
 
     //
-    // copy the next uint16_t into [uint16_t]
+    // copy the next word into [word]
     //
-    wuint16_t[0] = *text++;
-    uint16_tindex = 1;
+    wword[0] = *text++;
+    wordindex = 1;
     while (*text>32)
     {
-        wuint16_t[uint16_tindex] = *text++;
-        if (++uint16_tindex == uint16_tLIMIT)
-            Quit ("PageLayout: uint16_t limit exceeded");
+        wword[wordindex] = *text++;
+        if (++wordindex == WORDLIMIT)
+            Quit ("PageLayout: Word limit exceeded");
     }
-    wuint16_t[uint16_tindex] = 0;            // stick a null at end for C
+    wword[wordindex] = 0;            // stick a null at end for C
 
     //
     // see if it fits on this line
     //
-    VW_MeasurePropString (wuint16_t,&wwidth,&wheight);
+    VW_MeasurePropString (wword,&wwidth,&wheight);
 
     while (px+wwidth > (int) rightmargin[rowon])
     {
@@ -388,7 +388,7 @@ void Handleuint16_t (void)
     // print it
     //
     newpos = px+wwidth;
-    VWB_DrawPropString (wuint16_t);
+    VWB_DrawPropString (wword);
     px = newpos;
 
     //
@@ -406,13 +406,13 @@ void Handleuint16_t (void)
 =
 = PageLayout
 =
-= Clears the screen, draws the pics on the page, and uint16_t wraps the text.
+= Clears the screen, draws the pics on the page, and word wraps the text.
 = Returns a pointer to the terminating command
 =
 =====================
 */
 
-void PageLayout (int8_t shownumber)
+void PageLayout (boolean shownumber)
 {
     int     i,oldfontcolor;
     char    ch;
@@ -473,7 +473,7 @@ void PageLayout (int8_t shownumber)
             else if (ch <= 32)
                 HandleCtrls ();
             else
-                Handleuint16_t ();
+                HandleWord ();
 
     } while (!layoutdone);
 
@@ -482,16 +482,16 @@ void PageLayout (int8_t shownumber)
     if (shownumber)
     {
 #ifdef SPANISH
-        sprintf(string_buffer, "Hoja %d de %d", pagenum, numpages);
+        sprintf(str, "Hoja %d de %d", pagenum, numpages);
         px = 208;
 #else
-        sprintf(string_buffer, "pg %d of %d", pagenum, numpages);
+        sprintf(str, "pg %d of %d", pagenum, numpages);
         px = 213;
 #endif
         py = 183;
         fontcolor = 0x4f;                          //12^BACKCOLOR;
 
-        VWB_DrawPropString (string_buffer);
+        VWB_DrawPropString (str);
     }
 
     fontcolor = oldfontcolor;
@@ -628,7 +628,7 @@ void ShowArticle (char *article)
     };
 #endif
     unsigned    oldfontnumber;
-    int8_t     newpage,firstpage;
+    boolean     newpage,firstpage;
     ControlInfo ci;
 
 #ifdef JAPAN
@@ -762,7 +762,7 @@ void HelpScreens (void)
     int     artnum;
     char    *text;
 #ifndef ARTSEXTERN
-    void*  layout;
+    memptr  layout;
 #endif
 
 
@@ -808,7 +808,7 @@ void EndText (void)
     int     artnum;
     char    *text;
 #ifndef ARTSEXTERN
-    void*  layout;
+    memptr  layout;
 #endif
 
     ClearMemory ();

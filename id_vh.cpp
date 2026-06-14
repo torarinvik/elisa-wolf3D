@@ -5,7 +5,7 @@ pictabletype    *pictable;
 SDL_Surface     *latchpics[NUMLATCHPICS];
 
 int     px,py;
-uint8_t    fontcolor,backcolor;
+byte    fontcolor,backcolor;
 int     fontnumber;
 
 //==========================================================================
@@ -14,19 +14,19 @@ void VWB_DrawPropString(const char* string)
 {
     fontstruct  *font;
     int         width, step, height;
-    uint8_t        *source, *dest;
-    uint8_t        ch;
+    byte        *source, *dest;
+    byte        ch;
 
-    uint8_t *vbuf = LOCK();
+    byte *vbuf = LOCK();
 
     font = (fontstruct *) grsegs[STARTFONT+fontnumber];
     height = font->height;
     dest = vbuf + scaleFactor * (py * curPitch + px);
 
-    while ((ch = (uint8_t)*string++)!=0)
+    while ((ch = (byte)*string++)!=0)
     {
         width = step = font->width[ch];
-        source = ((uint8_t *)font)+font->location[ch];
+        source = ((byte *)font)+font->location[ch];
         while (width--)
         {
             for(int i=0;i<height;i++)
@@ -56,10 +56,10 @@ void VWB_DrawPropString(const char* string)
 =================
 */
 
-void VL_MungePic (uint8_t *source, unsigned width, unsigned height)
+void VL_MungePic (byte *source, unsigned width, unsigned height)
 {
     unsigned x,y,plane,size,pwidth;
-    uint8_t *temp, *dest, *srcline;
+    byte *temp, *dest, *srcline;
 
     size = width*height;
 
@@ -69,7 +69,7 @@ void VL_MungePic (uint8_t *source, unsigned width, unsigned height)
 //
 // copy the pic to a temp buffer
 //
-    temp=(uint8_t *) malloc(size);
+    temp=(byte *) malloc(size);
     CHECKMALLOCRESULT(temp);
     memcpy (temp,source,size);
 
@@ -93,14 +93,14 @@ void VL_MungePic (uint8_t *source, unsigned width, unsigned height)
     free(temp);
 }
 
-void VWL_MeasureString (const char *string, uint16_t *width, uint16_t *height, fontstruct *font)
+void VWL_MeasureString (const char *string, word *width, word *height, fontstruct *font)
 {
     *height = font->height;
     for (*width = 0;*string;string++)
-        *width += font->width[*((uint8_t *)string)];   // proportional width
+        *width += font->width[*((byte *)string)];   // proportional width
 }
 
-void VW_MeasurePropString (const char *string, uint16_t *width, uint16_t *height)
+void VW_MeasurePropString (const char *string, word *width, word *height)
 {
     VWL_MeasureString(string,width,height,(fontstruct *)grsegs[STARTFONT+fontnumber]);
 }
@@ -127,7 +127,7 @@ void VWB_DrawTile8 (int x, int y, int tile)
 
 void VWB_DrawTile8M (int x, int y, int tile)
 {
-    VL_MemToScreen (((uint8_t *)grsegs[STARTTILE8M])+tile*64,8,8,x,y);
+    VL_MemToScreen (((byte *)grsegs[STARTTILE8M])+tile*64,8,8,x,y);
 }
 
 void VWB_DrawPic (int x, int y, int chunknum)
@@ -225,7 +225,7 @@ void LatchDrawPicScaledCoord (unsigned scx, unsigned scy, unsigned picnum)
 void LoadLatchMem (void)
 {
     int i,width,height,start,end;
-    uint8_t *src;
+    byte *src;
     SDL_Surface *surf;
 
 //
@@ -337,8 +337,8 @@ void VH_Startup()
     rndmask = rndmasks[rndbits - 17];
 }
 
-int8_t FizzleFade (SDL_Surface *source, int x1, int y1,
-    unsigned width, unsigned height, unsigned frames, int8_t abortable)
+boolean FizzleFade (SDL_Surface *source, int x1, int y1,
+    unsigned width, unsigned height, unsigned frames, boolean abortable)
 {
 
     unsigned x, y, frame, pixperframe;
@@ -357,7 +357,7 @@ int8_t FizzleFade (SDL_Surface *source, int x1, int y1,
     SDL_Surface *source_copy = SDL_DuplicateSurface(source);
     SDL_Surface *screen_copy = SDL_DuplicateSurface(screen);
 
-    uint8_t *srcptr = VL_LockSurface(source_copy);
+    byte *srcptr = VL_LockSurface(source_copy);
     do
     {
         if(abortable && IN_CheckAck ())
@@ -371,7 +371,7 @@ int8_t FizzleFade (SDL_Surface *source, int x1, int y1,
             return true;
         }
 
-        uint8_t *destptr = VL_LockSurface(screen_copy);
+        byte *destptr = VL_LockSurface(screen_copy);
 
         rndval = lastrndval;
 
@@ -413,7 +413,7 @@ int8_t FizzleFade (SDL_Surface *source, int x1, int y1,
                 }
                 else
                 {
-                    uint8_t col = *(srcptr + (y1 + y) * source->pitch + x1 + x);
+                    byte col = *(srcptr + (y1 + y) * source->pitch + x1 + x);
                     *(destptr + (y1 + y) * screen->pitch + x1 + x) = col;
                 }
 

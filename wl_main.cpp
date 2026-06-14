@@ -24,7 +24,7 @@
 =============================================================================
 */
 
-extern uint8_t signon[];
+extern byte signon[];
 
 /*
 =============================================================================
@@ -35,8 +35,8 @@ extern uint8_t signon[];
 */
 
 
-#define uint32_t     (0x5700l)               // in global coordinates
-//#define uint32_t     (0x0200l)               // in global coordinates
+#define FOCALLENGTH     (0x5700l)               // in global coordinates
+//#define FOCALLENGTH     (0x0200l)               // in global coordinates
 #define VIEWGLOBAL      0x10000                 // globals visable flush to wall
 
 #define VIEWWIDTH       256                     // size of view window
@@ -50,28 +50,28 @@ extern uint8_t signon[];
 =============================================================================
 */
 
-char    string_buffer[80];
+char    str[80];
 int     dirangle[9] = {0,ANGLES/8,2*ANGLES/8,3*ANGLES/8,4*ANGLES/8,
                        5*ANGLES/8,6*ANGLES/8,7*ANGLES/8,ANGLES};
 
 //
 // proejection variables
 //
-uint32_t    uint32_t;
+fixed    focallength;
 unsigned screenofs;
 int      viewscreenx, viewscreeny;
 int      viewwidth;
 int      viewheight;
 short    centerx;
 int      shootdelta;           // pixels away from centerx a target can be
-uint32_t    scale;
+fixed    scale;
 int32_t  heightnumerator;
 
 
 void    Quit (const char *error,...);
 
-int8_t startgame;
-int8_t loadedgame;
+boolean startgame;
+boolean loadedgame;
 int     mouseadjustment;
 
 char    configdir[256] = "";
@@ -80,8 +80,8 @@ char    configname[13] = "config.";
 //
 // Command line parameter variables
 //
-int8_t param_debugmode = false;
-int8_t param_nowait = false;
+boolean param_debugmode = false;
+boolean param_nowait = false;
 int     param_difficulty = 1;           // default is "normal"
 int     param_tedlevel = -1;            // default is not to start a level
 int     param_joystickindex = 0;
@@ -92,8 +92,8 @@ int     param_samplerate = 44100;
 int     param_audiobuffer = 2048 / (44100 / param_samplerate);
 
 int     param_mission = 0;
-int8_t param_goodtimes = false;
-int8_t param_ignorenumchunks = false;
+boolean param_goodtimes = false;
+boolean param_ignorenumchunks = false;
 
 /*
 =============================================================================
@@ -132,7 +132,7 @@ void ReadConfig(void)
         //
         // valid config file
         //
-        uint16_t tmp;
+        word tmp;
         read(file,&tmp,sizeof(tmp));
         if(tmp!=0xfefa)
         {
@@ -147,9 +147,9 @@ void ReadConfig(void)
 
         read(file,&mouseenabled,sizeof(mouseenabled));
         read(file,&joystickenabled,sizeof(joystickenabled));
-        int8_t dummyJoypadEnabled;
+        boolean dummyJoypadEnabled;
         read(file,&dummyJoypadEnabled,sizeof(dummyJoypadEnabled));
-        int8_t dummyJoystickProgressive;
+        boolean dummyJoystickProgressive;
         read(file,&dummyJoystickProgressive,sizeof(dummyJoystickProgressive));
         int dummyJoystickPort = 0;
         read(file,&dummyJoystickPort,sizeof(dummyJoystickPort));
@@ -250,7 +250,7 @@ void WriteConfig(void)
     const int file = open(configpath, O_CREAT | O_WRONLY | O_BINARY, 0644);
     if (file != -1)
     {
-        uint16_t tmp=0xfefa;
+        word tmp=0xfefa;
         write(file,&tmp,sizeof(tmp));
         write(file,Scores,sizeof(HighScore) * MaxScores);
 
@@ -260,9 +260,9 @@ void WriteConfig(void)
 
         write(file,&mouseenabled,sizeof(mouseenabled));
         write(file,&joystickenabled,sizeof(joystickenabled));
-        int8_t dummyJoypadEnabled = false;
+        boolean dummyJoypadEnabled = false;
         write(file,&dummyJoypadEnabled,sizeof(dummyJoypadEnabled));
-        int8_t dummyJoystickProgressive = false;
+        boolean dummyJoystickProgressive = false;
         write(file,&dummyJoystickProgressive,sizeof(dummyJoystickProgressive));
         int dummyJoystickPort = 0;
         write(file,&dummyJoystickPort,sizeof(dummyJoystickPort));
@@ -321,7 +321,7 @@ void DiskFlopAnim(int x,int y)
 }
 
 
-int32_t DoChecksum(uint8_t *source,unsigned size,int32_t checksum)
+int32_t DoChecksum(byte *source,unsigned size,int32_t checksum)
 {
     unsigned i;
 
@@ -343,7 +343,7 @@ int32_t DoChecksum(uint8_t *source,unsigned size,int32_t checksum)
 extern statetype s_grdstand;
 extern statetype s_player;
 
-int8_t SaveTheGame(FILE *file,int x,int y)
+boolean SaveTheGame(FILE *file,int x,int y)
 {
 //    struct diskfree_t dfree;
 //    int32_t avail,size,checksum;
@@ -356,7 +356,7 @@ int8_t SaveTheGame(FILE *file,int x,int y)
         Quit("Error in _dos_getdiskfree call");
 
     avail = (int32_t)dfree.avail_clusters *
-                  dfree.uint8_ts_per_sector *
+                  dfree.bytes_per_sector *
                   dfree.sectors_per_cluster;
 
     size = 0;
@@ -388,15 +388,15 @@ int8_t SaveTheGame(FILE *file,int x,int y)
 
     DiskFlopAnim(x,y);
     fwrite(&gamestate,sizeof(gamestate),1,file);
-    checksum = DoChecksum((uint8_t *)&gamestate,sizeof(gamestate),checksum);
+    checksum = DoChecksum((byte *)&gamestate,sizeof(gamestate),checksum);
 
     DiskFlopAnim(x,y);
     fwrite(&LevelRatios[0],sizeof(LRstruct)*LRpack,1,file);
-    checksum = DoChecksum((uint8_t *)&LevelRatios[0],sizeof(LRstruct)*LRpack,checksum);
+    checksum = DoChecksum((byte *)&LevelRatios[0],sizeof(LRstruct)*LRpack,checksum);
 
     DiskFlopAnim(x,y);
     fwrite(tilemap,sizeof(tilemap),1,file);
-    checksum = DoChecksum((uint8_t *)tilemap,sizeof(tilemap),checksum);
+    checksum = DoChecksum((byte *)tilemap,sizeof(tilemap),checksum);
     DiskFlopAnim(x,y);
 
     int i;
@@ -404,14 +404,14 @@ int8_t SaveTheGame(FILE *file,int x,int y)
     {
         for(int j=0;j<MAPSIZE;j++)
         {
-            uint16_t actnum;
+            word actnum;
             objtype *objptr=actorat[i][j];
             if(ISPOINTER(objptr))
-                actnum=0x8000 | (uint16_t)(objptr-objlist);
+                actnum=0x8000 | (word)(objptr-objlist);
             else
-                actnum=(uint16_t)(uintptr_t)objptr;
+                actnum=(word)(uintptr_t)objptr;
             fwrite(&actnum,sizeof(actnum),1,file);
-            checksum = DoChecksum((uint8_t *)&actnum,sizeof(actnum),checksum);
+            checksum = DoChecksum((byte *)&actnum,sizeof(actnum),checksum);
         }
     }
 
@@ -440,39 +440,39 @@ int8_t SaveTheGame(FILE *file,int x,int y)
     fwrite(&nullobj,sizeof(nullobj),1,file);
 
     DiskFlopAnim(x,y);
-    uint16_t laststatobjnum=(uint16_t) (laststatobj-statobjlist);
+    word laststatobjnum=(word) (laststatobj-statobjlist);
     fwrite(&laststatobjnum,sizeof(laststatobjnum),1,file);
-    checksum = DoChecksum((uint8_t *)&laststatobjnum,sizeof(laststatobjnum),checksum);
+    checksum = DoChecksum((byte *)&laststatobjnum,sizeof(laststatobjnum),checksum);
 
     DiskFlopAnim(x,y);
     for(i=0;i<MAXSTATS;i++)
     {
         memcpy(&nullstat,statobjlist+i,sizeof(nullstat));
-        nullstat.visspot=(uint8_t *) ((uintptr_t) nullstat.visspot-(uintptr_t)spotvis);
+        nullstat.visspot=(byte *) ((uintptr_t) nullstat.visspot-(uintptr_t)spotvis);
         fwrite(&nullstat,sizeof(nullstat),1,file);
-        checksum = DoChecksum((uint8_t *)&nullstat,sizeof(nullstat),checksum);
+        checksum = DoChecksum((byte *)&nullstat,sizeof(nullstat),checksum);
     }
 
     DiskFlopAnim(x,y);
     fwrite (doorposition,sizeof(doorposition),1,file);
-    checksum = DoChecksum((uint8_t *)doorposition,sizeof(doorposition),checksum);
+    checksum = DoChecksum((byte *)doorposition,sizeof(doorposition),checksum);
     DiskFlopAnim(x,y);
     fwrite (doorobjlist,sizeof(doorobjlist),1,file);
-    checksum = DoChecksum((uint8_t *)doorobjlist,sizeof(doorobjlist),checksum);
+    checksum = DoChecksum((byte *)doorobjlist,sizeof(doorobjlist),checksum);
 
     DiskFlopAnim(x,y);
     fwrite (&pwallstate,sizeof(pwallstate),1,file);
-    checksum = DoChecksum((uint8_t *)&pwallstate,sizeof(pwallstate),checksum);
+    checksum = DoChecksum((byte *)&pwallstate,sizeof(pwallstate),checksum);
     fwrite (&pwalltile,sizeof(pwalltile),1,file);
-    checksum = DoChecksum((uint8_t *)&pwalltile,sizeof(pwalltile),checksum);
+    checksum = DoChecksum((byte *)&pwalltile,sizeof(pwalltile),checksum);
     fwrite (&pwallx,sizeof(pwallx),1,file);
-    checksum = DoChecksum((uint8_t *)&pwallx,sizeof(pwallx),checksum);
+    checksum = DoChecksum((byte *)&pwallx,sizeof(pwallx),checksum);
     fwrite (&pwally,sizeof(pwally),1,file);
-    checksum = DoChecksum((uint8_t *)&pwally,sizeof(pwally),checksum);
+    checksum = DoChecksum((byte *)&pwally,sizeof(pwally),checksum);
     fwrite (&pwalldir,sizeof(pwalldir),1,file);
-    checksum = DoChecksum((uint8_t *)&pwalldir,sizeof(pwalldir),checksum);
+    checksum = DoChecksum((byte *)&pwalldir,sizeof(pwalldir),checksum);
     fwrite (&pwallpos,sizeof(pwallpos),1,file);
-    checksum = DoChecksum((uint8_t *)&pwallpos,sizeof(pwallpos),checksum);
+    checksum = DoChecksum((byte *)&pwallpos,sizeof(pwallpos),checksum);
 
     //
     // WRITE OUT CHECKSUM
@@ -494,7 +494,7 @@ int8_t SaveTheGame(FILE *file,int x,int y)
 ==================
 */
 
-int8_t LoadTheGame(FILE *file,int x,int y)
+boolean LoadTheGame(FILE *file,int x,int y)
 {
     int32_t checksum,oldchecksum;
     objtype nullobj;
@@ -504,18 +504,18 @@ int8_t LoadTheGame(FILE *file,int x,int y)
 
     DiskFlopAnim(x,y);
     fread (&gamestate,sizeof(gamestate),1,file);
-    checksum = DoChecksum((uint8_t *)&gamestate,sizeof(gamestate),checksum);
+    checksum = DoChecksum((byte *)&gamestate,sizeof(gamestate),checksum);
 
     DiskFlopAnim(x,y);
     fread (&LevelRatios[0],sizeof(LRstruct)*LRpack,1,file);
-    checksum = DoChecksum((uint8_t *)&LevelRatios[0],sizeof(LRstruct)*LRpack,checksum);
+    checksum = DoChecksum((byte *)&LevelRatios[0],sizeof(LRstruct)*LRpack,checksum);
 
     DiskFlopAnim(x,y);
     SetupGameLevel ();
 
     DiskFlopAnim(x,y);
     fread (tilemap,sizeof(tilemap),1,file);
-    checksum = DoChecksum((uint8_t *)tilemap,sizeof(tilemap),checksum);
+    checksum = DoChecksum((byte *)tilemap,sizeof(tilemap),checksum);
 
     DiskFlopAnim(x,y);
 
@@ -524,8 +524,8 @@ int8_t LoadTheGame(FILE *file,int x,int y)
     {
         for(int j=0;j<MAPSIZE;j++)
         {
-            fread (&actnum,sizeof(uint16_t),1,file);
-            checksum = DoChecksum((uint8_t *) &actnum,sizeof(uint16_t),checksum);
+            fread (&actnum,sizeof(word),1,file);
+            checksum = DoChecksum((byte *) &actnum,sizeof(word),checksum);
             if(actnum&0x8000)
                 actorat[i][j]=objlist+(actnum&0x7fff);
             else
@@ -555,44 +555,44 @@ int8_t LoadTheGame(FILE *file,int x,int y)
     }
 
     DiskFlopAnim(x,y);
-    uint16_t laststatobjnum;
+    word laststatobjnum;
     fread (&laststatobjnum,sizeof(laststatobjnum),1,file);
     laststatobj=statobjlist+laststatobjnum;
-    checksum = DoChecksum((uint8_t *)&laststatobjnum,sizeof(laststatobjnum),checksum);
+    checksum = DoChecksum((byte *)&laststatobjnum,sizeof(laststatobjnum),checksum);
 
     DiskFlopAnim(x,y);
     for(i=0;i<MAXSTATS;i++)
     {
         fread(&nullstat,sizeof(nullstat),1,file);
-        checksum = DoChecksum((uint8_t *)&nullstat,sizeof(nullstat),checksum);
-        nullstat.visspot=(uint8_t *) ((uintptr_t)nullstat.visspot+(uintptr_t)spotvis);
+        checksum = DoChecksum((byte *)&nullstat,sizeof(nullstat),checksum);
+        nullstat.visspot=(byte *) ((uintptr_t)nullstat.visspot+(uintptr_t)spotvis);
         memcpy(statobjlist+i,&nullstat,sizeof(nullstat));
     }
 
     DiskFlopAnim(x,y);
     fread (doorposition,sizeof(doorposition),1,file);
-    checksum = DoChecksum((uint8_t *)doorposition,sizeof(doorposition),checksum);
+    checksum = DoChecksum((byte *)doorposition,sizeof(doorposition),checksum);
     DiskFlopAnim(x,y);
     fread (doorobjlist,sizeof(doorobjlist),1,file);
-    checksum = DoChecksum((uint8_t *)doorobjlist,sizeof(doorobjlist),checksum);
+    checksum = DoChecksum((byte *)doorobjlist,sizeof(doorobjlist),checksum);
 
     DiskFlopAnim(x,y);
     fread (&pwallstate,sizeof(pwallstate),1,file);
-    checksum = DoChecksum((uint8_t *)&pwallstate,sizeof(pwallstate),checksum);
+    checksum = DoChecksum((byte *)&pwallstate,sizeof(pwallstate),checksum);
     fread (&pwalltile,sizeof(pwalltile),1,file);
-    checksum = DoChecksum((uint8_t *)&pwalltile,sizeof(pwalltile),checksum);
+    checksum = DoChecksum((byte *)&pwalltile,sizeof(pwalltile),checksum);
     fread (&pwallx,sizeof(pwallx),1,file);
-    checksum = DoChecksum((uint8_t *)&pwallx,sizeof(pwallx),checksum);
+    checksum = DoChecksum((byte *)&pwallx,sizeof(pwallx),checksum);
     fread (&pwally,sizeof(pwally),1,file);
-    checksum = DoChecksum((uint8_t *)&pwally,sizeof(pwally),checksum);
+    checksum = DoChecksum((byte *)&pwally,sizeof(pwally),checksum);
     fread (&pwalldir,sizeof(pwalldir),1,file);
-    checksum = DoChecksum((uint8_t *)&pwalldir,sizeof(pwalldir),checksum);
+    checksum = DoChecksum((byte *)&pwalldir,sizeof(pwalldir),checksum);
     fread (&pwallpos,sizeof(pwallpos),1,file);
-    checksum = DoChecksum((uint8_t *)&pwallpos,sizeof(pwallpos),checksum);
+    checksum = DoChecksum((byte *)&pwallpos,sizeof(pwallpos),checksum);
 
     if (gamestate.secretcount)      // assign valid floorcodes under moved pushwalls
     {
-        uint16_t *map, *obj; uint16_t tile, sprite;
+        word *map, *obj; word tile, sprite;
         map = mapsegs[0]; obj = mapsegs[1];
         for (y=0;y<mapheight;y++)
             for (x=0;x<mapwidth;x++)
@@ -707,7 +707,7 @@ void BuildTables (void)
     float anglestep=(float)(PI/2/ANGLEQUAD);
     for(i=0; i<ANGLEQUAD; i++)
     {
-        uint32_t value=(int32_t)(GLOBAL1*sin(angle));
+        fixed value=(int32_t)(GLOBAL1*sin(angle));
         sintable[i]=sintable[i+ANGLES]=sintable[ANGLES/2-i]=value;
         sintable[ANGLES-i]=sintable[ANGLES/2+i]=-value;
         angle+=anglestep;
@@ -725,7 +725,7 @@ void BuildTables (void)
 =
 = CalcProjection
 =
-= Uses uint32_t
+= Uses focallength
 =
 ====================
 */
@@ -739,7 +739,7 @@ void CalcProjection (int32_t focal)
     int     halfview;
     double  facedist;
 
-    uint32_t = focal;
+    focallength = focal;
     facedist = focal+MINDIST;
     halfview = viewwidth/2;                                 // half view in pixels
 
@@ -747,7 +747,7 @@ void CalcProjection (int32_t focal)
     // calculate scale value for vertical height calculations
     // and sprite x calculations
     //
-    scale = (uint32_t) (halfview*facedist/(VIEWGLOBAL/2));
+    scale = (fixed) (halfview*facedist/(VIEWGLOBAL/2));
 
     //
     // divide heightnumerator by a posts distance to get the posts height for
@@ -1182,7 +1182,7 @@ void DoJukebox(void)
 static void InitGame()
 {
 #ifndef SPEARDEMO
-    int8_t didjukebox=false;
+    boolean didjukebox=false;
 #endif
 
     // initialize SDL
@@ -1217,7 +1217,7 @@ static void InitGame()
         if(SDL_GetWMInfo(&wmInfo) != -1)
         {
             HWND hwndSDL = wmInfo.window;
-            Duint16_t style = GetWindowLong(hwndSDL, GWL_STYLE) & ~WS_SYSMENU;
+            DWORD style = GetWindowLong(hwndSDL, GWL_STYLE) & ~WS_SYSMENU;
             SetWindowLong(hwndSDL, GWL_STYLE, style);
             SetWindowPos(hwndSDL, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
         }
@@ -1239,12 +1239,12 @@ static void InitGame()
     if (mminfo.mainmem < 257000L && !MS_CheckParm("debugmode"))
 #endif
     {
-        uint8_t *screen;
+        byte *screen;
 
         CA_CacheGrChunk (ERRORSCREEN);
         screen = grsegs[ERRORSCREEN];
         ShutdownId();
-/*        memcpy((uint8_t *)0xb8000,screen+7+7*160,17*160);
+/*        memcpy((byte *)0xb8000,screen+7+7*160,17*160);
         gotoxy (1,23);*/
         exit(1);
     }
@@ -1301,8 +1301,8 @@ static void InitGame()
         FinishSignon();
 
 #ifdef NOTYET
-    vdisp = (uint8_t *) (0xa0000+PAGE1START);
-    vbuf = (uint8_t *) (0xa0000+PAGE2START);
+    vdisp = (byte *) (0xa0000+PAGE1START);
+    vbuf = (byte *) (0xa0000+PAGE2START);
 #endif
 }
 
@@ -1316,7 +1316,7 @@ static void InitGame()
 ==========================
 */
 
-int8_t SetViewSize (unsigned width, unsigned height)
+boolean SetViewSize (unsigned width, unsigned height)
 {
     viewwidth = width&~15;                  // must be divisable by 16
     viewheight = height&~1;                 // must be even
@@ -1334,7 +1334,7 @@ int8_t SetViewSize (unsigned width, unsigned height)
 //
 // calculate trace angles and projection constants
 //
-    CalcProjection (uint32_t);
+    CalcProjection (FOCALLENGTH);
 
     return true;
 }
@@ -1397,7 +1397,7 @@ void NewViewSize (int width)
 void Quit (const char *errorStr, ...)
 {
 #ifdef NOTYET
-    uint8_t *screen;
+    byte *screen;
 #endif
     char error[256];
     if(errorStr != NULL)
@@ -1449,7 +1449,7 @@ void Quit (const char *errorStr, ...)
     if (error && *error)
     {
 #ifdef NOTYET
-        memcpy((uint8_t *)0xb8000,screen+7,7*160);
+        memcpy((byte *)0xb8000,screen+7,7*160);
         SetTextCursor(9,3);
 #endif
         puts(error);
@@ -1464,7 +1464,7 @@ void Quit (const char *errorStr, ...)
     {
 #ifdef NOTYET
         #ifndef JAPAN
-        memcpy((uint8_t *)0xb8000,screen+7,24*160); // 24 for SPEAR/UPLOAD compatibility
+        memcpy((byte *)0xb8000,screen+7,24*160); // 24 for SPEAR/UPLOAD compatibility
         #endif
         SetTextCursor(0,23);
 #endif
@@ -1642,7 +1642,7 @@ static void DemoLoop()
 
 //===========================================================================
 
-#define IFARG(string_buffer) if(!strcmp(arg, (string_buffer)))
+#define IFARG(str) if(!strcmp(arg, (str)))
 
 void CheckParameters(int argc, char *argv[])
 {
@@ -1880,7 +1880,7 @@ void CheckParameters(int argc, char *argv[])
             " --joystickhat <index>  Enables movement with the given coolie hat\n"
             " --samplerate <rate>    Sets the sound sample rate (given in Hz, default: %i)\n"
             " --audiobuffer <size>   Sets the size of the audio buffer (-> sound latency)\n"
-            "                        (given in uint8_ts, default: 2048 / (44100 / samplerate))\n"
+            "                        (given in bytes, default: 2048 / (44100 / samplerate))\n"
             " --ignorenumchunks      Ignores the number of chunks in VGAHEAD.*\n"
             "                        (may be useful for some broken mods)\n"
             " --configdir <dir>      Directory where config file and save games are stored\n"

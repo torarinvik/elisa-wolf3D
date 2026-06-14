@@ -76,9 +76,9 @@ void CountObjects (void)
     total = (int)(laststatobj-&statobjlist[0]);
     US_PrintUnsigned (total);
 
-    char string_buffer[60];
-    sprintf(string_buffer,"\nlaststatobj=%.8X",(int32_t)(uintptr_t)laststatobj);
-    US_Print(string_buffer);
+    char str[60];
+    sprintf(str,"\nlaststatobj=%.8X",(int32_t)(uintptr_t)laststatobj);
+    US_Print(str);
 
     US_Print ("\nIn use statics:");
     for (i=0;i<total;i++)
@@ -230,17 +230,17 @@ void ShapeTest (void)
 {
     //TODO
 #if NOTYET
-    extern  uint16_t    NumDigi;
-    extern  uint16_t    *DigiList;
+    extern  word    NumDigi;
+    extern  word    *DigiList;
     extern  int     postx;
-    extern  uint8_t    *postsource;
+    extern  byte    *postsource;
     static  char    buf[10];
 
-    int8_t         done;
+    boolean         done;
     ScanCode        scan;
     int             i,j,k,x;
-    longuint16_t        l;
-    uint8_t            *addr;
+    longword        l;
+    byte            *addr;
     soundnames      sound;
     //      PageListStruct  far *page;
 
@@ -284,7 +284,7 @@ void ShapeTest (void)
         US_PrintUnsigned(page->lastHit);*/
 
         US_Print("\n Address: ");
-        addr = (uint8_t *) PM_GetPage(i);
+        addr = (byte *) PM_GetPage(i);
         sprintf(buf,"0x%08X",(int32_t) addr);
         US_Print(buf);
 
@@ -323,14 +323,14 @@ void ShapeTest (void)
                     l += DigiList[(j * 2) + 1];
                     k += (DigiList[(j * 2) + 1] + (PMPageSize - 1)) / PMPageSize;
                 }
-                US_Print("\n Total uint8_ts: ");
+                US_Print("\n Total bytes: ");
                 US_PrintUnsigned(l);
                 US_Print("\n Total pages: ");
                 US_PrintUnsigned(k);
             }
             else
             {
-                uint8_t *dp = addr;
+                byte *dp = addr;
                 for (j = 0;j < NumDigi;j++)
                 {
                     k = (DigiList[(j * 2) + 1] + (PMPageSize - 1)) / PMPageSize;
@@ -348,7 +348,7 @@ void ShapeTest (void)
                 }
                 for (j = 0;j < PageLengths[i];j += 32)
                 {
-                    uint8_t v = dp[j];
+                    byte v = dp[j];
                     int v2 = (unsigned)v;
                     v2 -= 128;
                     v2 /= 4;
@@ -426,7 +426,7 @@ void ShapeTest (void)
 
 int DebugKeys (void)
 {
-    int8_t esc;
+    boolean esc;
     int level;
 
     if (Keyboard[sc_B])             // B = border color
@@ -435,10 +435,10 @@ int DebugKeys (void)
         PrintY+=6;
         US_Print(" Border color (0-56): ");
         VW_UpdateScreen();
-        esc = !US_LineInput (px,py,string_buffer,NULL,true,2,0);
+        esc = !US_LineInput (px,py,str,NULL,true,2,0);
         if (!esc)
         {
-            level = atoi (string_buffer);
+            level = atoi (str);
             if (level>=0 && level<=99)
             {
                 if (level<30) level += 31;
@@ -482,7 +482,7 @@ int DebugKeys (void)
 
     if (Keyboard[sc_F])             // F = facing spot
     {
-        char string_buffer[60];
+        char str[60];
         CenterWindow (14,6);
         US_Print ("x:");     US_PrintUnsigned (player->x);
         US_Print (" (");     US_PrintUnsigned (player->x%65536);
@@ -492,7 +492,7 @@ int DebugKeys (void)
         US_Print (" X:");    US_PrintUnsigned (player->tilex);
         US_Print (" Y:");    US_PrintUnsigned (player->tiley);
         US_Print ("\n1:");   US_PrintUnsigned (tilemap[player->tilex][player->tiley]);
-        sprintf(string_buffer," 2:%.8X",(unsigned)(uintptr_t)actorat[player->tilex][player->tiley]); US_Print(string_buffer);
+        sprintf(str," 2:%.8X",(unsigned)(uintptr_t)actorat[player->tilex][player->tiley]); US_Print(str);
         US_Print ("\nf 1:"); US_PrintUnsigned (player->areanumber);
         US_Print (" 2:");    US_PrintUnsigned (MAPSPOT(player->tilex,player->tiley,1));
         US_Print (" 3:");
@@ -550,10 +550,10 @@ int DebugKeys (void)
         PrintY+=6;
         US_Print("  Give Key (1-4): ");
         VW_UpdateScreen();
-        esc = !US_LineInput (px,py,string_buffer,NULL,true,1,0);
+        esc = !US_LineInput (px,py,str,NULL,true,1,0);
         if (!esc)
         {
-            level = atoi (string_buffer);
+            level = atoi (str);
             if (level>0 && level<5)
                 GiveKey(level-1);
         }
@@ -561,7 +561,7 @@ int DebugKeys (void)
     }
     else if (Keyboard[sc_L])        // L = level ratios
     {
-        uint8_t x,start,end=LRpack;
+        byte x,start,end=LRpack;
 
         if (end == 8)   // wolf3d
         {
@@ -632,10 +632,10 @@ again:
         PrintY+=6;
         US_Print(" Slow Motion steps (default 14): ");
         VW_UpdateScreen();
-        esc = !US_LineInput (px,py,string_buffer,NULL,true,2,0);
+        esc = !US_LineInput (px,py,str,NULL,true,2,0);
         if (!esc)
         {
-            level = atoi (string_buffer);
+            level = atoi (str);
             if (level>=0 && level<=50)
                 singlestep = level;
         }
@@ -652,10 +652,10 @@ again:
         PrintY+=6;
         US_Print("  Add how many extra VBLs(0-8): ");
         VW_UpdateScreen();
-        esc = !US_LineInput (px,py,string_buffer,NULL,true,1,0);
+        esc = !US_LineInput (px,py,str,NULL,true,1,0);
         if (!esc)
         {
-            level = atoi (string_buffer);
+            level = atoi (str);
             if (level>=0 && level<=8)
                 extravbls = level;
         }
@@ -671,10 +671,10 @@ again:
         US_Print("  Warp to which level(1-21): ");
 #endif
         VW_UpdateScreen();
-        esc = !US_LineInput (px,py,string_buffer,NULL,true,2,0);
+        esc = !US_LineInput (px,py,str,NULL,true,2,0);
         if (!esc)
         {
-            level = atoi (string_buffer);
+            level = atoi (str);
 #ifndef SPEAR
             if (level>0 && level<11)
 #else
@@ -772,7 +772,7 @@ void OverheadRefresh (void)
 
 void ViewMap (void)
 {
-    int8_t         button0held;
+    boolean         button0held;
 
     viewtype = actoratview;
     //      button0held = false;

@@ -22,7 +22,7 @@
 =============================================================================
 */
 
-int8_t madenoise;              // true when shooting or screaming
+boolean madenoise;              // true when shooting or screaming
 
 exit_t playstate;
 
@@ -33,11 +33,11 @@ static int DebugOk;
 objtype objlist[MAXACTORS];
 objtype *newobj, *obj, *player, *lastobj, *objfreelist, *killerobj;
 
-int8_t noclip, ammocheat;
+boolean noclip, ammocheat;
 int godmode, singlestep, extravbls = 0;
 
-uint8_t tilemap[MAPSIZE][MAPSIZE]; // wall values only
-uint8_t spotvis[MAPSIZE][MAPSIZE];
+byte tilemap[MAPSIZE][MAPSIZE]; // wall values only
+byte spotvis[MAPSIZE][MAPSIZE];
 objtype *actorat[MAPSIZE][MAPSIZE];
 
 //
@@ -48,7 +48,7 @@ unsigned tics;
 //
 // control info
 //
-int8_t mouseenabled, joystickenabled;
+boolean mouseenabled, joystickenabled;
 int dirscan[4] = { sc_UpArrow, sc_RightArrow, sc_DownArrow, sc_LeftArrow };
 int buttonscan[NUMBUTTONS] = { sc_Control, sc_Alt, sc_LShift, sc_Space, sc_1, sc_2, sc_3, sc_4 };
 int buttonmouse[4] = { bt_attack, bt_strafe, bt_use, bt_nobutton };
@@ -63,17 +63,17 @@ int buttonjoy[32] = {
 
 int viewsize;
 
-int8_t buttonheld[NUMBUTTONS];
+boolean buttonheld[NUMBUTTONS];
 
-int8_t demorecord, demoplayback;
+boolean demorecord, demoplayback;
 int8_t *demoptr, *lastdemoptr;
-void* demobuffer;
+memptr demobuffer;
 
 //
 // current user input
 //
 int controlx, controly;         // range from -100 to 100 per tic
-int8_t buttonstate[NUMBUTTONS];
+boolean buttonstate[NUMBUTTONS];
 
 int lastgamemusicoffset = 0;
 
@@ -81,7 +81,7 @@ int lastgamemusicoffset = 0;
 //===========================================================================
 
 
-void CenterWindow (uint16_t w, uint16_t h);
+void CenterWindow (word w, word h);
 void InitObjList (void);
 void RemoveObj (objtype * gone);
 void PollControls (void);
@@ -206,7 +206,7 @@ int songs[] = {
     XFUNKIE_MUS,
     XDEATH_MUS,
     XGETYOU_MUS,                // DON'T KNOW
-    ULTIMATE_MUS,               // Trans Grï¿½sse
+    ULTIMATE_MUS,               // Trans Gr”sse
 
     DUNGEON_MUS,
     GOINGAFT_MUS,
@@ -394,7 +394,7 @@ void PollJoystickMove (void)
 void PollControls (void)
 {
     int max, min, i;
-    uint8_t buttonbits;
+    byte buttonbits;
 
     IN_ProcessEvents();
 
@@ -532,7 +532,7 @@ void PollControls (void)
 #define MAXX    320
 #define MAXY    160
 
-void CenterWindow (uint16_t w, uint16_t h)
+void CenterWindow (word w, word h)
 {
     US_DrawWindow (((MAXX / 8) - w) / 2, ((MAXY / 8) - h) / 2, w, h);
 }
@@ -954,7 +954,7 @@ SDL_Color redshifts[NUMREDSHIFTS][256];
 SDL_Color whiteshifts[NUMWHITESHIFTS][256];
 
 int damagecount, bonuscount;
-int8_t palshifted;
+boolean palshifted;
 
 /*
 =====================

@@ -29,14 +29,14 @@
 =============================================================================
 */
 
-int8_t         ingame,fizzlein;
+boolean         ingame,fizzlein;
 gametype        gamestate;
-uint8_t            bordercol=VIEWCOLOR;        // color of the Change View/Ingame border
+byte            bordercol=VIEWCOLOR;        // color of the Change View/Ingame border
 
 #ifdef SPEAR
 int32_t         spearx,speary;
 unsigned        spearangle;
-int8_t         spearflag;
+boolean         spearflag;
 #endif
 
 
@@ -79,7 +79,7 @@ void GameLoop (void);
 
 int leftchannel, rightchannel;
 #define ATABLEMAX 15
-uint8_t righttable[ATABLEMAX][ATABLEMAX * 2] = {
+byte righttable[ATABLEMAX][ATABLEMAX * 2] = {
 { 8, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7, 7, 7, 6, 0, 0, 0, 0, 0, 1, 3, 5, 8, 8, 8, 8, 8, 8, 8, 8},
 { 8, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7, 7, 6, 4, 0, 0, 0, 0, 0, 2, 4, 6, 8, 8, 8, 8, 8, 8, 8, 8},
 { 8, 8, 8, 8, 8, 8, 8, 7, 7, 7, 7, 6, 6, 4, 1, 0, 0, 0, 1, 2, 4, 6, 8, 8, 8, 8, 8, 8, 8, 8},
@@ -96,7 +96,7 @@ uint8_t righttable[ATABLEMAX][ATABLEMAX * 2] = {
 { 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8},
 { 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8}
 };
-uint8_t lefttable[ATABLEMAX][ATABLEMAX * 2] = {
+byte lefttable[ATABLEMAX][ATABLEMAX * 2] = {
 { 8, 8, 8, 8, 8, 8, 8, 8, 5, 3, 1, 0, 0, 0, 0, 0, 6, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8},
 { 8, 8, 8, 8, 8, 8, 8, 8, 6, 4, 2, 0, 0, 0, 0, 0, 4, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8},
 { 8, 8, 8, 8, 8, 8, 8, 8, 6, 4, 2, 1, 0, 0, 0, 1, 4, 6, 6, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8},
@@ -115,9 +115,9 @@ uint8_t lefttable[ATABLEMAX][ATABLEMAX * 2] = {
 };
 
 void
-SetSoundLoc(uint32_t gx,uint32_t gy)
+SetSoundLoc(fixed gx,fixed gy)
 {
-    uint32_t   xt,yt;
+    fixed   xt,yt;
     int     x,y;
 
 //
@@ -129,15 +129,15 @@ SetSoundLoc(uint32_t gx,uint32_t gy)
 //
 // calculate newx
 //
-    xt = uint32_tMul(gx,viewcos);
-    yt = uint32_tMul(gy,viewsin);
+    xt = FixedMul(gx,viewcos);
+    yt = FixedMul(gy,viewsin);
     x = (xt - yt) >> TILESHIFT;
 
 //
 // calculate newy
 //
-    xt = uint32_tMul(gx,viewsin);
-    yt = uint32_tMul(gy,viewcos);
+    xt = FixedMul(gx,viewsin);
+    yt = FixedMul(gy,viewcos);
     y = (yt + xt) >> TILESHIFT;
 
     if (y >= ATABLEMAX)
@@ -165,7 +165,7 @@ SetSoundLoc(uint32_t gx,uint32_t gy)
 =
 ==========================
 */
-void PlaySoundLocGlobal(uint16_t s,uint32_t gx,uint32_t gy)
+void PlaySoundLocGlobal(word s,fixed gx,fixed gy)
 {
     SetSoundLoc(gx, gy);
     SD_PositionSound(leftchannel, rightchannel);
@@ -216,7 +216,7 @@ static void ScanInfoPlane(void)
 {
     unsigned x,y;
     int      tile;
-    uint16_t     *start;
+    word     *start;
 
     start = mapsegs[1];
     for (y=0;y<mapheight;y++)
@@ -621,8 +621,8 @@ static void ScanInfoPlane(void)
 void SetupGameLevel (void)
 {
     int  x,y;
-    uint16_t *map;
-    uint16_t tile;
+    word *map;
+    word tile;
 
 
     if (!loadedgame)
@@ -665,7 +665,7 @@ void SetupGameLevel (void)
             if (tile<AREATILE)
             {
                 // solid wall
-                tilemap[x][y] = (uint8_t) tile;
+                tilemap[x][y] = (byte) tile;
                 actorat[x][y] = (objtype *)(uintptr_t) tile;
             }
             else
@@ -823,7 +823,7 @@ void DrawPlayBorderSides(void)
 ===================
 */
 
-void DrawStatusBorder (uint8_t color)
+void DrawStatusBorder (byte color)
 {
     int statusborderw = (screenWidth-scaleFactor*320)/2;
 
@@ -922,11 +922,11 @@ void DrawPlayScreen (void)
 void LatchNumberHERE (int x, int y, unsigned width, int32_t number)
 {
     unsigned length,c;
-    char string_buffer[20];
+    char str[20];
 
-    ltoa (number,string_buffer,10);
+    ltoa (number,str,10);
 
-    length = (unsigned) strlen (string_buffer);
+    length = (unsigned) strlen (str);
 
     while (length<width)
     {
@@ -939,7 +939,7 @@ void LatchNumberHERE (int x, int y, unsigned width, int32_t number)
 
     while (c<length)
     {
-        LatchDrawPic (x,y,string_buffer[c]-'0'+ N_0PIC);
+        LatchDrawPic (x,y,str[c]-'0'+ N_0PIC);
         x++;
         c++;
     }
@@ -948,7 +948,7 @@ void LatchNumberHERE (int x, int y, unsigned width, int32_t number)
 void ShowActStatus()
 {
     // Draw status bar without borders
-    uint8_t *source = grsegs[STATUSBARPIC];
+    byte *source = grsegs[STATUSBARPIC];
     int picnum = STATUSBARPIC - STARTPICS;
     int width = pictable[picnum].width;
     int height = pictable[picnum].height;
@@ -1026,9 +1026,9 @@ void FinishDemoRecord (void)
     US_Print(" Demo number (0-9): ");
     VW_UpdateScreen();
 
-    if (US_LineInput (px,py,string_buffer,NULL,true,1,0))
+    if (US_LineInput (px,py,str,NULL,true,1,0))
     {
-        level = atoi (string_buffer);
+        level = atoi (str);
         if (level>=0 && level<=9)
         {
             demoname[4] = (char)('0'+level);
@@ -1071,11 +1071,11 @@ void RecordDemo (void)
 #endif
     VW_UpdateScreen();
     VW_FadeIn ();
-    esc = !US_LineInput (px,py,string_buffer,NULL,true,2,0);
+    esc = !US_LineInput (px,py,str,NULL,true,2,0);
     if (esc)
         return;
 
-    level = atoi (string_buffer);
+    level = atoi (str);
     level--;
 
     if (level >= maps || level < 0)
@@ -1156,7 +1156,7 @@ void PlayDemo (int demonumber)
     NewGame (1,0);
     gamestate.mapon = *demoptr++;
     gamestate.difficulty = gd_hard;
-    length = READuint16_t(*(uint8_t **)&demoptr);
+    length = READWORD(*(uint8_t **)&demoptr);
     // TODO: Seems like the original demo format supports 16 MB demos
     //       But T_DEM00 and T_DEM01 of Wolf have a 0xd8 as third length size...
     demoptr++;
@@ -1346,7 +1346,7 @@ void Died (void)
 
 void GameLoop (void)
 {
-    int8_t died;
+    boolean died;
 #ifdef MYPROFILE
     clock_t start,end;
 #endif

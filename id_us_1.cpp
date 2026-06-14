@@ -29,15 +29,15 @@
 #endif
 
 //  Global variables
-        uint16_t        PrintX,PrintY;
-        uint16_t        WindowX,WindowY,WindowW,WindowH;
+        word        PrintX,PrintY;
+        word        WindowX,WindowY,WindowW,WindowH;
 
 //  Internal variables
 #define ConfigVersion   1
 
-static  int8_t     US_Started;
+static  boolean     US_Started;
 
-        void        (*USL_MeasureString)(const char *,uint16_t *,uint16_t *) = VW_MeasurePropString;
+        void        (*USL_MeasureString)(const char *,word *,word *) = VW_MeasurePropString;
         void        (*USL_DrawString)(const char *) = VWB_DrawPropString;
 
         SaveGame    Games[MaxSaveGames];
@@ -54,7 +54,7 @@ static  int8_t     US_Started;
 
 int rndindex = 0;
 
-static uint8_t rndtable[] = {
+static byte rndtable[] = {
       0,   8, 109, 220, 222, 241, 149, 107,  75, 248, 254, 140,  16,  66,
      74,  21, 211,  47,  80, 242, 154,  27, 205, 128, 161,  89,  77,  36,
      95, 110,  85,  48, 212, 140, 211, 249,  22,  79, 200,  50,  28, 188,
@@ -119,7 +119,7 @@ US_Shutdown(void)
 //
 ///////////////////////////////////////////////////////////////////////////
 void
-US_SetPrintRoutines(void (*measure)(const char *,uint16_t *,uint16_t *),
+US_SetPrintRoutines(void (*measure)(const char *,word *,word *),
     void (*print)(const char *))
 {
     USL_MeasureString = measure;
@@ -139,7 +139,7 @@ US_Print(const char *sorg)
     char *sstart = strdup(sorg);
     char *s = sstart;
     char *se;
-    uint16_t w,h;
+    word w,h;
 
     while (*s)
     {
@@ -174,7 +174,7 @@ US_Print(const char *sorg)
 //
 ///////////////////////////////////////////////////////////////////////////
 void
-US_PrintUnsigned(longuint16_t n)
+US_PrintUnsigned(longword n)
 {
     char    buffer[32];
     sprintf(buffer, "%lu", n);
@@ -203,7 +203,7 @@ US_PrintSigned(int32_t n)
 void
 USL_PrintInCenter(const char *s,Rect r)
 {
-    uint16_t    w,h,
+    word    w,h,
             rw,rh;
 
     USL_MeasureString(s,&w,&h);
@@ -242,7 +242,7 @@ US_PrintCentered(const char *s)
 void
 US_CPrintLine(const char *s)
 {
-    uint16_t    w,h;
+    word    w,h;
 
     USL_MeasureString(s,&w,&h);
 
@@ -345,10 +345,10 @@ US_ClearWindow(void)
 //
 ///////////////////////////////////////////////////////////////////////////
 void
-US_DrawWindow(uint16_t x,uint16_t y,uint16_t w,uint16_t h)
+US_DrawWindow(word x,word y,word w,word h)
 {
    
-    uint16_t    i,
+    word    i,
             sx,sy,sw,sh;
 
     WindowX = x * 8;
@@ -419,12 +419,12 @@ US_RestoreWindow(WindowRec *win)
 //
 ///////////////////////////////////////////////////////////////////////////
 static void
-USL_XORICursor(int x,int y,const char *s,uint16_t cursor)
+USL_XORICursor(int x,int y,const char *s,word cursor)
 {
-    static  int8_t status;     // VGA doesn't XOR...
+    static  boolean status;     // VGA doesn't XOR...
     char    buf[MaxString];
     int     temp;
-    uint16_t    w,h;
+    word    w,h;
 
     strcpy(buf,s);
     buf[cursor] = '\0';
@@ -471,21 +471,21 @@ char USL_RotateChar(char ch, int dir)
 //      returned
 //
 ///////////////////////////////////////////////////////////////////////////
-int8_t
-US_LineInput(int x,int y,char *buf,const char *def,int8_t escok,
+boolean
+US_LineInput(int x,int y,char *buf,const char *def,boolean escok,
                 int maxchars,int maxwidth)
 {
-    int8_t     redraw,
+    boolean     redraw,
                 cursorvis,cursormoved,
                 done,result, checkkey;
     ScanCode    sc;
     char        c;
     char        s[MaxString],olds[MaxString];
     int         cursor,len;
-    uint16_t        i,
+    word        i,
                 w,h,
                 temp;
-    longuint16_t    curtime, lasttime, lastdirtime, lastbuttontime, lastdirmovetime;
+    longword    curtime, lasttime, lastdirtime, lastbuttontime, lastdirmovetime;
     ControlInfo ci;
     Direction   lastdir = dir_None;
 
@@ -707,7 +707,7 @@ US_LineInput(int x,int y,char *buf,const char *def,int8_t escok,
             temp = fontcolor;
             fontcolor = backcolor;
             USL_DrawString(olds);
-            fontcolor = (uint8_t) temp;
+            fontcolor = (byte) temp;
             strcpy(olds,s);
 
             px = x;

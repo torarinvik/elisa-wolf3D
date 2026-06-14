@@ -23,7 +23,7 @@ Revision History:
 04-08-2003 Jarek Burczynski:
  - removed BFRDY hack. BFRDY is busy flag, and it should be 0 only when the chip
    handles memory read/write or during the adpcm synthesis when the chip
-   requests another uint8_t of ADPCM data.
+   requests another byte of ADPCM data.
 
 24-07-2003 Jarek Burczynski:
  - added a small hack for Y8950 status BFRDY flag (bit 3 should be set after
@@ -68,7 +68,7 @@ Revision History:
 
 12-28-2001 Acho A. Tang
  - reflected Delta-T EOS status on Y8950 status port.
- - uint32_t subscription range of attack/decay tables
+ - fixed subscription range of attack/decay tables
 
 
     To do:
@@ -109,10 +109,10 @@ inline void logerror(...) {}
 #endif
 
 
-#define FREQ_SH         16  /* 16.16 uint32_t point (frequency calculations) */
-#define EG_SH           16  /* 16.16 uint32_t point (EG timing)              */
-#define LFO_SH          24  /*  8.24 uint32_t point (LFO calculations)       */
-#define TIMER_SH        16  /* 16.16 uint32_t point (timers calculations)    */
+#define FREQ_SH         16  /* 16.16 fixed point (frequency calculations) */
+#define EG_SH           16  /* 16.16 fixed point (EG timing)              */
+#define LFO_SH          24  /*  8.24 fixed point (LFO calculations)       */
+#define TIMER_SH        16  /* 16.16 fixed point (timers calculations)    */
 
 #define FREQ_MASK       ((1<<FREQ_SH)-1)
 
@@ -1123,7 +1123,7 @@ INLINE void OPL_CALC_RH( OPL_CH *CH, unsigned int noise )
         /* Noise bit XOR'es phase by 0x100 */
         /* when noisebit = 0 pass the phase from calculation above */
         /* when noisebit = 1 phase ^= 0x100; */
-        /* in other uint16_ts: phase ^= (noisebit<<8); */
+        /* in other words: phase ^= (noisebit<<8); */
         if (noise)
             phase ^= 0x100;
 
@@ -1205,7 +1205,7 @@ static int init_tables(void)
             logerror("\n");
     #endif
     }
-    /*logerror("FMOPL.C: TL_TAB_LEN = %i elements (%i uint8_ts)\n",TL_TAB_LEN, (int)sizeof(tl_tab));*/
+    /*logerror("FMOPL.C: TL_TAB_LEN = %i elements (%i bytes)\n",TL_TAB_LEN, (int)sizeof(tl_tab));*/
 
 
     for (i=0; i<SIN_LEN; i++)
@@ -1302,7 +1302,7 @@ static void OPL_initalize(FM_OPL *OPL)
     for( i=0 ; i < 1024 ; i++ )
     {
         /* opn phase increment counter = 20bit */
-        OPL->fn_tab[i] = (UINT32)( (double)i * 64 * OPL->freqbase * (1<<(FREQ_SH-10)) ); /* -10 because chip works with 10.10 uint32_t point, while we use 16.16 */
+        OPL->fn_tab[i] = (UINT32)( (double)i * 64 * OPL->freqbase * (1<<(FREQ_SH-10)) ); /* -10 because chip works with 10.10 fixed point, while we use 16.16 */
 #if 0
         logerror("FMOPL.C: fn_tab[%4i] = %08x (dec=%8i)\n",
                  i, OPL->fn_tab[i]>>6, OPL->fn_tab[i]>>6 );
@@ -2434,8 +2434,8 @@ int Y8950Init(int num, int clock, int rate)
         OPL_Y8950[i]->deltat->status_change_EOS_bit = 0x10;     /* status flag: set bit4 on End Of Sample */
         OPL_Y8950[i]->deltat->status_change_BRDY_bit = 0x08;    /* status flag: set bit3 on BRDY (End Of: ADPCM analysis/synthesis, memory reading/writing) */
 
-        /*OPL_Y8950[i]->deltat->write_time = 10.0 / clock;*/        /* a single uint8_t write takes 10 cycles of main clock */
-        /*OPL_Y8950[i]->deltat->read_time  = 8.0 / clock;*/     /* a single uint8_t read takes 8 cycles of main clock */
+        /*OPL_Y8950[i]->deltat->write_time = 10.0 / clock;*/        /* a single byte write takes 10 cycles of main clock */
+        /*OPL_Y8950[i]->deltat->read_time  = 8.0 / clock;*/     /* a single byte read takes 8 cycles of main clock */
         /* reset */
         Y8950ResetChip(i);
     }

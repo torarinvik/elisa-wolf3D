@@ -33,7 +33,7 @@
 //
 int32_t         thrustspeed;
 
-uint16_t            plux,pluy;          // player coordinates scaled to unsigned
+word            plux,pluy;          // player coordinates scaled to unsigned
 
 short           anglefrac;
 
@@ -77,7 +77,7 @@ void SelectItem (void);
 
 //----------
 
-int8_t TryMove (objtype *ob);
+boolean TryMove (objtype *ob);
 void T_Player (objtype *ob);
 
 void ClipMove (objtype *ob, int32_t xmove, int32_t ymove);
@@ -362,11 +362,11 @@ void UpdateFace (void)
 static void LatchNumber (int x, int y, unsigned width, int32_t number)
 {
     unsigned length,c;
-    char    string_buffer[20];
+    char    str[20];
 
-    ltoa (number,string_buffer,10);
+    ltoa (number,str,10);
 
-    length = (unsigned) strlen (string_buffer);
+    length = (unsigned) strlen (str);
 
     while (length<width)
     {
@@ -379,7 +379,7 @@ static void LatchNumber (int x, int y, unsigned width, int32_t number)
 
     while (c<length)
     {
-        StatusDrawPic (x,y,string_buffer[c]-'0'+ N_0PIC);
+        StatusDrawPic (x,y,str[c]-'0'+ N_0PIC);
         x++;
         c++;
     }
@@ -824,7 +824,7 @@ void GetBonus (statobj_t *check)
 ===================
 */
 
-int8_t TryMove (objtype *ob)
+boolean TryMove (objtype *ob)
 {
     int         xl,yl,xh,yh,x,y;
     objtype    *check;
@@ -982,7 +982,7 @@ void VictoryTile (void)
 */
 
 // For player movement in demos exactly as in the original Wolf3D v1.4 source code
-static uint32_t uint32_tByFracOrig(uint32_t a, uint32_t b)
+static fixed FixedByFracOrig(fixed a, fixed b)
 {
     int sign = 0;
     if(b == 65536)
@@ -997,7 +997,7 @@ static uint32_t uint32_tByFracOrig(uint32_t a, uint32_t b)
         a = -a;
         sign = !sign;
     }
-    uint32_t res = (uint32_t)(((int64_t) a * b) >> 16);
+    fixed res = (fixed)(((int64_t) a * b) >> 16);
     
     if(sign)
         res = -res;
@@ -1026,11 +1026,11 @@ void Thrust (int angle, int32_t speed)
         speed = MINDIST*2-1;
 
     xmove = DEMOCHOOSE_ORIG_SDL(
-                uint32_tByFracOrig(speed, costable[angle]),
-                uint32_tMul(speed,costable[angle]));
+                FixedByFracOrig(speed, costable[angle]),
+                FixedMul(speed,costable[angle]));
     ymove = DEMOCHOOSE_ORIG_SDL(
-                -uint32_tByFracOrig(speed, sintable[angle]),
-                -uint32_tMul(speed,sintable[angle]));
+                -FixedByFracOrig(speed, sintable[angle]),
+                -FixedMul(speed,sintable[angle]));
 
     ClipMove(player,xmove,ymove);
 
@@ -1090,7 +1090,7 @@ void Cmd_Fire (void)
 void Cmd_Use (void)
 {
     int     checkx,checky,doornum,dir;
-    int8_t elevatorok;
+    boolean elevatorok;
 
     //
     // find which cardinal direction the player is facing
@@ -1182,7 +1182,7 @@ void SpawnPlayer (int tilex, int tiley, int dir)
     player->active = ac_yes;
     player->tilex = tilex;
     player->tiley = tiley;
-    player->areanumber = (uint8_t) *(mapsegs[0]+(player->tiley<<mapshift)+player->tilex);
+    player->areanumber = (byte) *(mapsegs[0]+(player->tiley<<mapshift)+player->tilex);
     player->x = ((int32_t)tilex<<TILESHIFT)+TILEGLOBAL/2;
     player->y = ((int32_t)tiley<<TILESHIFT)+TILEGLOBAL/2;
     player->state = &s_player;
@@ -1386,8 +1386,8 @@ void    T_Attack (objtype *ob)
     if (gamestate.victoryflag)              // watching the BJ actor
         return;
 
-    plux = (uint16_t) (player->x >> UNSIGNEDSHIFT);                     // scale to fit in unsigned
-    pluy = (uint16_t) (player->y >> UNSIGNEDSHIFT);
+    plux = (word) (player->x >> UNSIGNEDSHIFT);                     // scale to fit in unsigned
+    pluy = (word) (player->y >> UNSIGNEDSHIFT);
     player->tilex = (short)(player->x >> TILESHIFT);                // scale to tile values
     player->tiley = (short)(player->y >> TILESHIFT);
 
@@ -1485,8 +1485,8 @@ void    T_Player (objtype *ob)
     if (gamestate.victoryflag)              // watching the BJ actor
         return;
 
-    plux = (uint16_t) (player->x >> UNSIGNEDSHIFT);                     // scale to fit in unsigned
-    pluy = (uint16_t) (player->y >> UNSIGNEDSHIFT);
+    plux = (word) (player->x >> UNSIGNEDSHIFT);                     // scale to fit in unsigned
+    pluy = (word) (player->y >> UNSIGNEDSHIFT);
     player->tilex = (short)(player->x >> TILESHIFT);                // scale to tile values
     player->tiley = (short)(player->y >> TILESHIFT);
 }

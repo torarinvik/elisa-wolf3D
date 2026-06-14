@@ -32,7 +32,7 @@ void CRT_Init(int _width){
                  200,                   // height
                  0,                     // border, always 0 in OpenGL ES
                  GL_RGB,                // format
-                 GL_UNSIGNED_uint8_t,      // type
+                 GL_UNSIGNED_BYTE,      // type
                  0
                  );
     
@@ -56,10 +56,10 @@ void CRT_DAC(void){
     SDL_Surface *screen = screenBuffer ;
     
     //Convert palette based framebuffer to RGB for OpenGL
-    uint8_t* pixelPointer = coloredFrameBuffer;
+    byte* pixelPointer = coloredFrameBuffer;
     for (int i=0; i < 320*200; i++) {
         unsigned char paletteIndex;
-        paletteIndex = ((uint8_t*)screen->pixels)[i];
+        paletteIndex = ((byte*)screen->pixels)[i];
         *pixelPointer++ = curpal[paletteIndex].r;
         *pixelPointer++ = curpal[paletteIndex].g;
         *pixelPointer++ = curpal[paletteIndex].b;
@@ -75,7 +75,7 @@ void CRT_DAC(void){
                     320,
                     200,
                     GL_RGB,
-                    GL_UNSIGNED_uint8_t,
+                    GL_UNSIGNED_BYTE,
                     coloredFrameBuffer);
     
     //Draw a quad with the texture
@@ -121,7 +121,7 @@ void CRT_Screenshot(void){
    // Let's fetch them from the backbuffer	
    // We request the pixels in GL_BGR format
   	#define GL_BGR                            0x80E0
-   glReadPixels((GLint)0, (GLint)0,(GLint)width, (GLint)height, GL_BGR, GL_UNSIGNED_uint8_t, dataBuffer);
+   glReadPixels((GLint)0, (GLint)0,(GLint)width, (GLint)height, GL_BGR, GL_UNSIGNED_BYTE, dataBuffer);
  
    //Now the file creation
    FILE *filePtr = fopen(filename, "wb");
@@ -142,6 +142,6 @@ void CRT_Screenshot(void){
    fwrite(TGAheader,	sizeof(unsigned char),	12,	filePtr);
    fwrite(header,	sizeof(unsigned char),	6,	filePtr);
    // And finally our image data
-   fwrite(dataBuffer,	sizeof(GLuuint8_t),	nSize,	filePtr);
+   fwrite(dataBuffer,	sizeof(GLubyte),	nSize,	filePtr);
    fclose(filePtr);
 }
