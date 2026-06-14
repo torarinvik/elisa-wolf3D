@@ -1,0 +1,1277 @@
+include "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/port/wolf_opl.elisa"
+include "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/port/wolf_vga.elisa"
+include "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/port/wolf_palette.elisa"
+
+# Wolfenstein 3D — live SDL2 host. Opens a window, runs the raycaster against the real WL6 data, and
+# lets you walk E1M1 with the arrow keys / WASD. The 8bpp paletted framebuffer is converted through
+# WOLF_PAL into an RGB888 streaming texture each frame. Movement here is intentionally minimal
+# (axis-separated tile collision); the faithful ClipMove + doors + actors land in the game-loop phase.
+
+extern SDL_Init(flags: u32) -> int
+extern SDL_CreateWindow(title: u8&, x: int, y: int, w: int, h: int, flags: u32) -> void&
+extern SDL_CreateRenderer(window: void&, index: int, flags: u32) -> void&
+extern SDL_CreateTexture(renderer: void&, format: u32, access: int, w: int, h: int) -> void&
+extern SDL_UpdateTexture(texture: void&, rect: void&?, pixels: void&, pitch: int) -> int
+extern SDL_RenderClear(renderer: void&) -> int
+extern SDL_RenderCopy(renderer: void&, texture: void&, src: void&?, dst: void&?) -> int
+extern SDL_RenderPresent(renderer: void&) -> void
+extern SDL_PollEvent(event: mutable void&) -> int
+extern SDL_PumpEvents() -> void
+extern SDL_GetKeyboardState(numkeys: void&?) -> u8&
+extern SDL_GetTicks() -> u32
+extern SDL_Delay(ms: u32) -> void
+extern SDL_OpenAudioDevice(device: void&?, iscapture: int, desired: void&, obtained: void&?, allowed: int) -> u32
+extern SDL_QueueAudio(dev: u32, data: void&, len: u32) -> int
+extern SDL_GetQueuedAudioSize(dev: u32) -> u32
+extern SDL_PauseAudioDevice(dev: u32, pause: int) -> void
+extern SDL_Quit() -> void
+extern atoi(s: u8&) -> int
+
+struct SdlAudioSpec layout c:
+    freq: mutable i32
+    format: mutable u16
+    channels: mutable u8
+    silence: mutable u8
+    samples: mutable u16
+    padding: mutable u16
+    size: mutable u32
+    callback: mutable void&?
+    userdata: mutable void&?
+
+global MAPHEAD_PATH: cstr = "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/MAPHEAD.WL6"
+global GAMEMAPS_PATH: cstr = "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/GAMEMAPS.WL6"
+global VSWAP_PATH: cstr = "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/VSWAP.WL6"
+global AUDIOHED_PATH: cstr = "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/AUDIOHED.WL6"
+global AUDIOT_PATH: cstr = "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/AUDIOT.WL6"
+global SAVE_PATH: cstr = "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/port/wolf3d.sav"
+global HISCORE_PATH: cstr = "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/port/wolf3d.scores"
+# Wolf movement constants (wl_agent.cpp); all motion scales by `tics` (1/70s units).
+global BASEMOVE: i32 = 35
+global RUNMOVE: i32 = 70
+global MOVESCALE: i32 = 150
+global BACKMOVESCALE: i32 = 100
+global ANGLESCALE: i32 = 20
+global MAXTICS: i32 = 10
+global MINDIST2: i32 = 45055         # MINDIST*2 - 1, the per-thrust speed cap
+
+struct SdlEvent layout c:
+    kind: mutable u32
+    rest: mutable array[u8, 56]
+
+# Is (gx, gy) [fixed-point global coords] inside a solid wall tile?
+def is_wall(r: Render&, gx: i32, gy: i32) -> bool:
+    tx: i32 = gx >> 16
+    ty: i32 = gy >> 16
+    if tx < 0 or tx >= 64 or ty < 0 or ty >= 64:
+        return true
+    cell: i32 = r.tilemap[(tx * 64 + ty).usize()].i32()
+    if cell != 0:
+        if (cell & 0x80) != 0:
+            # door: passable only when fully open
+            return r.door_action[(cell & 0x7F).usize()] != 2
+        return true
+    # blocking static object
+    return r.solid_static[(tx * 64 + ty).usize()] != 0u8
+
+# Axis-separated movement with a small collision margin so we don't clip into walls.
+def try_move(r: mutable Render&, dx: i32, dy: i32) -> void:
+    margin: i32 = 0x1800
+    nx: i32 = r.px + dx
+    sx: mutable i32 = nx
+    if dx > 0:
+        sx <- nx + margin
+    elif dx < 0:
+        sx <- nx - margin
+    if not is_wall(r, sx, r.py):
+        r.px <- nx
+    ny: i32 = r.py + dy
+    sy: mutable i32 = ny
+    if dy > 0:
+        sy <- ny + margin
+    elif dy < 0:
+        sy <- ny - margin
+    if not is_wall(r, r.px, sy):
+        r.py <- ny
+
+# Move the player `speed` fixed-point units along `angle` (Wolf Thrust + ClipMove), tics already folded in.
+def thrust(r: mutable Render&, angle: i32, speed: i32) -> void:
+    sp: mutable i32 = speed
+    if sp >= MINDIST2:
+        sp <- MINDIST2
+    a: mutable i32 = angle
+    if a < 0:
+        a <- a + 360
+    if a >= 360:
+        a <- a - 360
+    dx: i32 = fixed_mul(sp, costable(r, a))
+    dy: i32 = -fixed_mul(sp, r.sintable[a.usize()])
+    try_move(r, dx, dy)
+
+# Per-frame player control, scaled by `tics` (1/70s elapsed) so speed is frame-rate independent.
+def handle_input(r: mutable Render&, keys: u8&, tics: i32) -> void:
+    mv: mutable i32 = BASEMOVE
+    if keys[r.kb_run.u32()] != 0u8:                  # run
+        mv <- RUNMOVE
+    # turning — accumulate sub-degree fractions like Wolf's anglefrac/ANGLESCALE
+    if keys[r.kb_left.u32()] != 0u8:
+        r.anglefrac <- r.anglefrac + mv * tics
+    if keys[r.kb_right.u32()] != 0u8:
+        r.anglefrac <- r.anglefrac - mv * tics
+    units: i32 = r.anglefrac / ANGLESCALE
+    r.anglefrac <- r.anglefrac - units * ANGLESCALE
+    r.pangle <- r.pangle + units
+    if r.pangle >= 360:
+        r.pangle <- r.pangle - 360
+    if r.pangle < 0:
+        r.pangle <- r.pangle + 360
+    # forward / backward
+    if keys[r.kb_fwd.u32()] != 0u8:
+        thrust(r, r.pangle, mv * MOVESCALE * tics)
+    if keys[r.kb_back.u32()] != 0u8:
+        thrust(r, r.pangle + 180, mv * BACKMOVESCALE * tics)
+    # strafe
+    if keys[r.kb_strafeR.u32()] != 0u8:
+        thrust(r, r.pangle - 90, mv * MOVESCALE * tics)
+    if keys[r.kb_strafeL.u32()] != 0u8:
+        thrust(r, r.pangle + 90, mv * MOVESCALE * tics)
+
+# Convert the 8bpp paletted framebuffer into a 0x00RRGGBB pixel buffer.
+def blit_palette(r: Render&, pixels: mutable u32&) -> void:
+    for i in 0..<64000:
+        idx: i32 = r.fb[i.usize()].i32()
+        rr: u32 = WOLF_PAL[(idx * 3).usize()].u32()
+        gg: u32 = WOLF_PAL[(idx * 3 + 1).usize()].u32()
+        bb: u32 = WOLF_PAL[(idx * 3 + 2).usize()].u32()
+        pixels[i.usize()] <- (rr << 16u32) | (gg << 8u32) | bb
+
+# Draw the pause menu over the (frozen) current frame: a bordered box with three options.
+def draw_menu(r: mutable Render&, v: Vga&, sel: i32) -> void:
+    bx: i32 = 96
+    by: i32 = 64
+    bw: i32 = 128
+    bh: i32 = 76
+    for y in by..<(by + bh):
+        for x in bx..<(bx + bw):
+            edge: bool = y == by or y == by + bh - 1 or x == bx or x == bx + bw - 1
+            c: mutable u8 = 0u8
+            if edge:
+                c <- 15u8
+            r.fb[(y * VIEWWIDTH + x).usize()] <- c
+    # three options; the selected one is bright with a '>' marker
+    col0: mutable u8 = 31u8
+    col1: mutable u8 = 31u8
+    col2: mutable u8 = 31u8
+    if sel == 0:
+        col0 <- 15u8
+    if sel == 1:
+        col1 <- 15u8
+    if sel == 2:
+        col2 <- 15u8
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, bx + 22, by + 12, "RESUME".cast[u8&], col0)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, bx + 22, by + 32, "NEW GAME".cast[u8&], col1)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, bx + 22, by + 52, "QUIT".cast[u8&], col2)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, bx + 8, by + 12 + sel * 20, ">".cast[u8&], 15u8)
+
+# blit an opaque VGAGRAPH pic into the framebuffer at (dx,dy)
+def blit_pic(r: mutable Render&, src: u8&, sw: i32, sh: i32, dx: i32, dy: i32) -> void:
+    for y in 0..<sh:
+        for x in 0..<sw:
+            px: i32 = dx + x
+            py: i32 = dy + y
+            if px >= 0 and px < VIEWWIDTH and py >= 0 and py < SCREENHEIGHT:
+                r.fb[(py * VIEWWIDTH + px).usize()] <- src[(y * sw + x).usize()]
+
+# one menu item: TEXTCOLOR(0x17), HIGHLIGHT(0x13) if selected, DEACTIVE(0x2b) if disabled (Save Game)
+def menu_item(r: mutable Render&, v: Vga&, sel: i32, i: i32, text: u8&) -> void:
+    col: mutable i32 = 0x17
+    if i == 4:
+        col <- 0x2b
+    elif i == sel:
+        col <- 0x13
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 100, 55 + i * 13, text, col.u8())
+
+# Authentic Wolfenstein main menu (wl_menu.cpp DrawMainMenu): bronze background, Options logo, a
+# bordered window, the full item list in the menu font, and the gun cursor at the selection.
+def draw_main_menu(r: mutable Render&, v: Vga&, sel: i32) -> void:
+    # background BORDCOLOR (0x29) + black stripe band (DrawStripes 10) + STRIPE line (0x2c)
+    for i in 0..<64000:
+        r.fb[i.usize()] <- 0x29u8
+    for y in 10..<34:
+        for x in 0..<VIEWWIDTH:
+            r.fb[(y * VIEWWIDTH + x).usize()] <- 0u8
+    for x in 0..<VIEWWIDTH:
+        r.fb[(32 * VIEWWIDTH + x).usize()] <- 0x2Cu8
+    # Options logo at (84,0)
+    if r.has_menugfx:
+        blit_pic(r, &r.menu_logo[0], r.logo_w, r.logo_h, 84, 0)
+    # DrawWindow(68,52,178,136): fill BKGDCOLOR(0x2d) + outline (top/left DEACTIVE 0x2b, bot/right BORD2 0x23)
+    wx: i32 = 68
+    wy: i32 = 52
+    ww: i32 = 178
+    wh: i32 = 136
+    for y in wy..<(wy + wh):
+        for x in wx..<(wx + ww):
+            r.fb[(y * VIEWWIDTH + x).usize()] <- 0x2Du8
+    for x in wx..<(wx + ww):
+        r.fb[(wy * VIEWWIDTH + x).usize()] <- 0x2Bu8
+        r.fb[((wy + wh - 1) * VIEWWIDTH + x).usize()] <- 0x23u8
+    for y in wy..<(wy + wh):
+        r.fb[(y * VIEWWIDTH + wx).usize()] <- 0x2Bu8
+        r.fb[(y * VIEWWIDTH + wx + ww - 1).usize()] <- 0x23u8
+    # items (Wolf order; Save Game disabled)
+    menu_item(r, v, sel, 0, "New Game".cast[u8&])
+    menu_item(r, v, sel, 1, "Sound".cast[u8&])
+    menu_item(r, v, sel, 2, "Control".cast[u8&])
+    menu_item(r, v, sel, 3, "Load Game".cast[u8&])
+    menu_item(r, v, sel, 4, "Save Game".cast[u8&])
+    menu_item(r, v, sel, 5, "Change View".cast[u8&])
+    menu_item(r, v, sel, 6, "Read This!".cast[u8&])
+    menu_item(r, v, sel, 7, "View Scores".cast[u8&])
+    menu_item(r, v, sel, 8, "Back to Demo".cast[u8&])
+    menu_item(r, v, sel, 9, "Quit".cast[u8&])
+    # gun cursor at the selected row
+    if r.has_menugfx:
+        blit_pic(r, &r.menu_gun[0], r.gun_w, r.gun_h, 76, 53 + sel * 13)
+
+# Wolf DrawWindow: BKGDCOLOR fill + outline (top/left DEACTIVE 0x2b, bottom/right BORD2 0x23).
+def draw_window(r: mutable Render&, wx: i32, wy: i32, ww: i32, wh: i32) -> void:
+    for y in wy..<(wy + wh):
+        for x in wx..<(wx + ww):
+            if x >= 0 and x < VIEWWIDTH and y >= 0 and y < SCREENHEIGHT:
+                r.fb[(y * VIEWWIDTH + x).usize()] <- 0x2Du8
+    for x in wx..<(wx + ww):
+        if x >= 0 and x < VIEWWIDTH:
+            r.fb[(wy * VIEWWIDTH + x).usize()] <- 0x2Bu8
+            r.fb[((wy + wh - 1) * VIEWWIDTH + x).usize()] <- 0x23u8
+    for y in wy..<(wy + wh):
+        if y >= 0 and y < SCREENHEIGHT:
+            r.fb[(y * VIEWWIDTH + wx).usize()] <- 0x2Bu8
+            r.fb[(y * VIEWWIDTH + wx + ww - 1).usize()] <- 0x23u8
+
+# Episode-select screen (DrawNewEpisode): the 6 episode title pics (C_EPISODE1PIC=30..35) + gun.
+def draw_episode_menu(r: mutable Render&, v: mutable Vga&, sel: i32) -> void:
+    for i in 0..<64000:
+        r.fb[i.usize()] <- 0x29u8
+    draw_window(r, 6, 19, 308, 162)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 72, 4, "Which episode to play?".cast[u8&], 0x47u8)
+    scratch: mutable array[u8, 20000] = zeroed
+    ei: mutable i32 = 0
+    while ei < 6:
+        ew: mutable i32 = 0
+        eh: mutable i32 = 0
+        if vga_get_pic(v, 30 + ei, &scratch[0], &ew, &eh):
+            blit_pic(r, &scratch[0], ew, eh, 42, 23 + ei * 26)
+        col: mutable u8 = 0x17u8
+        if ei == sel:
+            col <- 0x13u8
+        ty: i32 = 23 + ei * 26 + 4
+        if ei == 0:
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 112, ty, "Episode 1".cast[u8&], col)
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 112, ty + 11, "Escape from Wolfenstein".cast[u8&], col)
+        elif ei == 1:
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 112, ty, "Episode 2".cast[u8&], col)
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 112, ty + 11, "Operation: Eisenfaust".cast[u8&], col)
+        elif ei == 2:
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 112, ty, "Episode 3".cast[u8&], col)
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 112, ty + 11, "Die, Fuhrer, Die!".cast[u8&], col)
+        elif ei == 3:
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 112, ty, "Episode 4".cast[u8&], col)
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 112, ty + 11, "A Dark Secret".cast[u8&], col)
+        elif ei == 4:
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 112, ty, "Episode 5".cast[u8&], col)
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 112, ty + 11, "Trail of the Madman".cast[u8&], col)
+        else:
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 112, ty, "Episode 6".cast[u8&], col)
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 112, ty + 11, "Confrontation".cast[u8&], col)
+        ei <- ei + 1
+    if r.has_menugfx:
+        blit_pic(r, &r.menu_gun[0], r.gun_w, r.gun_h, 12, 22 + sel * 26)
+
+# Difficulty screen (DrawNewGame + DrawNewGameDiff): 4 skill names + the BJ face (C_BABYMODEPIC=19+d).
+def draw_difficulty_menu(r: mutable Render&, v: mutable Vga&, sel: i32) -> void:
+    for i in 0..<64000:
+        r.fb[i.usize()] <- 0x29u8
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 70, 68, "How tough are you?".cast[u8&], 0x47u8)
+    draw_window(r, 45, 90, 225, 67)
+    di: mutable i32 = 0
+    while di < 4:
+        col: mutable u8 = 0x17u8
+        if di == sel:
+            col <- 0x13u8
+        yrow: i32 = 100 + di * 13
+        if di == 0:
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 74, yrow, "Can I play, Daddy?".cast[u8&], col)
+        elif di == 1:
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 74, yrow, "Don't hurt me.".cast[u8&], col)
+        elif di == 2:
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 74, yrow, "Bring 'em on!".cast[u8&], col)
+        else:
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 74, yrow, "I am Death incarnate!".cast[u8&], col)
+        di <- di + 1
+    # BJ difficulty face
+    fscratch: mutable array[u8, 8000] = zeroed
+    fw: mutable i32 = 0
+    fh: mutable i32 = 0
+    if vga_get_pic(v, 19 + sel, &fscratch[0], &fw, &fh):
+        blit_pic(r, &fscratch[0], fw, fh, 235, 97)
+    if r.has_menugfx:
+        blit_pic(r, &r.menu_gun[0], r.gun_w, r.gun_h, 52, 98 + sel * 13)
+
+# Sound submenu: toggle AdLib (music+FX) and Digitized (speech) channels.
+def draw_sound_menu(r: mutable Render&, v: mutable Vga&, sel: i32, adlib_on: bool, digi_on: bool) -> void:
+    for i in 0..<64000:
+        r.fb[i.usize()] <- 0x29u8
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 130, 12, "Sound".cast[u8&], 0x47u8)
+    draw_window(r, 50, 50, 220, 60)
+    c0: mutable u8 = 0x17u8
+    c1: mutable u8 = 0x17u8
+    if sel == 0:
+        c0 <- 0x13u8
+    if sel == 1:
+        c1 <- 0x13u8
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 62, 58, "AdLib Sound & Music".cast[u8&], c0)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 62, 78, "Digitized Sound".cast[u8&], c1)
+    a_txt: mutable cstr = "Off"
+    if adlib_on:
+        a_txt <- "On"
+    d_txt: mutable cstr = "Off"
+    if digi_on:
+        d_txt <- "On"
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 236, 58, a_txt.cast[u8&], 0x13u8)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 236, 78, d_txt.cast[u8&], 0x13u8)
+    if r.has_menugfx:
+        blit_pic(r, &r.menu_gun[0], r.gun_w, r.gun_h, 52, 56 + sel * 20)
+
+# A plain titled info screen (used by Control / Read This! / View Scores). Press a key to return.
+def draw_info_header(r: mutable Render&, v: mutable Vga&, title: u8&) -> void:
+    for i in 0..<64000:
+        r.fb[i.usize()] <- 0x29u8
+    draw_window(r, 16, 16, 288, 168)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 28, 22, title, 0x47u8)
+
+# --- Customize Controls: 9 bindable actions, accessed by index ---
+def ctrl_get(r: Render&, idx: i32) -> i32:
+    if idx == 0:
+        return r.kb_fwd
+    if idx == 1:
+        return r.kb_back
+    if idx == 2:
+        return r.kb_left
+    if idx == 3:
+        return r.kb_right
+    if idx == 4:
+        return r.kb_strafeL
+    if idx == 5:
+        return r.kb_strafeR
+    if idx == 6:
+        return r.kb_fire
+    if idx == 7:
+        return r.kb_use
+    return r.kb_run
+
+def ctrl_set(r: mutable Render&, idx: i32, sc: i32) -> void:
+    if idx == 0:
+        r.kb_fwd <- sc
+    elif idx == 1:
+        r.kb_back <- sc
+    elif idx == 2:
+        r.kb_left <- sc
+    elif idx == 3:
+        r.kb_right <- sc
+    elif idx == 4:
+        r.kb_strafeL <- sc
+    elif idx == 5:
+        r.kb_strafeR <- sc
+    elif idx == 6:
+        r.kb_fire <- sc
+    elif idx == 7:
+        r.kb_use <- sc
+    else:
+        r.kb_run <- sc
+
+def ctrl_label(idx: i32) -> u8&:
+    if idx == 0:
+        return "Move forward".cast[u8&]
+    if idx == 1:
+        return "Move back".cast[u8&]
+    if idx == 2:
+        return "Turn left".cast[u8&]
+    if idx == 3:
+        return "Turn right".cast[u8&]
+    if idx == 4:
+        return "Strafe left".cast[u8&]
+    if idx == 5:
+        return "Strafe right".cast[u8&]
+    if idx == 6:
+        return "Fire".cast[u8&]
+    if idx == 7:
+        return "Open / push".cast[u8&]
+    return "Run".cast[u8&]
+
+# Map a few common SDL scancodes to a short display name; fall back to "Key NN".
+def keyname(sc: i32, buf: mutable u8&) -> u8&:
+    if sc >= 4 and sc <= 29:                  # A..Z
+        buf[0u32] <- (65 + (sc - 4)).u8()
+        buf[1u32] <- 0u8
+        return buf
+    if sc >= 30 and sc <= 38:                 # 1..9
+        buf[0u32] <- (49 + (sc - 30)).u8()
+        buf[1u32] <- 0u8
+        return buf
+    if sc == 39:
+        return "0".cast[u8&]
+    if sc == 44:
+        return "Space".cast[u8&]
+    if sc == 224 or sc == 228:
+        return "Ctrl".cast[u8&]
+    if sc == 225 or sc == 229:
+        return "Shift".cast[u8&]
+    if sc == 226 or sc == 230:
+        return "Alt".cast[u8&]
+    if sc == 80:
+        return "Left".cast[u8&]
+    if sc == 79:
+        return "Right".cast[u8&]
+    if sc == 82:
+        return "Up".cast[u8&]
+    if sc == 81:
+        return "Down".cast[u8&]
+    if sc == 43:
+        return "Tab".cast[u8&]
+    # fallback: "Key NNN"
+    buf[0u32] <- 75u8                          # K
+    buf[1u32] <- 101u8                         # e
+    buf[2u32] <- 121u8                         # y
+    buf[3u32] <- 32u8                          # space
+    n: mutable i32 = sc
+    if n > 999:
+        n <- 999
+    buf[4u32] <- (48 + (n / 100) % 10).u8()
+    buf[5u32] <- (48 + (n / 10) % 10).u8()
+    buf[6u32] <- (48 + n % 10).u8()
+    buf[7u32] <- 0u8
+    return buf
+
+def draw_control_screen2(r: mutable Render&, v: mutable Vga&, sel: i32, rebinding: bool) -> void:
+    draw_info_header(r, v, "Customize Controls".cast[u8&])
+    nb: mutable array[u8, 16] = zeroed
+    for i in 0..<9:
+        y: i32 = 40 + i * 14
+        col: mutable u8 = 0x17u8
+        if i == sel:
+            col <- 0x13u8
+        _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 32, y, ctrl_label(i), col)
+        kn: mutable u8& = "?".cast[u8&]
+        if i == sel and rebinding:
+            kn <- "< press a key >".cast[u8&]
+        else:
+            kn <- keyname(ctrl_get(r, i), &nb[0])
+        _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 180, y, kn, col)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 24, 176, "Enter=bind  Esc=back".cast[u8&], 0x13u8)
+
+# --- Read This!: the REAL T_HELPART article, paginated on '^P', rendered with control codes ---
+global RT_LEFT: i32 = 16
+global RT_RIGHT: i32 = 300
+global RT_TOP: i32 = 4
+
+def hexval(c: i32) -> i32:
+    if c >= 48 and c <= 57:
+        return c - 48
+    if c >= 97 and c <= 102:
+        return c - 87                          # a-f
+    if c >= 65 and c <= 70:
+        return c - 55                          # A-F
+    return 0
+
+# load + paginate the help article once (scan for every '^P' = page start)
+def rt_load(r: mutable Render&, v: mutable Vga&) -> void:
+    if r.rt_loaded:
+        return
+    r.rt_len <- vga_get_text(v, 138, &r.rt_text[0], 16000)     # T_HELPART
+    r.rt_npages <- 0
+    i: mutable i32 = 0
+    while i < r.rt_len:
+        c: i32 = r.rt_text[i.usize()].i32()
+        if c == 94:                            # '^'
+            n: i32 = r.rt_text[(i + 1).usize()].i32()
+            if (n == 80 or n == 112) and r.rt_npages < 64:    # 'P'/'p'
+                r.rt_page_off[r.rt_npages.usize()] <- i
+                r.rt_npages <- r.rt_npages + 1
+        i <- i + 1
+    if r.rt_npages == 0:
+        r.rt_page_off[0u32] <- 0
+        r.rt_npages <- 1
+    r.rt_loaded <- true
+    r.rt_page <- 0
+
+# width in pixels of the word starting at `i` (until space/CR/LF/TAB/'^'/end)
+def rt_word_width(r: Render&, v: Vga&, i: i32, end: i32) -> i32:
+    w: mutable i32 = 0
+    j: mutable i32 = i
+    going: mutable bool = true
+    while going and j < end:
+        c: i32 = r.rt_text[j.usize()].i32()
+        if c == 32 or c == 13 or c == 10 or c == 9 or c == 94:
+            going <- false
+        else:
+            w <- w + vga_char_width(v, c)
+            j <- j + 1
+    return w
+
+def draw_readthis_screen(r: mutable Render&, v: mutable Vga&) -> void:
+    rt_load(r, v)
+    # plain dark background, like the article screen
+    for k in 0..<64000:
+        r.fb[k.usize()] <- 0x00u8
+    page: i32 = r.rt_page
+    start: i32 = r.rt_page_off[page.usize()]
+    endp: mutable i32 = r.rt_len
+    if page + 1 < r.rt_npages:
+        endp <- r.rt_page_off[(page + 1).usize()]
+    px: mutable i32 = RT_LEFT
+    py: mutable i32 = RT_TOP
+    color: mutable u8 = 0x17u8
+    lh: i32 = v.font_height + 1
+    pic: mutable array[u8, 64000] = zeroed
+    i: mutable i32 = start
+    while i < endp:
+        c: i32 = r.rt_text[i.usize()].i32()
+        if c == 94:                            # '^' command
+            n: i32 = r.rt_text[(i + 1).usize()].i32()
+            if n == 80 or n == 112:            # ^P page: skip rest of line
+                i <- i + 2
+                while i < endp and r.rt_text[i.usize()].i32() != 13:
+                    i <- i + 1
+                i <- i + 1
+                px <- RT_LEFT
+            elif n == 67 or n == 99:           # ^c## hex color
+                color <- (hexval(r.rt_text[(i + 2).usize()].i32()) * 16 + hexval(r.rt_text[(i + 3).usize()].i32())).u8()
+                i <- i + 4
+            elif n == 71 or n == 103:          # ^G y,x,chunk  graphic
+                j: mutable i32 = i + 2
+                nums: mutable array[i32, 3] = zeroed
+                ni: mutable i32 = 0
+                cur: mutable i32 = 0
+                have: mutable bool = false
+                while j < endp and r.rt_text[j.usize()].i32() != 13 and ni < 3:
+                    ch: i32 = r.rt_text[j.usize()].i32()
+                    if ch >= 48 and ch <= 57:
+                        cur <- cur * 10 + (ch - 48)
+                        have <- true
+                    elif ch == 44:             # comma
+                        nums[ni.usize()] <- cur
+                        ni <- ni + 1
+                        cur <- 0
+                        have <- false
+                    j <- j + 1
+                if have and ni < 3:
+                    nums[ni.usize()] <- cur
+                    ni <- ni + 1
+                if ni >= 3:
+                    pw: mutable i32 = 0
+                    ph: mutable i32 = 0
+                    if vga_get_pic(v, nums[2u32], &pic[0], &pw, &ph):
+                        blit_pic(r, &pic[0], pw, ph, nums[1u32], nums[0u32])
+                i <- j
+            elif n == 76 or n == 108:          # ^L x,y  set location
+                j2: mutable i32 = i + 2
+                lnums: mutable array[i32, 2] = zeroed
+                li: mutable i32 = 0
+                lcur: mutable i32 = 0
+                while j2 < endp and li < 2 and r.rt_text[j2.usize()].i32() != 13 and r.rt_text[j2.usize()].i32() != 94:
+                    ch2: i32 = r.rt_text[j2.usize()].i32()
+                    if ch2 >= 48 and ch2 <= 57:
+                        lcur <- lcur * 10 + (ch2 - 48)
+                    elif ch2 == 44:
+                        lnums[li.usize()] <- lcur
+                        li <- li + 1
+                        lcur <- 0
+                    j2 <- j2 + 1
+                if li < 2:
+                    lnums[li.usize()] <- lcur
+                px <- lnums[0u32]
+                py <- lnums[1u32]
+                i <- j2
+            elif n == 69 or n == 101:          # ^E end of article
+                i <- endp
+            else:
+                i <- i + 2
+        elif c == 13:                          # CR -> newline
+            px <- RT_LEFT
+            py <- py + lh
+            i <- i + 1
+        elif c == 10:
+            i <- i + 1
+        elif c == 9:                           # tab -> next ~28px stop, bounded
+            px <- ((px / 28) + 1) * 28
+            if px > 260:
+                px <- 260
+            i <- i + 1
+        elif c == 32:                          # space
+            px <- px + vga_char_width(v, 32)
+            i <- i + 1
+        else:                                  # word start: wrap if it would overflow
+            ww: i32 = rt_word_width(r, v, i, endp)
+            if px + ww > RT_RIGHT and px > RT_LEFT:
+                px <- RT_LEFT
+                py <- py + lh
+            wgoing: mutable bool = true
+            while wgoing and i < endp:
+                wc: i32 = r.rt_text[i.usize()].i32()
+                if wc == 32 or wc == 13 or wc == 10 or wc == 9 or wc == 94:
+                    wgoing <- false
+                else:
+                    px <- px + vga_draw_char(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, px, py, wc, color)
+                    i <- i + 1
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 60, 190, "Enter/Down=next  Up=prev  Esc=back".cast[u8&], 0x13u8)
+
+# --- Persistent high scores: 7 entries (name[16], score, level), raw-struct file ---
+global HS_COUNT: i32 = 7
+global HS_NAMELEN: i32 = 16
+
+struct HiScores layout c:
+    names: mutable array[u8, 112]            # 7 * 16
+    scores: mutable array[i32, 7]
+    levels: mutable array[i32, 7]
+
+def hs_defaults(h: mutable HiScores&) -> void:
+    # id Software's standing scores (matches the original)
+    deflt: array[u8, 112] = [
+        105,100,32,83,111,102,116,119,97,114,101,0,0,0,0,0,     # "id Software"
+        65,100,114,105,97,110,0,0,0,0,0,0,0,0,0,0,              # "Adrian"
+        66,105,108,108,121,0,0,0,0,0,0,0,0,0,0,0,               # "Billy"
+        74,97,121,0,0,0,0,0,0,0,0,0,0,0,0,0,                    # "Jay"
+        75,101,118,105,110,0,0,0,0,0,0,0,0,0,0,0,               # "Kevin"
+        84,111,109,0,0,0,0,0,0,0,0,0,0,0,0,0,                   # "Tom"
+        82,111,109,101,114,111,0,0,0,0,0,0,0,0,0,0]             # "Romero"
+    for i in 0..<112:
+        h.names[i.usize()] <- deflt[i.usize()]
+    defsc: array[i32, 7] = [10000, 10000, 10000, 10000, 10000, 10000, 10000]
+    for i in 0..<7:
+        h.scores[i.usize()] <- defsc[i.usize()]
+        h.levels[i.usize()] <- 1
+
+def hs_load(h: mutable HiScores&, path: cstr) -> void:
+    f: void&? = fopen(path.cast[u8&], "rb".cast[u8&])
+    if f == null:
+        hs_defaults(h)
+        return
+    n: usize = fread((&h).cast[mutable u8&], 1.usize(), size_of[HiScores], f)
+    _ = fclose(f)
+    if n < size_of[HiScores]:
+        hs_defaults(h)
+
+def hs_save(h: HiScores&, path: cstr) -> void:
+    f: void&? = fopen(path.cast[u8&], "wb".cast[u8&])
+    if f == null:
+        return
+    _ = fwrite((&h).cast[u8&], 1.usize(), size_of[HiScores], f)
+    _ = fclose(f)
+
+# lowest rank index this score beats, or -1 if it doesn't make the table
+def hs_rank(h: HiScores&, score: i32) -> i32:
+    if score <= 0:
+        return -1
+    if score <= h.scores[(HS_COUNT - 1).usize()]:
+        return -1
+    rank: mutable i32 = HS_COUNT - 1
+    while rank > 0 and h.scores[(rank - 1).usize()] < score:
+        rank <- rank - 1
+    return rank
+
+def hs_insert(h: mutable HiScores&, rank: i32, name: u8&, score: i32, level: i32) -> void:
+    # shift entries [rank..end-1] down by one
+    i: mutable i32 = HS_COUNT - 1
+    while i > rank:
+        h.scores[i.usize()] <- h.scores[(i - 1).usize()]
+        h.levels[i.usize()] <- h.levels[(i - 1).usize()]
+        for c in 0..<HS_NAMELEN:
+            h.names[(i * HS_NAMELEN + c).usize()] <- h.names[((i - 1) * HS_NAMELEN + c).usize()]
+        i <- i - 1
+    h.scores[rank.usize()] <- score
+    h.levels[rank.usize()] <- level
+    for c in 0..<HS_NAMELEN:
+        h.names[(rank * HS_NAMELEN + c).usize()] <- name[c.u32()]
+
+# render an i32 right-justified into the framebuffer string area via the proportional font
+def draw_int(r: mutable Render&, v: mutable Vga&, x: i32, y: i32, val: i32, col: u8) -> void:
+    buf: mutable array[u8, 16] = zeroed
+    n: mutable i32 = val
+    if n < 0:
+        n <- 0
+    p: mutable i32 = 15
+    buf[15u32] <- 0u8
+    if n == 0:
+        p <- p - 1
+        buf[p.u32()] <- 48u8
+    while n > 0 and p > 0:
+        p <- p - 1
+        buf[p.u32()] <- (48 + n % 10).u8()
+        n <- n / 10
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, x, y, &buf[p.u32()], col)
+
+def draw_viewscores_screen(r: mutable Render&, v: mutable Vga&, h: HiScores&) -> void:
+    draw_info_header(r, v, "High Scores".cast[u8&])
+    for i in 0..<HS_COUNT:
+        y: i32 = 44 + i * 18
+        _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 32, y, &h.names[(i * HS_NAMELEN).usize()], 0x17u8)
+        draw_int(r, v, 150, y, h.levels[i.usize()], 0x17u8)
+        draw_int(r, v, 200, y, h.scores[i.usize()], 0x17u8)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 60, 176, "Press a key to return".cast[u8&], 0x13u8)
+
+# the in-game name-entry overlay shown when a death produced a qualifying score
+def draw_name_entry(r: mutable Render&, v: mutable Vga&, name: u8&, score: i32) -> void:
+    draw_info_header(r, v, "New High Score!".cast[u8&])
+    draw_int(r, v, 120, 60, score, 0x13u8)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 32, 90, "Enter your name:".cast[u8&], 0x17u8)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 32, 110, name, 0x13u8)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 60, 176, "Enter when done".cast[u8&], 0x13u8)
+
+def main(argc: int, argv: u8&&) -> int:
+    can Console, Abort.Panic:
+        mapnum: mutable i32 = 0
+        if argc >= 2:
+            mapnum <- atoi(argv[1]).i32()
+        w: mutable WolfData = zeroed
+        if not ca_startup(&w, MAPHEAD_PATH, GAMEMAPS_PATH):
+            return 2
+        pm: mutable VSwap = zeroed
+        if not pm_startup(&pm, VSWAP_PATH):
+            return 3
+        pm_setup_digi(&pm)
+        opl: mutable Opl = zeroed
+        if not opl_load(&opl, AUDIOHED_PATH, AUDIOT_PATH):
+            return 4
+        if mapnum < 0 or mapnum >= 60:
+            mapnum <- 0
+        r: mutable Render = zeroed
+        render_init(&r, &pm)
+        r.player_ammo <- 99      # generous ammo for free-roam testing
+        load_level(&r, &w, &pm, mapnum)
+        opl_play_level_music(&opl, r.current_map)  # play the episode-1 theme (loops)
+        # decode the authentic VGAGRAPH status bar into the HUD
+        vga: mutable Vga = zeroed
+        if vga_load(&vga,
+                "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/VGADICT.WL6",
+                "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/VGAHEAD.WL6",
+                "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/VGAGRAPH.WL6"):
+            sw: mutable i32 = 0
+            sh: mutable i32 = 0
+            if vga_get_pic(&vga, STATUSBARPIC, &r.statusbar[0], &sw, &sh):
+                r.has_statusbar <- true
+            # decode the 8px HUD number pics (N_BLANKPIC=98, N_0PIC..N_9PIC = 99..108)
+            dtmp: mutable array[u8, 512] = zeroed
+            all_digits: mutable bool = true
+            for slot in 0..<11:
+                dw2: mutable i32 = 0
+                dh2: mutable i32 = 0
+                if vga_get_pic(&vga, 98 + slot, &dtmp[0], &dw2, &dh2):
+                    r.digit_w <- dw2
+                    r.digit_h <- dh2
+                    for k in 0..<(dw2 * dh2):
+                        r.hud_digits[(slot * dw2 * dh2 + k).usize()] <- dtmp[k.usize()]
+                else:
+                    all_digits <- false
+            if all_digits:
+                r.has_digits <- true
+            # decode the main-menu Options logo (C_OPTIONSPIC=10) and gun cursor (C_CURSOR1PIC=11)
+            lw: mutable i32 = 0
+            lh: mutable i32 = 0
+            gw: mutable i32 = 0
+            gh: mutable i32 = 0
+            ok_logo: bool = vga_get_pic(&vga, 10, &r.menu_logo[0], &lw, &lh)
+            ok_gun: bool = vga_get_pic(&vga, 11, &r.menu_gun[0], &gw, &gh)
+            if ok_logo and ok_gun:
+                r.logo_w <- lw
+                r.logo_h <- lh
+                r.gun_w <- gw
+                r.gun_h <- gh
+                r.has_menugfx <- true
+
+        if SDL_Init(0x30) != 0:        # SDL_INIT_VIDEO | SDL_INIT_AUDIO
+            return 1
+        # 4:3 window so the 320x200 framebuffer is stretched to Wolf's display aspect (taller walls)
+        win: void& = SDL_CreateWindow("Elisa Wolfenstein 3D".cast[u8&], 0x2FFF0000, 0x2FFF0000,
+                                      640, 480, 0x4)
+        ren: void& = SDL_CreateRenderer(win, -1, 0x6)
+        tex: void& = SDL_CreateTexture(ren, 0x16161804, 1, VIEWWIDTH, SCREENHEIGHT)
+
+        # digitized SFX: 8-bit unsigned PCM @ 7000Hz mono, queue mode
+        aspec: mutable SdlAudioSpec = zeroed
+        aspec.freq <- 7000
+        aspec.format <- 0x0008          # AUDIO_U8
+        aspec.channels <- 1u8
+        aspec.samples <- 1024u16
+        audio_dev: u32 = SDL_OpenAudioDevice(null, 0, (&aspec).cast[void&], null, 0)
+        SDL_PauseAudioDevice(audio_dev, 0)
+
+        # AdLib FM SFX: a second device, S16 mono @ 44100Hz; the OS mixes it with the digi channel
+        ospec: mutable SdlAudioSpec = zeroed
+        ospec.freq <- 44100
+        ospec.format <- 0x8010          # AUDIO_S16SYS
+        ospec.channels <- 1u8
+        ospec.samples <- 1024u16
+        opl_dev: u32 = SDL_OpenAudioDevice(null, 0, (&ospec).cast[void&], null, 0)
+        SDL_PauseAudioDevice(opl_dev, 0)
+        oplbuf: mutable array[i16, 2048] = zeroed
+
+        pixels: mutable array[u32, 64000] = zeroed
+        ev: mutable SdlEvent = zeroed
+        hiscores: mutable HiScores = zeroed
+        hs_load(&hiscores, HISCORE_PATH)
+        entering_name: mutable bool = false
+        namebuf: mutable array[u8, 16] = zeroed
+        namelen: mutable i32 = 0
+        pending_rank: mutable i32 = -1
+        name_prevkeys: mutable array[u8, 64] = zeroed
+        running: mutable bool = true
+        prev_use: mutable bool = false
+        menu_open: mutable bool = false
+        menu_sel: mutable i32 = 0
+        prev_esc: mutable bool = false
+        prev_up: mutable bool = false
+        prev_down: mutable bool = false
+        prev_enter: mutable bool = false
+
+        # Title screen: decode TITLEPIC into the framebuffer and hold until Enter/Space (Esc quits).
+        tw0: mutable i32 = 0
+        th0: mutable i32 = 0
+        if vga_get_pic(&vga, 87, &r.fb[0], &tw0, &th0):
+            titling: mutable bool = true
+            while titling and running:
+                while SDL_PollEvent((&ev).cast[mutable void&]) != 0:
+                    if ev.kind == 0x100:
+                        running <- false
+                        titling <- false
+                SDL_PumpEvents()
+                tkeys: u8& = SDL_GetKeyboardState(null)
+                # any of Enter/Space/Esc dismisses the title into the game (Esc no longer quits)
+                if tkeys[40u32] != 0u8 or tkeys[44u32] != 0u8 or tkeys[41u32] != 0u8:
+                    titling <- false
+                opl_render(&opl, &oplbuf[0], 735)
+                if SDL_GetQueuedAudioSize(opl_dev) < 17640u32:
+                    _ = SDL_QueueAudio(opl_dev, (&oplbuf[0]).cast[void&], 1470u32)
+                blit_palette(&r, &pixels[0])
+                _ = SDL_UpdateTexture(tex, null, (&pixels[0]).cast[void&], VIEWWIDTH * 4)
+                _ = SDL_RenderClear(ren)
+                _ = SDL_RenderCopy(ren, tex, null, null)
+                SDL_RenderPresent(ren)
+
+        # Menu front-end phases: 0 main, 1 episode, 2 difficulty, 3 sound, 4 control, 5 read this,
+        # 6 view scores, 7 change view
+        mmsel: mutable i32 = 0
+        esel: mutable i32 = 0
+        dsel: mutable i32 = 0
+        ssel: mutable i32 = 0
+        csel: mutable i32 = 0                  # Control screen: selected action 0..8
+        crebind: mutable bool = false          # Control screen: awaiting a key to bind
+        crebind_armed: mutable bool = false    # waiting for keys-released before capture
+        menu_phase: mutable i32 = 0
+        adlib_on: mutable bool = true
+        digi_on: mutable bool = true
+        mm_pu: mutable bool = true
+        mm_pd: mutable bool = true
+        mm_pe: mutable bool = true
+        mm_pb: mutable bool = true
+        mm_pl: mutable bool = true
+        mm_pr: mutable bool = true
+        mm_pk: mutable bool = true
+        inmenu: mutable bool = running
+        while inmenu and running:
+            while SDL_PollEvent((&ev).cast[mutable void&]) != 0:
+                if ev.kind == 0x100:
+                    running <- false
+                    inmenu <- false
+            SDL_PumpEvents()
+            mk: u8& = SDL_GetKeyboardState(null)
+            mu: bool = mk[82u32] != 0u8
+            md: bool = mk[81u32] != 0u8
+            me: bool = mk[40u32] != 0u8 or mk[44u32] != 0u8
+            mb: bool = mk[41u32] != 0u8                   # Esc = back
+            mlk: bool = mk[80u32] != 0u8                  # Left
+            mrk: bool = mk[79u32] != 0u8                  # Right
+            anyk: bool = me or mb or mu or md or mlk or mrk
+            up_edge: bool = mu and not mm_pu
+            dn_edge: bool = md and not mm_pd
+            en_edge: bool = me and not mm_pe
+            bk_edge: bool = mb and not mm_pb
+            lf_edge: bool = mlk and not mm_pl
+            rt_edge: bool = mrk and not mm_pr
+            any_edge: bool = anyk and not mm_pk
+            if menu_phase == 0:
+                if up_edge:
+                    mmsel <- mmsel - 1
+                    if mmsel < 0:
+                        mmsel <- 9
+                    if mmsel == 4:
+                        mmsel <- 3
+                if dn_edge:
+                    mmsel <- mmsel + 1
+                    if mmsel > 9:
+                        mmsel <- 0
+                    if mmsel == 4:
+                        mmsel <- 5
+                if en_edge:
+                    if mmsel == 0 or mmsel == 8:
+                        menu_phase <- 1                   # New Game / Back to Demo -> episode
+                        esel <- 0
+                    elif mmsel == 1:
+                        menu_phase <- 3                   # Sound submenu
+                        ssel <- 0
+                    elif mmsel == 2:
+                        menu_phase <- 4                   # Control
+                    elif mmsel == 3:
+                        if load_game(&r, SAVE_PATH):      # Load Game
+                            inmenu <- false
+                    elif mmsel == 5:
+                        menu_phase <- 7                   # Change View
+                    elif mmsel == 6:
+                        menu_phase <- 5                   # Read This!
+                        r.rt_page <- 0
+                    elif mmsel == 7:
+                        menu_phase <- 6                   # View Scores
+                    elif mmsel == 9:
+                        running <- false
+                        inmenu <- false
+            elif menu_phase == 1:
+                if up_edge:
+                    esel <- esel - 1
+                    if esel < 0:
+                        esel <- 5
+                if dn_edge:
+                    esel <- esel + 1
+                    if esel > 5:
+                        esel <- 0
+                if en_edge:
+                    menu_phase <- 2                       # -> difficulty
+                    dsel <- 0
+                if bk_edge:
+                    menu_phase <- 0
+            elif menu_phase == 2:
+                if up_edge:
+                    dsel <- dsel - 1
+                    if dsel < 0:
+                        dsel <- 3
+                if dn_edge:
+                    dsel <- dsel + 1
+                    if dsel > 3:
+                        dsel <- 0
+                if en_edge:
+                    r.difficulty <- dsel
+                    startmap: mutable i32 = esel * 10
+                    if startmap < 0 or startmap >= 60:
+                        startmap <- 0
+                    load_level(&r, &w, &pm, startmap)
+                    opl_play_level_music(&opl, r.current_map)
+                    inmenu <- false                       # start the game
+                if bk_edge:
+                    menu_phase <- 1
+            elif menu_phase == 3:
+                # Sound submenu: nav 2 items, Enter toggles the device
+                if up_edge or dn_edge:
+                    ssel <- 1 - ssel
+                if en_edge:
+                    if ssel == 0:
+                        adlib_on <- not adlib_on
+                        pa: mutable int = 0
+                        if not adlib_on:
+                            pa <- 1
+                        SDL_PauseAudioDevice(opl_dev, pa)
+                    else:
+                        digi_on <- not digi_on
+                        pdd: mutable int = 0
+                        if not digi_on:
+                            pdd <- 1
+                        SDL_PauseAudioDevice(audio_dev, pdd)
+                if bk_edge:
+                    menu_phase <- 0
+            elif menu_phase == 7:
+                # Change View: left = smaller window, right = bigger; recompute viewport + projection
+                if lf_edge and r.view_size < 12:
+                    set_view_size(&r, r.view_size + 1)
+                if rt_edge and r.view_size > 0:
+                    set_view_size(&r, r.view_size - 1)
+                if bk_edge or en_edge:
+                    menu_phase <- 0
+            elif menu_phase == 4:
+                # Customize Controls: nav 9 actions, Enter rebinds the selected one
+                if crebind:
+                    # scan whole keyboard; arm only after all keys are released
+                    anydown: mutable bool = false
+                    capt: mutable i32 = -1
+                    for sc in 4..<231:
+                        if mk[sc.u32()] != 0u8:
+                            anydown <- true
+                            if capt < 0:
+                                capt <- sc
+                    if not crebind_armed:
+                        if not anydown:
+                            crebind_armed <- true
+                    else:
+                        if capt == 41:                 # Esc cancels the rebind
+                            crebind <- false
+                        elif capt >= 0:
+                            ctrl_set(&r, csel, capt)
+                            crebind <- false
+                else:
+                    if up_edge:
+                        csel <- csel - 1
+                        if csel < 0:
+                            csel <- 8
+                    if dn_edge:
+                        csel <- csel + 1
+                        if csel > 8:
+                            csel <- 0
+                    if en_edge:
+                        crebind <- true
+                        crebind_armed <- false
+                    if bk_edge:
+                        menu_phase <- 0
+            elif menu_phase == 5:
+                # Read This!: page through the help article
+                if en_edge or rt_edge or dn_edge:
+                    if r.rt_page + 1 < r.rt_npages:
+                        r.rt_page <- r.rt_page + 1
+                    else:
+                        menu_phase <- 0                   # past last page -> back to menu
+                if (lf_edge or up_edge) and r.rt_page > 0:
+                    r.rt_page <- r.rt_page - 1
+                if bk_edge:
+                    menu_phase <- 0
+            else:
+                # info screen (6 view scores): any key returns
+                if any_edge:
+                    menu_phase <- 0
+            mm_pu <- mu
+            mm_pd <- md
+            mm_pe <- me
+            mm_pb <- mb
+            mm_pl <- mlk
+            mm_pr <- mrk
+            mm_pk <- anyk
+            if menu_phase == 0:
+                draw_main_menu(&r, &vga, mmsel)
+            elif menu_phase == 1:
+                draw_episode_menu(&r, &vga, esel)
+            elif menu_phase == 2:
+                draw_difficulty_menu(&r, &vga, dsel)
+            elif menu_phase == 3:
+                draw_sound_menu(&r, &vga, ssel, adlib_on, digi_on)
+            elif menu_phase == 4:
+                draw_control_screen2(&r, &vga, csel, crebind)
+            elif menu_phase == 5:
+                draw_readthis_screen(&r, &vga)
+            elif menu_phase == 6:
+                draw_viewscores_screen(&r, &vga, &hiscores)
+            else:
+                # change view: preview the actual runtime viewport rectangle on a panel field
+                for ii in 0..<64000:
+                    r.fb[ii.usize()] <- 0x7Du8
+                for yy in 0..<160:
+                    for xx in 0..<320:
+                        inside: bool = xx >= r.vx and xx < r.vx + r.vw and yy >= r.vy and yy < r.vy + r.vh
+                        if inside:
+                            half: bool = (yy - r.vy) >= r.vh / 2
+                            cc: mutable u8 = 0x1Du8
+                            if half:
+                                cc <- 0x19u8
+                            r.fb[(yy * 320 + xx).usize()] <- cc
+                _ = vga_draw_string(&vga, &r.fb[0], 320, 320, 200, 70, 172, "Change View - Left/Right".cast[u8&], 0x13u8)
+            opl_render(&opl, &oplbuf[0], 735)
+            if SDL_GetQueuedAudioSize(opl_dev) < 17640u32:
+                _ = SDL_QueueAudio(opl_dev, (&oplbuf[0]).cast[void&], 1470u32)
+            blit_palette(&r, &pixels[0])
+            _ = SDL_UpdateTexture(tex, null, (&pixels[0]).cast[void&], VIEWWIDTH * 4)
+            _ = SDL_RenderClear(ren)
+            _ = SDL_RenderCopy(ren, tex, null, null)
+            SDL_RenderPresent(ren)
+
+        # seed edge-detection from the keys currently held (so a held title-dismiss key doesn't
+        # immediately toggle the menu or fire on the first game frame)
+        SDL_PumpEvents()
+        seedkeys: u8& = SDL_GetKeyboardState(null)
+        prev_esc <- seedkeys[41u32] != 0u8
+        prev_enter <- seedkeys[40u32] != 0u8
+        prev_use <- seedkeys[44u32] != 0u8
+
+        # adaptive timing (Wolf CalcTics): tics = elapsed 1/70s units, paced + clamped
+        lasttimecount: mutable i32 = ((SDL_GetTicks() * 7u32) / 100u32).i32()
+        prev_f2: mutable bool = false
+        prev_f3: mutable bool = false
+        while running:
+            while SDL_PollEvent((&ev).cast[mutable void&]) != 0:
+                if ev.kind == 0x100:            # SDL_QUIT
+                    running <- false
+            SDL_PumpEvents()
+            keys: u8& = SDL_GetKeyboardState(null)
+
+            # CalcTics: real elapsed 70Hz ticks since last frame; delay if a tic hasn't passed
+            now: u32 = SDL_GetTicks()
+            tcur: i32 = ((now * 7u32) / 100u32).i32()
+            tics: mutable i32 = tcur - lasttimecount
+            if tics < 1:
+                SDL_Delay(2u32)
+                tics <- 1
+            lasttimecount <- lasttimecount + tics
+            if tics > MAXTICS:
+                tics <- MAXTICS
+
+            # Escape toggles the pause menu
+            esc_now: bool = keys[41u32] != 0u8
+            if esc_now and not prev_esc:
+                menu_open <- not menu_open
+            prev_esc <- esc_now
+
+            if menu_open:
+                up_now: bool = keys[82u32] != 0u8
+                down_now: bool = keys[81u32] != 0u8
+                enter_now: bool = keys[40u32] != 0u8
+                if up_now and not prev_up:
+                    if menu_sel > 0:
+                        menu_sel <- menu_sel - 1
+                    else:
+                        menu_sel <- 2
+                if down_now and not prev_down:
+                    if menu_sel < 2:
+                        menu_sel <- menu_sel + 1
+                    else:
+                        menu_sel <- 0
+                if enter_now and not prev_enter:
+                    if menu_sel == 0:
+                        menu_open <- false
+                    elif menu_sel == 1:
+                        load_level(&r, &w, &pm, 0)
+                        opl_play_level_music(&opl, r.current_map)
+                        menu_open <- false
+                    else:
+                        running <- false
+                prev_up <- up_now
+                prev_down <- down_now
+                prev_enter <- enter_now
+                draw_menu(&r, &vga, menu_sel)
+                opl_render(&opl, &oplbuf[0], 735)
+                if SDL_GetQueuedAudioSize(opl_dev) < 17640u32:
+                    _ = SDL_QueueAudio(opl_dev, (&oplbuf[0]).cast[void&], 1470u32)
+                blit_palette(&r, &pixels[0])
+                _ = SDL_UpdateTexture(tex, null, (&pixels[0]).cast[void&], VIEWWIDTH * 4)
+                _ = SDL_RenderClear(ren)
+                _ = SDL_RenderCopy(ren, tex, null, null)
+                SDL_RenderPresent(ren)
+                continue
+
+            # A death this frame may have produced a high score: open the name-entry overlay
+            if r.want_highscore:
+                r.want_highscore <- false
+                rk: i32 = hs_rank(&hiscores, r.player_score)
+                if rk >= 0:
+                    pending_rank <- rk
+                    namelen <- 0
+                    for ci in 0..<16:
+                        namebuf[ci.usize()] <- 0u8
+                    for ci in 0..<64:
+                        name_prevkeys[ci.usize()] <- 0u8
+                    entering_name <- true
+
+            if entering_name:
+                # capture typed letters/space (edge-detected), backspace, enter to commit
+                for sc in 4..<58:
+                    down: bool = keys[sc.u32()] != 0u8
+                    was: bool = name_prevkeys[sc.usize()] != 0u8
+                    if down and not was:
+                        ch: mutable i32 = -1
+                        if sc >= 4 and sc <= 29:
+                            ch <- 65 + (sc - 4)               # A..Z
+                        elif sc >= 30 and sc <= 38:
+                            ch <- 49 + (sc - 30)              # 1..9
+                        elif sc == 39:
+                            ch <- 48                          # 0
+                        elif sc == 44:
+                            ch <- 32                          # space
+                        if ch >= 0 and namelen < 15:
+                            namebuf[namelen.usize()] <- ch.u8()
+                            namelen <- namelen + 1
+                        elif sc == 42 and namelen > 0:        # backspace
+                            namelen <- namelen - 1
+                            namebuf[namelen.usize()] <- 0u8
+                    if down:
+                        name_prevkeys[sc.usize()] <- 1u8
+                    else:
+                        name_prevkeys[sc.usize()] <- 0u8
+                if keys[40u32] != 0u8 and not prev_enter:     # Enter commits
+                    namebuf[namelen.usize()] <- 0u8
+                    hs_insert(&hiscores, pending_rank, &namebuf[0], r.player_score, r.current_map + 1)
+                    hs_save(&hiscores, HISCORE_PATH)
+                    entering_name <- false
+                prev_enter <- keys[40u32] != 0u8
+                draw_name_entry(&r, &vga, &namebuf[0], r.player_score)
+                blit_palette(&r, &pixels[0])
+                _ = SDL_UpdateTexture(tex, null, (&pixels[0]).cast[void&], VIEWWIDTH * 4)
+                _ = SDL_RenderClear(ren)
+                _ = SDL_RenderCopy(ren, tex, null, null)
+                SDL_RenderPresent(ren)
+                continue
+
+            handle_input(&r, keys, tics)
+
+            # Use key: operate the door in front, edge-triggered
+            use_now: bool = keys[r.kb_use.u32()] != 0u8
+            if use_now and not prev_use:
+                operate_door_in_front(&r)
+            prev_use <- use_now
+            # Weapon select: number keys 1-4 (scancodes 30-33)
+            if keys[30u32] != 0u8:
+                select_weapon(&r, 0)
+            if keys[31u32] != 0u8:
+                select_weapon(&r, 1)
+            if keys[32u32] != 0u8:
+                select_weapon(&r, 2)
+            if keys[33u32] != 0u8:
+                select_weapon(&r, 3)
+            # Fire: the attack-animation cadence sets the rate (auto for MG/chaingun)
+            if keys[r.kb_fire.u32()] != 0u8:
+                start_fire(&r)
+            # F2 = quick save, F3 = quick load
+            if keys[59u32] != 0u8 and not prev_f2:
+                _ = save_game(&r, SAVE_PATH)
+            prev_f2 <- keys[59u32] != 0u8
+            if keys[60u32] != 0u8 and not prev_f3:
+                _ = load_game(&r, SAVE_PATH)
+            prev_f3 <- keys[60u32] != 0u8
+            weapon_update(&r, tics)
+            move_doors(&r, tics)
+            move_actors(&r, tics)
+            collect_pickups(&r)
+            # elevator pressed -> advance to the next map (wraps at 60)
+            if r.want_next:
+                nextmap: mutable i32 = r.current_map + 1
+                if nextmap >= 60:
+                    nextmap <- 0
+                load_level(&r, &w, &pm, nextmap)
+                opl_play_level_music(&opl, r.current_map)
+
+            # play any digi sounds the sim queued this frame (bounded to avoid latency buildup)
+            for si in 0..<r.snd_count:
+                idx: i32 = r.snd_queue[si.usize()]
+                if idx >= 0 and idx < pm.num_digi and SDL_GetQueuedAudioSize(audio_dev) < 32768u32:
+                    off: i32 = pm_digi_offset(&pm, idx)
+                    _ = SDL_QueueAudio(audio_dev, (&pm.raw[off.usize()]).cast[void&], pm.digi_len[idx.usize()].u32())
+            r.snd_count <- 0
+            # AdLib FM channel: trigger a queued SFX, then render this frame's samples (~735 @ 60fps)
+            if r.adlib_req >= 0:
+                opl_play(&opl, r.adlib_req)
+                r.adlib_req <- -1
+            opl_render(&opl, &oplbuf[0], 735)
+            if SDL_GetQueuedAudioSize(opl_dev) < 17640u32:
+                _ = SDL_QueueAudio(opl_dev, (&oplbuf[0]).cast[void&], 1470u32)
+
+            wall_refresh(&r)
+            draw_frame(&r, &pm)
+            blit_palette(&r, &pixels[0])
+            _ = SDL_UpdateTexture(tex, null, (&pixels[0]).cast[void&], VIEWWIDTH * 4)
+            _ = SDL_RenderClear(ren)
+            _ = SDL_RenderCopy(ren, tex, null, null)
+            SDL_RenderPresent(ren)
+
+        SDL_Quit()
+        return 0
+    return 0

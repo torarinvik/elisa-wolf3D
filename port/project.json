@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "targets": {
+    "wolf": {
+      "entry": "wolf_sdl.elisa",
+      "emit": "obj",
+      "output": "wolf3d",
+      "opt": "3",
+      "link-flags": ["-L/opt/homebrew/lib", "-lSDL2", "-Wl,-rpath,/opt/homebrew/lib"]
+    }
+  }
+}

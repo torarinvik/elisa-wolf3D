@@ -1,0 +1,224 @@
+include "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/compiler/runtime/elisacore_std/elisacore_runtime.elisa"
+
+# Wolfenstein 3D data / cache layer — a from-scratch Elisa port of id_ca.c (the "Caching Manager").
+#
+# Loads the registered WL6 data set and reproduces id Software's two-stage map compression exactly:
+#
+#   GAMEMAPS.WL6   each map plane is Carmack-compressed (a near/far LZ over 16-bit words),
+#                  whose payload is in turn RLEW-compressed (run-length over 16-bit words).
+#   MAPHEAD.WL6    the RLEW tag word + 100 int32 file offsets, one per map, into GAMEMAPS.
+#
+# A map is three 64x64 word planes (plane 0 = walls/tiles, plane 1 = things/objects, plane 2 unused);
+# Wolf only expands the first MAPPLANES(=2). We read the whole files into fixed byte buffers up front
+# (GAMEMAPS is ~150KB) so all parsing is pure in-memory pointer-free indexing — no fseek, no aliasing.
+
+extern fopen(path: u8&, mode: u8&) -> void&?
+extern fread(ptr: mutable u8&, size: usize, nmemb: usize, stream: void&) -> usize
+extern fwrite(ptr: u8&, size: usize, nmemb: usize, stream: void&) -> usize
+extern fclose(stream: void&) -> int
+
+global NUMMAPS: i32 = 60
+global MAPPLANES: i32 = 2
+global MAPAREA: i32 = 4096          # 64*64
+global CARMACK_NEARTAG: u16 = 0x00A7
+global CARMACK_FARTAG: u16 = 0x00A8
+
+# All loaded WL6 game data lives in one owner struct, passed by mutable ref. No mutable globals.
+struct WolfData layout c:
+    gamemaps: mutable array[u8, 262144]     # whole GAMEMAPS.WL6 (~150KB), padded to 256KB
+    gamemaps_len: mutable i32
+    rlew_tag: mutable u16
+    map_offset: mutable array[i32, 60]      # MAPHEAD headeroffsets (-1 / <0 = sparse map)
+    map_planestart: mutable array[i32, 180] # per map: 3 plane file offsets   (mapnum*3 + plane)
+    map_planelen: mutable array[i32, 180]   # per map: 3 plane compressed byte lengths
+    map_width: mutable array[i32, 60]
+    map_height: mutable array[i32, 60]
+    # The currently-cached map: two expanded 64x64 word planes.
+    planes: mutable array[u16, 8192]        # plane0 = [0,4096), plane1 = [4096,8192)
+    mapon: mutable i32
+    # Scratch for the Carmack stage (expanded RLEW stream, leading length word + up to 4096 words).
+    carmack_buf: mutable array[u16, 8192]
+
+# ---- little-endian readers over a byte buffer ----
+
+def rd_u16(buf: u8&, off: i32) -> u16:
+    lo: u16 = buf[off.usize()].u16()
+    hi: u16 = buf[(off + 1).usize()].u16()
+    return lo | (hi << 8u16)
+
+def rd_u32(buf: u8&, off: i32) -> u32:
+    b0: u32 = buf[off.usize()].u32()
+    b1: u32 = buf[(off + 1).usize()].u32()
+    b2: u32 = buf[(off + 2).usize()].u32()
+    b3: u32 = buf[(off + 3).usize()].u32()
+    return b0 | (b1 << 8u32) | (b2 << 16u32) | (b3 << 24u32)
+
+def rd_i32(buf: u8&, off: i32) -> i32:
+    b0: i32 = buf[off.usize()].i32()
+    b1: i32 = buf[(off + 1).usize()].i32()
+    b2: i32 = buf[(off + 2).usize()].i32()
+    b3: i32 = buf[(off + 3).usize()].i32()
+    return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+
+# Read an entire file into dest; returns bytes read, or -1 on open failure.
+def read_whole_file(path: cstr, dest: mutable u8&, cap: i32) -> i32:
+    f: void&? = fopen(path.cast[u8&], "rb".cast[u8&])
+    if f == null:
+        return -1
+    n: usize = fread(dest, 1.usize(), cap.usize(), f)
+    _ = fclose(f)
+    return n.i32()
+
+# ---- Carmack expansion: source bytes -> dest words, `length` = expanded length in BYTES ----
+# Faithful port of CAL_CarmackExpand. Near pointers reference back `offset` words from the current
+# output; far pointers reference `offset` words from the start of the output. A zero count after a
+# tag's high byte means the tag byte was literal data (escape).
+def carmack_expand(src: u8&, src_off: i32, dest: mutable u16&, length_bytes: i32) -> void:
+    length: mutable i32 = length_bytes / 2
+    inptr: mutable i32 = src_off
+    outpos: mutable i32 = 0
+    while length > 0:
+        ch: u16 = rd_u16(src, inptr)
+        inptr <- inptr + 2
+        chhigh: u16 = ch >> 8u16
+        if chhigh == CARMACK_NEARTAG:
+            count: i32 = (ch & 0x00FFu16).i32()
+            if count == 0:
+                # escaped: real word = tag-high-byte composed with next literal byte
+                merged: u16 = (ch & 0xFF00u16) | src[inptr.usize()].u16()
+                inptr <- inptr + 1
+                dest[outpos.usize()] <- merged
+                outpos <- outpos + 1
+                length <- length - 1
+            else:
+                offset: i32 = src[inptr.usize()].i32()
+                inptr <- inptr + 1
+                copypos: mutable i32 = outpos - offset
+                length <- length - count
+                if length < 0:
+                    return
+                for _ in 0..<count:
+                    dest[outpos.usize()] <- dest[copypos.usize()]
+                    outpos <- outpos + 1
+                    copypos <- copypos + 1
+        elif chhigh == CARMACK_FARTAG:
+            count: i32 = (ch & 0x00FFu16).i32()
+            if count == 0:
+                merged: u16 = (ch & 0xFF00u16) | src[inptr.usize()].u16()
+                inptr <- inptr + 1
+                dest[outpos.usize()] <- merged
+                outpos <- outpos + 1
+                length <- length - 1
+            else:
+                offset: i32 = rd_u16(src, inptr).i32()
+                inptr <- inptr + 2
+                copypos: mutable i32 = offset
+                length <- length - count
+                if length < 0:
+                    return
+                for _ in 0..<count:
+                    dest[outpos.usize()] <- dest[copypos.usize()]
+                    outpos <- outpos + 1
+                    copypos <- copypos + 1
+        else:
+            dest[outpos.usize()] <- ch
+            outpos <- outpos + 1
+            length <- length - 1
+
+# ---- RLEW expansion: source words -> dest words, `length` = expanded length in BYTES ----
+# Faithful port of CA_RLEWexpand. A word equal to rlewtag introduces a (count, value) run.
+def rlew_expand(src: u16&, src_off: i32, dest: mutable u16&, dest_off: i32, length_bytes: i32, rlewtag: u16) -> void:
+    end: i32 = dest_off + length_bytes / 2
+    inpos: mutable i32 = src_off
+    outpos: mutable i32 = dest_off
+    while outpos < end:
+        value: u16 = src[inpos.usize()]
+        inpos <- inpos + 1
+        if value != rlewtag:
+            dest[outpos.usize()] <- value
+            outpos <- outpos + 1
+        else:
+            count: i32 = src[inpos.usize()].i32()
+            inpos <- inpos + 1
+            rep: u16 = src[inpos.usize()]
+            inpos <- inpos + 1
+            for _ in 0..<count:
+                dest[outpos.usize()] <- rep
+                outpos <- outpos + 1
+
+# ---- setup: read MAPHEAD + GAMEMAPS, parse per-map headers ----
+def ca_startup(w: mutable WolfData&, maphead_path: cstr, gamemaps_path: cstr) -> bool:
+    head: mutable array[u8, 512] = zeroed
+    hn: i32 = read_whole_file(maphead_path, &head[0], 512)
+    if hn < 2:
+        return false
+    w.rlew_tag <- rd_u16(&head[0], 0)
+    for i in 0..<NUMMAPS:
+        w.map_offset[i.usize()] <- rd_i32(&head[0], 2 + i * 4)
+
+    gn: i32 = read_whole_file(gamemaps_path, &w.gamemaps[0], 262144)
+    if gn < 0:
+        return false
+    w.gamemaps_len <- gn
+
+    # Parse each map's maptype record: planestart[3] i32, planelength[3] u16, width u16, height u16.
+    for i in 0..<NUMMAPS:
+        pos: i32 = w.map_offset[i.usize()]
+        if pos < 0:
+            continue
+        for p in 0..<3:
+            w.map_planestart[(i * 3 + p).usize()] <- rd_i32(&w.gamemaps[0], pos + p * 4)
+            w.map_planelen[(i * 3 + p).usize()] <- rd_u16(&w.gamemaps[0], pos + 12 + p * 2).i32()
+        w.map_width[i.usize()] <- rd_u16(&w.gamemaps[0], pos + 18).i32()
+        w.map_height[i.usize()] <- rd_u16(&w.gamemaps[0], pos + 20).i32()
+    return true
+
+# ---- cache one map: expand planes 0..MAPPLANES into w.planes ----
+# Carmackized chunk layout (CARMACIZED gamemaps): leading u16 = expanded byte length of the RLEW
+# stream, followed by the Carmack-compressed bytes. The RLEW stream itself also has a leading
+# (ignored) length word, so we RLEW-expand from carmack_buf[1].
+def ca_cache_map(w: mutable WolfData&, mapnum: i32) -> void:
+    w.mapon <- mapnum
+    for plane in 0..<MAPPLANES:
+        pos: i32 = w.map_planestart[(mapnum * 3 + plane).usize()]
+        # expanded length word precedes the carmack data
+        expanded: i32 = rd_u16(&w.gamemaps[0], pos).i32()
+        carmack_expand(&w.gamemaps[0], pos + 2, &w.carmack_buf[0], expanded)
+        rlew_expand(&w.carmack_buf[0], 1, &w.planes[0], plane * MAPAREA, MAPAREA * 2, w.rlew_tag)
+
+# tile accessor: plane 0/1, (x,y) in 0..63 ; tile origin is row-major (y*64 + x)
+def map_tile(w: WolfData&, plane: i32, x: i32, y: i32) -> u16:
+    return w.planes[(plane * MAPAREA + y * 64 + x).usize()]
+
+# ================================ tests ================================
+
+@test
+def map_loads_e1m1() -> void:
+    can Abort.Panic:
+        w: mutable WolfData = zeroed
+        ok: bool = ca_startup(&w,
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/MAPHEAD.WL6",
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/GAMEMAPS.WL6")
+        if not ok:
+            panic("failed to load WL6 map data")
+        # MAPHEAD: RLEW tag is 0xABCD, first map offset 0x08CA.
+        if w.rlew_tag != 0xABCDu16:
+            panic("wrong RLEW tag")
+        if w.map_offset[0u32] != 0x08CA:
+            panic("wrong first map offset")
+        # E1M1 is map 0, a 64x64 level.
+        if w.map_width[0u32] != 64 or w.map_height[0u32] != 64:
+            panic("E1M1 not 64x64")
+        ca_cache_map(&w, 0)
+        # The border of every Wolf map is solid wall (non-zero, < area-fill ids). Tile (0,0) is a wall.
+        if map_tile(&w, 0, 0, 0) == 0u16:
+            panic("E1M1 corner tile should be solid")
+        # Plane 1 holds the player start (object code 19=N .. 22=W) somewhere; scan for it.
+        found_start: mutable bool = false
+        for y in 0..<64:
+            for x in 0..<64:
+                t: u16 = map_tile(&w, 1, x, y)
+                if t >= 19u16 and t <= 22u16:
+                    found_start <- true
+        if not found_start:
+            panic("E1M1 player start object (19..22) not found in plane 1")

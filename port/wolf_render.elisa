@@ -1,0 +1,1638 @@
+include "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/port/wolf_vswap.elisa"
+
+# Wolfenstein 3D raycaster — a from-scratch port of the wl_draw.c "AsmRefresh" wall hit-scan and the
+# CalcProjection/BuildTables trig setup. This is the engine's heart: for every screen column it casts
+# one ray through the 64x64 tile grid via id's simultaneous horizontal/vertical intercept DDA, finds
+# the first solid wall, derives the on-screen wall height from the perpendicular distance, and records
+# the texture page + column to sample. A separate scaler then draws each textured vertical strip,
+# faithfully reproducing ScalePost's fixed-point texture stepping.
+#
+# The original is written with `goto`s weaving between a "vertical" and a "horizontal" DDA loop; Elisa
+# has no goto, so the two loops are folded into one state machine (mode = VERT/HORIZ + a skip-the-
+# transition-check flag) that is behaviorally identical: entering a side via the labels skips that
+# side's leading transition test exactly as the gotos do.
+#
+# This first cut handles solid walls and map borders. Doors and pushwalls render as solid for now and
+# get their real behavior in the game-loop phase.
+
+extern sin(x: f64) -> f64
+extern cos(x: f64) -> f64
+extern tan(x: f64) -> f64
+extern atan(x: f64) -> f64
+
+global VIEWWIDTH: i32 = 320               # full-screen 3D viewport width (max)
+global VIEWHEIGHT: i32 = 160              # full-screen 3D viewport height (max); status bar below
+global SCREENWIDTH: i32 = 320             # framebuffer pitch (always 320, independent of viewport)
+global SCREENHEIGHT: i32 = 200
+global AREATILE: i32 = 107
+global FOCALLENGTH: i32 = 0x5700
+global MINDIST: i32 = 0x5800
+global RADTOINT: f64 = 572.9577951308232   # FINEANGLES/2/PI = 1800/PI
+global CEILING_COLOR: u8 = 29
+global FLOOR_COLOR: u8 = 25
+global ACTORSIZE: i32 = 0x4000
+global SPR_STAT_0: i32 = 2      # sprite-page index of the first static (SPR_DEMO=0, SPR_DEATHCAM=1)
+
+# di_ wall-pic helper constants derived at runtime (DOORWALL = sprite_start - 8).
+
+struct Render layout c:
+    # trig tables (i32 fixed-point, GLOBAL1 = 1<<16)
+    finetangent: mutable array[i32, 900]    # FINEANGLES/4
+    sintable: mutable array[i32, 450]       # ANGLES + ANGLES/4 ; costable(a) == sintable[a+90]
+    pixelangle: mutable array[i32, 320]     # per-column ray angle offset (FINEANGLES units)
+    scale: mutable i32
+    heightnumerator: mutable i32
+    doorwall: mutable i32                    # DOORWALL pic base
+    # collision/render tile grid, column-major: tilemap[x*64 + y].
+    # wall tiles hold their tile id (1..AREATILE-1); door tiles hold doornum|0x80.
+    tilemap: mutable array[u8, 4096]
+    # doors (up to 64 per level)
+    num_doors: mutable i32
+    door_tilex: mutable array[i32, 64]
+    door_tiley: mutable array[i32, 64]
+    door_vertical: mutable array[u8, 64]
+    door_lock: mutable array[i32, 64]       # 0=normal 1=locked 2=elevator (selects door pic)
+    door_action: mutable array[i32, 64]     # 0=closed 1=opening 2=open 3=closing
+    door_ticcount: mutable array[i32, 64]
+    door_position: mutable array[i32, 64]   # 0=closed .. 0xffff=fully open (slid leading edge)
+    # player + view state
+    px: mutable i32
+    py: mutable i32
+    pangle: mutable i32
+    anglefrac: mutable i32                    # sub-degree turn accumulator (Wolf ANGLESCALE)
+    viewx: mutable i32
+    viewy: mutable i32
+    viewsin: mutable i32
+    viewcos: mutable i32
+    midangle: mutable i32
+    focaltx: mutable i32
+    focalty: mutable i32
+    xpartialup: mutable i32
+    xpartialdown: mutable i32
+    ypartialup: mutable i32
+    ypartialdown: mutable i32
+    # billboard objects (statics now; actors later)
+    num_objs: mutable i32
+    obj_x: mutable array[i32, 256]
+    obj_y: mutable array[i32, 256]
+    obj_shape: mutable array[i32, 256]
+    obj_active: mutable array[u8, 256]       # 0 = taken/removed
+    obj_bkind: mutable array[i32, 256]       # bonus kind: 0 none,1 ammo,2 health,3 treasure,4 key
+    obj_bamt: mutable array[i32, 256]
+    player_score: mutable i32
+    player_keys: mutable i32                 # bitmask
+    solid_static: mutable array[u8, 4096]    # blocking statics, for collision
+    pushwall: mutable array[u8, 4096]        # secret pushable walls (plane-1 code 98)
+    # enemy actors (guards/officers/SS)
+    num_acts: mutable i32
+    act_x: mutable array[i32, 128]
+    act_y: mutable array[i32, 128]
+    act_dir: mutable array[i32, 128]         # 8-dir facing (0=E,2=N,4=W,6=S; 8=none)
+    act_walkbase: mutable array[i32, 128]    # SPR_*_W1_1 sprite index
+    act_standbase: mutable array[i32, 128]   # standing-frame base (walkbase-8, or walkbase for dogs)
+    act_deadframe: mutable array[i32, 128]   # final corpse sprite index
+    act_state: mutable array[i32, 128]       # 0=stand 1=chase 2=dead
+    act_anim: mutable array[i32, 128]        # walk frame 0..3
+    act_tic: mutable array[i32, 128]         # animation timer
+    act_speed: mutable array[i32, 128]
+    act_hp: mutable array[i32, 128]
+    act_deathbase: mutable array[i32, 128]   # SPR_*_DIE_1 sprite index
+    act_deathframe: mutable array[i32, 128]  # 0..3 death-animation progress
+    act_shoottic: mutable array[i32, 128]    # enemy fire cooldown
+    # player weapon
+    weapon_frame: mutable i32                # 0=ready, 1..4 = attack frames
+    weapon_tic: mutable i32
+    weapon_firing: mutable bool
+    weapon_hitdone: mutable bool             # this shot already resolved its hit-scan
+    weapon_type: mutable i32                 # 0 knife, 1 pistol, 2 machine gun, 3 chaingun
+    weapons_owned: mutable i32               # bitmask
+    player_hp: mutable i32
+    player_ammo: mutable i32
+    spawn_x: mutable i32
+    spawn_y: mutable i32
+    spawn_angle: mutable i32
+    hurt_flash: mutable i32                  # frames of red damage flash remaining
+    rng: mutable u32                         # simple xorshift PRNG state
+    current_map: mutable i32
+    want_next: mutable bool                  # elevator pressed -> advance level
+    difficulty: mutable i32                  # 0..3 (Daddy/Don't hurt/Bring 'em/Death)
+    view_size: mutable i32                    # Change View: 0 = full screen, larger = smaller window
+    # runtime 3D viewport geometry (recomputed from view_size by set_view_size); fb pitch stays SCREENWIDTH
+    vw: mutable i32                           # viewport width  (columns raycast)
+    vh: mutable i32                           # viewport height (centered in top VIEWHEIGHT region)
+    vx: mutable i32                           # viewport left  offset on screen
+    vy: mutable i32                           # viewport top   offset on screen
+    # Control: bindable SDL scancodes (Customize Controls)
+    kb_fwd: mutable i32
+    kb_back: mutable i32
+    kb_left: mutable i32
+    kb_right: mutable i32
+    kb_strafeL: mutable i32
+    kb_strafeR: mutable i32
+    kb_fire: mutable i32
+    kb_use: mutable i32
+    kb_run: mutable i32
+    want_highscore: mutable bool             # death raised: SDL layer should run name entry
+    # Read This! help article (T_HELPART) decoded once, paginated on '^P'
+    rt_text: mutable array[u8, 16000]
+    rt_len: mutable i32
+    rt_loaded: mutable bool
+    rt_page_off: mutable array[i32, 64]      # byte offset of each page's start
+    rt_npages: mutable i32
+    rt_page: mutable i32                      # currently displayed page
+    # sound requests: the sim pushes digi-sound indices; the SDL layer drains & plays them
+    snd_count: mutable i32
+    snd_queue: mutable array[i32, 16]
+    adlib_req: mutable i32                    # game-sound enum for an AdLib SFX this frame, or -1
+    # transient per-frame visible-sprite list (filled by draw_scaleds)
+    vis_x: mutable array[i32, 256]           # screen x center
+    vis_height: mutable array[i32, 256]      # projected height
+    vis_shape: mutable array[i32, 256]
+    vis_nx: mutable array[i32, 256]          # depth (for far->near sort)
+    # per-column raycast results
+    col_height: mutable array[i32, 320]
+    col_pic: mutable array[i32, 320]
+    col_texcol: mutable array[i32, 320]
+    col_hit: mutable array[u8, 320]
+    # authentic VGAGRAPH status bar (320x40), decoded once and blitted under the 3D view
+    statusbar: mutable array[u8, 12800]
+    has_statusbar: mutable bool
+    # authentic 8px HUD number pics (slot 0 = blank, slots 1..10 = digits 0..9)
+    hud_digits: mutable array[u8, 4096]
+    digit_w: mutable i32
+    digit_h: mutable i32
+    has_digits: mutable bool
+    # main-menu graphics: the Options logo (C_OPTIONSPIC) + gun cursor (C_CURSOR1PIC)
+    menu_logo: mutable array[u8, 32000]
+    logo_w: mutable i32
+    logo_h: mutable i32
+    menu_gun: mutable array[u8, 4096]
+    gun_w: mutable i32
+    gun_h: mutable i32
+    has_menugfx: mutable bool
+    # output framebuffer, 8bpp palette indices, VIEWWIDTH x SCREENHEIGHT (3D view on top, HUD below)
+    fb: mutable array[u8, 64000]            # 320*200
+
+# ---- fixed-point signed multiply (id's FixedMul, rounded) ----
+def fixed_mul(a: i32, b: i32) -> i32:
+    return ((a.i64() * b.i64() + 0x8000) >> 16i64).i32()
+
+# costable accessor (sintable shifted a quarter turn)
+def costable(r: Render&, a: i32) -> i32:
+    return r.sintable[(a + 90).usize()]
+
+# ---- table construction (BuildTables + CalcProjection) ----
+def build_tables(r: mutable Render&) -> void:
+    # fine tangents: finetangent[i] = tan; mirror half holds 1/tan
+    for i in 0..<450:
+        ang: f64 = (i.f64() + 0.5) / RADTOINT
+        t: f64 = tan(ang)
+        r.finetangent[i.usize()] <- (t * 65536.0).i32()
+        r.finetangent[(899 - i).usize()] <- ((1.0 / t) * 65536.0).i32()
+    # sin/cos table, quarter-symmetry
+    anglestep: f64 = 1.5707963267948966 / 90.0    # (PI/2)/ANGLEQUAD
+    angle: mutable f64 = 0.0
+    for i in 0..<90:
+        value: i32 = (65536.0 * sin(angle)).i32()
+        r.sintable[i.usize()] <- value
+        r.sintable[(i + 360).usize()] <- value
+        r.sintable[(180 - i).usize()] <- value
+        r.sintable[(360 - i).usize()] <- -value
+        r.sintable[(180 + i).usize()] <- -value
+        angle <- angle + anglestep
+    r.sintable[90u32] <- 65536
+    r.sintable[270u32] <- -65536
+
+def calc_projection(r: mutable Render&) -> void:
+    facedist: i32 = FOCALLENGTH + MINDIST
+    halfview: i32 = r.vw / 2
+    r.scale <- (halfview * facedist) / (0x10000 / 2)
+    r.heightnumerator <- (65536 * r.scale) >> 6
+    for i in 0..<halfview:
+        tang: f64 = (i.f64() * 65536.0) / r.vw.f64() / facedist.f64()
+        intang: i32 = (atan(tang) * RADTOINT).i32()
+        r.pixelangle[(halfview - 1 - i).usize()] <- intang
+        r.pixelangle[(halfview + i).usize()] <- -intang
+
+# Recompute the runtime 3D viewport geometry from the Change View size (0 = full screen).
+# Mirrors classic Wolf3D: window shrinks in 16px width steps, height = width/2 (the 320x160 ratio),
+# centered horizontally and within the top VIEWHEIGHT region; the status bar stays fixed below.
+def set_view_size(r: mutable Render&, size: mutable i32) -> void:
+    if size < 0:
+        size <- 0
+    if size > 12:
+        size <- 12
+    r.view_size <- size
+    w: mutable i32 = VIEWWIDTH - size * 16
+    if w < 96:
+        w <- 96
+    w <- w & (-16)                       # keep a multiple of 16 columns
+    r.vw <- w
+    r.vh <- (w * VIEWHEIGHT) / VIEWWIDTH  # = w/2 at the canonical 320x160 ratio
+    r.vx <- (VIEWWIDTH - r.vw) / 2
+    r.vy <- (VIEWHEIGHT - r.vh) / 2
+    calc_projection(r)
+
+# Classify a plane-0 map tile into the collision/render grid value.
+# Walls keep their tile id (1..AREATILE-1); area/floor tiles (>=AREATILE) and 0 become empty.
+def classify_tile(v: u16) -> u8:
+    iv: i32 = v.i32()
+    if iv >= 1 and iv < AREATILE:
+        return iv.u8()
+    return 0u8
+
+# Spawn a door at (tilex,tiley); the tile becomes doornum|0x80 in the tilemap (solid until open).
+def spawn_door(r: mutable Render&, tilex: i32, tiley: i32, vertical: u8, lock: i32) -> void:
+    if r.num_doors >= 64:
+        return
+    d: i32 = r.num_doors
+    r.door_tilex[d.usize()] <- tilex
+    r.door_tiley[d.usize()] <- tiley
+    r.door_vertical[d.usize()] <- vertical
+    r.door_lock[d.usize()] <- lock
+    r.door_action[d.usize()] <- 0
+    r.door_ticcount[d.usize()] <- 0
+    r.door_position[d.usize()] <- 0
+    r.tilemap[(tilex * 64 + tiley).usize()] <- (d | 0x80).u8()
+    r.num_doors <- d + 1
+
+# Build the column-major tilemap from a cached map's plane 0, spawning doors for door tiles.
+# Door map codes: 90..101. Even = vertical, odd = horizontal. 90/91 normal, 92..95 locked,
+# 100/101 elevator.
+def build_tilemap(r: mutable Render&, w: WolfData&) -> void:
+    r.num_doors <- 0
+    for x in 0..<64:
+        for y in 0..<64:
+            v: i32 = map_tile(w, 0, x, y).i32()
+            if v >= 90 and v <= 101:
+                vertical: mutable u8 = 0u8
+                if (v & 1) == 0:
+                    vertical <- 1u8
+                lock: mutable i32 = 0
+                if v >= 100:
+                    lock <- 2
+                elif v >= 92 and v <= 95:
+                    lock <- 1
+                spawn_door(r, x, y, vertical, lock)
+            else:
+                r.tilemap[(x * 64 + y).usize()] <- classify_tile(map_tile(w, 0, x, y))
+
+# Wall-pic page for a door leaf (same for vertical and horizontal faces).
+def doorpage_pic(r: Render&, lock: i32) -> i32:
+    if lock == 1:
+        return r.doorwall + 6     # locked door
+    if lock == 2:
+        return r.doorwall + 4     # elevator
+    return r.doorwall             # normal
+
+# Advance all doors one simulation step (tics = 70Hz ticks elapsed this frame).
+def move_doors(r: mutable Render&, tics: i32) -> void:
+    for d in 0..<r.num_doors:
+        act: i32 = r.door_action[d.usize()]
+        if act == 1:
+            # opening
+            p: i32 = r.door_position[d.usize()] + (tics << 10)
+            if p >= 0xFFFF:
+                r.door_position[d.usize()] <- 0xFFFF
+                r.door_action[d.usize()] <- 2
+                r.door_ticcount[d.usize()] <- 0
+            else:
+                r.door_position[d.usize()] <- p
+        elif act == 2:
+            # open: count down then auto-close — but never close on the player (Wolf CloseDoor guard)
+            r.door_ticcount[d.usize()] <- r.door_ticcount[d.usize()] + tics
+            if r.door_ticcount[d.usize()] >= 300:
+                ptx: i32 = r.px >> 16
+                pty: i32 = r.py >> 16
+                if ptx == r.door_tilex[d.usize()] and pty == r.door_tiley[d.usize()]:
+                    r.door_ticcount[d.usize()] <- 0      # player in the doorway: stay open
+                else:
+                    r.door_action[d.usize()] <- 3
+        elif act == 3:
+            # closing
+            p: i32 = r.door_position[d.usize()] - (tics << 10)
+            if p <= 0:
+                r.door_position[d.usize()] <- 0
+                r.door_action[d.usize()] <- 0
+            else:
+                r.door_position[d.usize()] <- p
+
+# Mark secret pushwalls from plane-1 code 98.
+def spawn_pushwalls(r: mutable Render&, w: WolfData&) -> void:
+    for x in 0..<64:
+        for y in 0..<64:
+            if map_tile(w, 1, x, y) == 98u16:
+                r.pushwall[(x * 64 + y).usize()] <- 1u8
+
+# Slide a secret wall at (cx,cy) away from the player up to 2 tiles into open floor. Returns true if
+# it moved. (Simplified: instant slide rather than the original animated push.)
+def try_pushwall(r: mutable Render&, tx: i32, ty: i32, cx: i32, cy: i32) -> bool:
+    if cx < 0 or cx >= 64 or cy < 0 or cy >= 64:
+        return false
+    if r.pushwall[(cx * 64 + cy).usize()] == 0u8:
+        return false
+    cell: i32 = r.tilemap[(cx * 64 + cy).usize()].i32()
+    if cell == 0 or (cell & 0x80) != 0:
+        return false                          # must be a solid wall
+    dx: i32 = cx - tx
+    dy: i32 = cy - ty
+    d1x: i32 = cx + dx
+    d1y: i32 = cy + dy
+    if d1x < 0 or d1x >= 64 or d1y < 0 or d1y >= 64:
+        return false
+    if r.tilemap[(d1x * 64 + d1y).usize()] != 0u8 or r.solid_static[(d1x * 64 + d1y).usize()] != 0u8:
+        return false                          # nowhere to slide
+    destx: mutable i32 = d1x
+    desty: mutable i32 = d1y
+    d2x: i32 = cx + dx * 2
+    d2y: i32 = cy + dy * 2
+    if d2x >= 0 and d2x < 64 and d2y >= 0 and d2y < 64:
+        if r.tilemap[(d2x * 64 + d2y).usize()] == 0u8 and r.solid_static[(d2x * 64 + d2y).usize()] == 0u8:
+            destx <- d2x
+            desty <- d2y
+    r.tilemap[(cx * 64 + cy).usize()] <- 0u8
+    r.tilemap[(destx * 64 + desty).usize()] <- cell.u8()
+    r.pushwall[(cx * 64 + cy).usize()] <- 0u8
+    return true
+
+# Player presses Use: operate a door, or shove a secret pushwall, directly in front.
+def operate_door_in_front(r: mutable Render&) -> void:
+    tx: i32 = r.px >> 16
+    ty: i32 = r.py >> 16
+    a: i32 = r.pangle
+    cx: mutable i32 = tx
+    cy: mutable i32 = ty
+    if a < 45 or a >= 315:
+        cx <- tx + 1            # east
+    elif a < 135:
+        cy <- ty - 1            # north
+    elif a < 225:
+        cx <- tx - 1            # west
+    else:
+        cy <- ty + 1            # south
+    if cx < 0 or cx >= 64 or cy < 0 or cy >= 64:
+        return
+    cell: i32 = r.tilemap[(cx * 64 + cy).usize()].i32()
+    if (cell & 0x80) == 0:
+        # elevator exit: the switch wall (tile 21) operated from the east/west face ends the level
+        facing_ew: bool = (a < 45 or a >= 315) or (a >= 135 and a < 225)
+        if cell == 21 and facing_ew:
+            r.tilemap[(cx * 64 + cy).usize()] <- 22u8   # flip switch to the activated texture
+            r.want_next <- true
+            return
+        _ = try_pushwall(r, tx, ty, cx, cy)
+        return
+    d: i32 = cell & 0x7F
+    act: i32 = r.door_action[d.usize()]
+    if act == 0 or act == 3:
+        r.door_action[d.usize()] <- 1     # closed/closing -> open
+        r.adlib_req <- 18                 # OPENDOORSND
+    elif act == 2 or act == 1:
+        r.door_action[d.usize()] <- 3     # open/opening -> close
+        r.adlib_req <- 18
+
+# wall pic for a vertical-facing wall tile (darker shade), with door tiles mapped to the door pic
+def vertwall_pic(r: Render&, tile: i32) -> i32:
+    if tile >= 90 and tile <= 101:
+        return r.doorwall + 3
+    return (tile - 1) * 2 + 1
+
+def horizwall_pic(r: Render&, tile: i32) -> i32:
+    if tile >= 90 and tile <= 101:
+        return r.doorwall + 2
+    return (tile - 1) * 2
+
+# ---- one-time engine setup ----
+def render_init(r: mutable Render&, pm: VSwap&) -> void:
+    build_tables(r)
+    set_view_size(r, r.view_size)          # init viewport geometry (full screen by default) + projection
+    r.doorwall <- pm.sprite_start - 8
+    r.player_hp <- 100
+    r.player_ammo <- 8
+    r.weapon_frame <- 0
+    r.weapon_firing <- false
+    r.weapon_type <- 1                 # start with the pistol
+    r.weapons_owned <- 3               # knife + pistol
+    r.adlib_req <- -1
+    # default control bindings (SDL scancodes): arrows + Ctrl/Space, A/D strafe, Shift run
+    r.kb_fwd <- 82
+    r.kb_back <- 81
+    r.kb_left <- 80
+    r.kb_right <- 79
+    r.kb_strafeL <- 4
+    r.kb_strafeR <- 7
+    r.kb_fire <- 224
+    r.kb_use <- 44
+    r.kb_run <- 225
+
+# Load a level: cache the map, reset per-level state, rebuild the world, place the player.
+# Player hp/ammo/score/keys carry over between levels.
+def load_level(r: mutable Render&, w: mutable WolfData&, pm: VSwap&, mapnum: i32) -> void:
+    ca_cache_map(w, mapnum)
+    r.num_objs <- 0
+    r.num_acts <- 0
+    r.num_doors <- 0
+    for i in 0..<4096:
+        r.tilemap[i.usize()] <- 0u8
+        r.solid_static[i.usize()] <- 0u8
+        r.pushwall[i.usize()] <- 0u8
+    build_tilemap(r, w)
+    spawn_statics(r, w)
+    spawn_actors(r, w)
+    spawn_pushwalls(r, w)
+    place_player(r, w)
+    r.weapon_frame <- 0
+    r.weapon_firing <- false
+    r.want_next <- false
+    r.current_map <- mapnum
+
+# Savegame = the whole Render struct (all game state lives here). POD raw-copy to/from a file.
+def save_game(r: Render&, path: cstr) -> bool:
+    f: void&? = fopen(path.cast[u8&], "wb".cast[u8&])
+    if f == null:
+        return false
+    _ = fwrite((&r).cast[u8&], 1.usize(), size_of[Render], f)
+    _ = fclose(f)
+    return true
+
+def load_game(r: mutable Render&, path: cstr) -> bool:
+    f: void&? = fopen(path.cast[u8&], "rb".cast[u8&])
+    if f == null:
+        return false
+    n: usize = fread((&r).cast[mutable u8&], 1.usize(), size_of[Render], f)
+    _ = fclose(f)
+    return n >= size_of[Render]
+
+# place the player from the plane-1 start object; angle: 19=N(90) 20=E(0) 21=S(270) 22=W(180)
+def place_player(r: mutable Render&, w: WolfData&) -> void:
+    for y in 0..<64:
+        for x in 0..<64:
+            t: u16 = map_tile(w, 1, x, y)
+            if t >= 19u16 and t <= 22u16:
+                r.px <- (x << 16) + 0x8000
+                r.py <- (y << 16) + 0x8000
+                code: i32 = t.i32()
+                if code == 20:
+                    r.pangle <- 0
+                elif code == 19:
+                    r.pangle <- 90
+                elif code == 22:
+                    r.pangle <- 180
+                else:
+                    r.pangle <- 270
+                r.spawn_x <- r.px
+                r.spawn_y <- r.py
+                r.spawn_angle <- r.pangle
+    if r.rng == 0u32:
+        r.rng <- 0x1234567u32
+
+# xorshift32 PRNG → 0..255
+def rng_byte(r: mutable Render&) -> i32:
+    x: mutable u32 = r.rng
+    x <- x ^ (x << 13u32)
+    x <- x ^ (x >> 17u32)
+    x <- x ^ (x << 5u32)
+    r.rng <- x
+    return (x & 0xFFu32).i32()
+
+def calc_view_variables(r: mutable Render&) -> void:
+    a: i32 = r.pangle
+    r.midangle <- a * 10
+    r.viewsin <- r.sintable[a.usize()]
+    r.viewcos <- costable(r, a)
+    r.viewx <- r.px - fixed_mul(FOCALLENGTH, r.viewcos)
+    r.viewy <- r.py + fixed_mul(FOCALLENGTH, r.viewsin)
+    r.focaltx <- r.viewx >> 16
+    r.focalty <- r.viewy >> 16
+
+def calc_height(r: Render&, xi: i32, yi: i32) -> i32:
+    z: mutable i32 = fixed_mul(xi - r.viewx, r.viewcos) - fixed_mul(yi - r.viewy, r.viewsin)
+    if z < MINDIST:
+        z <- MINDIST
+    return r.heightnumerator / (z >> 8)
+
+# ---- the ray-casting DDA, folded into a single VERT/HORIZ state machine ----
+def asm_refresh(r: mutable Render&) -> void:
+    for pixx in 0..<r.vw:
+        r.col_hit[pixx.usize()] <- 0u8
+        # ray angle for this column
+        angl: mutable i32 = r.midangle + r.pixelangle[pixx.usize()]
+        if angl < 0:
+            angl <- angl + 3600
+        if angl >= 3600:
+            angl <- angl - 3600
+        xtilestep: mutable i32 = 0
+        ytilestep: mutable i32 = 0
+        xstep: mutable i32 = 0
+        ystep: mutable i32 = 0
+        xpartial: mutable i32 = 0
+        ypartial: mutable i32 = 0
+        if angl < 900:
+            xtilestep <- 1
+            ytilestep <- -1
+            xstep <- r.finetangent[(900 - 1 - angl).usize()]
+            ystep <- -r.finetangent[angl.usize()]
+            xpartial <- r.xpartialup
+            ypartial <- r.ypartialdown
+        elif angl < 1800:
+            xtilestep <- -1
+            ytilestep <- -1
+            xstep <- -r.finetangent[(angl - 900).usize()]
+            ystep <- -r.finetangent[(1800 - 1 - angl).usize()]
+            xpartial <- r.xpartialdown
+            ypartial <- r.ypartialdown
+        elif angl < 2700:
+            xtilestep <- -1
+            ytilestep <- 1
+            xstep <- -r.finetangent[(2700 - 1 - angl).usize()]
+            ystep <- r.finetangent[(angl - 1800).usize()]
+            xpartial <- r.xpartialdown
+            ypartial <- r.ypartialup
+        else:
+            xtilestep <- 1
+            ytilestep <- 1
+            xstep <- r.finetangent[(angl - 2700).usize()]
+            ystep <- r.finetangent[(3600 - 1 - angl).usize()]
+            xpartial <- r.xpartialup
+            ypartial <- r.ypartialup
+
+        yintercept: mutable i32 = fixed_mul(ystep, xpartial) + r.viewy
+        xtile: mutable i32 = r.focaltx + xtilestep
+        xspot: mutable i32 = (xtile << 6) + (yintercept >> 16)
+        xintercept: mutable i32 = fixed_mul(xstep, ypartial) + r.viewx
+        ytile: mutable i32 = r.focalty + ytilestep
+        yspot: mutable i32 = ((xintercept >> 16) << 6) + ytile
+
+        # state machine: VERT(0) / HORIZ(1)
+        mode: mutable i32 = 0
+        skipcheck: mutable bool = false
+        done: mutable bool = false
+        guard: mutable i32 = 0
+        while not done and guard < 512:
+            guard <- guard + 1
+            if mode == 0:
+                # ---- VERT side ----
+                if not skipcheck:
+                    if (ytilestep == -1 and (yintercept >> 16) <= ytile) or (ytilestep == 1 and (yintercept >> 16) >= ytile):
+                        mode <- 1
+                        skipcheck <- true
+                        continue
+                skipcheck <- false
+                # vertentry: border?
+                if yintercept < 0 or yintercept >= (64 << 16) or xtile < 0 or xtile >= 64:
+                    done <- true     # ray left the map (enclosed maps: shouldn't normally show)
+                    continue
+                if xspot < 0 or xspot >= 4096:
+                    done <- true
+                    continue
+                tilehit: i32 = r.tilemap[xspot.usize()].i32()
+                if tilehit != 0:
+                    if (tilehit & 0x80) != 0:
+                        # vertical door: the leaf plane sits at the tile's x-center
+                        doornum: i32 = tilehit & 0x7F
+                        yintbuf: i32 = yintercept + (ystep >> 1)
+                        if (yintbuf >> 16) == (yintercept >> 16) and (yintbuf & 0xFFFF) >= r.door_position[doornum.usize()]:
+                            yintercept <- yintbuf
+                            xint: i32 = (xtile << 16) + 0x8000
+                            texcol: i32 = ((yintercept - r.door_position[doornum.usize()]) >> 10) & 63
+                            r.col_height[pixx.usize()] <- calc_height(r, xint, yintercept)
+                            r.col_pic[pixx.usize()] <- doorpage_pic(r, r.door_lock[doornum.usize()])
+                            r.col_texcol[pixx.usize()] <- texcol
+                            r.col_hit[pixx.usize()] <- 1u8
+                            done <- true
+                            continue
+                        # ray passes through the open part of the door — keep stepping
+                    else:
+                        # solid vertical wall hit
+                        xint2: mutable i32 = xtile << 16
+                        texcol2: mutable i32 = (yintercept >> 10) & 63
+                        if xtilestep == -1:
+                            texcol2 <- 63 - texcol2
+                            xint2 <- xint2 + 65536
+                        r.col_height[pixx.usize()] <- calc_height(r, xint2, yintercept)
+                        r.col_pic[pixx.usize()] <- vertwall_pic(r, tilehit)
+                        r.col_texcol[pixx.usize()] <- texcol2
+                        r.col_hit[pixx.usize()] <- 1u8
+                        done <- true
+                        continue
+                # passvert: advance to next vertical grid line
+                xtile <- xtile + xtilestep
+                yintercept <- yintercept + ystep
+                xspot <- (xtile << 6) + (yintercept >> 16)
+            else:
+                # ---- HORIZ side ----
+                if not skipcheck:
+                    if (xtilestep == -1 and (xintercept >> 16) <= xtile) or (xtilestep == 1 and (xintercept >> 16) >= xtile):
+                        mode <- 0
+                        skipcheck <- true
+                        continue
+                skipcheck <- false
+                if xintercept < 0 or xintercept >= (64 << 16) or ytile < 0 or ytile >= 64:
+                    done <- true
+                    continue
+                if yspot < 0 or yspot >= 4096:
+                    done <- true
+                    continue
+                tilehit2: i32 = r.tilemap[yspot.usize()].i32()
+                if tilehit2 != 0:
+                    if (tilehit2 & 0x80) != 0:
+                        # horizontal door: leaf plane at the tile's y-center
+                        doornum2: i32 = tilehit2 & 0x7F
+                        xintbuf: i32 = xintercept + (xstep >> 1)
+                        if (xintbuf >> 16) == (xintercept >> 16) and (xintbuf & 0xFFFF) >= r.door_position[doornum2.usize()]:
+                            xintercept <- xintbuf
+                            yintd: i32 = (ytile << 16) + 0x8000
+                            texcold: i32 = ((xintercept - r.door_position[doornum2.usize()]) >> 10) & 63
+                            r.col_height[pixx.usize()] <- calc_height(r, xintercept, yintd)
+                            r.col_pic[pixx.usize()] <- doorpage_pic(r, r.door_lock[doornum2.usize()])
+                            r.col_texcol[pixx.usize()] <- texcold
+                            r.col_hit[pixx.usize()] <- 1u8
+                            done <- true
+                            continue
+                        # passes through open part
+                    else:
+                        yint: mutable i32 = ytile << 16
+                        texcol3: mutable i32 = (xintercept >> 10) & 63
+                        if ytilestep == -1:
+                            yint <- yint + 65536
+                        else:
+                            texcol3 <- 63 - texcol3
+                        r.col_height[pixx.usize()] <- calc_height(r, xintercept, yint)
+                        r.col_pic[pixx.usize()] <- horizwall_pic(r, tilehit2)
+                        r.col_texcol[pixx.usize()] <- texcol3
+                        r.col_hit[pixx.usize()] <- 1u8
+                        done <- true
+                        continue
+                ytile <- ytile + ytilestep
+                xintercept <- xintercept + xstep
+                yspot <- ((xintercept >> 16) << 6) + ytile
+
+def wall_refresh(r: mutable Render&) -> void:
+    calc_view_variables(r)
+    r.xpartialdown <- r.viewx & 0xFFFF
+    r.xpartialup <- 0x10000 - r.xpartialdown
+    r.ypartialdown <- r.viewy & 0xFFFF
+    r.ypartialup <- 0x10000 - r.ypartialdown
+    asm_refresh(r)
+
+# ---- draw: fill floor/ceiling then scale each textured wall column (ScalePost faithful) ----
+def draw_frame(r: mutable Render&, pm: VSwap&) -> void:
+    # when the window is shrunk, paint the surrounding bezel (the top VIEWHEIGHT region) first
+    if r.view_size > 0:
+        for y in 0..<VIEWHEIGHT:
+            for x in 0..<VIEWWIDTH:
+                r.fb[(y * SCREENWIDTH + x).usize()] <- 0x7Du8       # panel gray
+        # a 1px black inset frame just outside the viewport
+        bx0: i32 = r.vx - 1
+        by0: i32 = r.vy - 1
+        bx1: i32 = r.vx + r.vw
+        by1: i32 = r.vy + r.vh
+        for x in bx0..<(bx1 + 1):
+            if x >= 0 and x < VIEWWIDTH:
+                if by0 >= 0:
+                    r.fb[(by0 * SCREENWIDTH + x).usize()] <- 0u8
+                if by1 < VIEWHEIGHT:
+                    r.fb[(by1 * SCREENWIDTH + x).usize()] <- 0u8
+        for y in by0..<(by1 + 1):
+            if y >= 0 and y < VIEWHEIGHT:
+                if bx0 >= 0:
+                    r.fb[(y * SCREENWIDTH + bx0).usize()] <- 0u8
+                if bx1 < VIEWWIDTH:
+                    r.fb[(y * SCREENWIDTH + bx1).usize()] <- 0u8
+    # ceiling (top half) + floor (bottom half) of the viewport
+    half: i32 = r.vh / 2
+    for y in 0..<r.vh:
+        c: mutable u8 = CEILING_COLOR
+        if y >= half:
+            c <- FLOOR_COLOR
+        for x in 0..<r.vw:
+            r.fb[((r.vy + y) * SCREENWIDTH + r.vx + x).usize()] <- c
+    # walls
+    for x in 0..<r.vw:
+        if r.col_hit[x.usize()] == 0u8:
+            continue
+        scale_column(r, pm, x, r.col_height[x.usize()], r.col_pic[x.usize()], r.col_texcol[x.usize()])
+    # billboard sprites (statics + actors) over the walls, with per-column depth clipping
+    draw_scaleds(r, pm)
+    # player weapon on top of the 3D view
+    draw_weapon(r, pm, 0)
+    # red damage flash (dithered overlay over the 3D viewport)
+    if r.hurt_flash > 0:
+        for y in 0..<r.vh:
+            xx: mutable i32 = y & 1
+            while xx < r.vw:
+                r.fb[((r.vy + y) * SCREENWIDTH + r.vx + xx).usize()] <- 39u8
+                xx <- xx + 2
+        r.hurt_flash <- r.hurt_flash - 1
+    # status bar
+    draw_hud(r)
+
+# Faithful ScalePost: draw a textured vertical strip for column x. `height` is CalcHeight()'s value;
+# the on-screen half-height is height>>3 and the 64-texel column is stepped TEXTURESIZE/2 per pixel.
+def scale_column(r: mutable Render&, pm: VSwap&, x: i32, height: i32, pic: i32, texcol: i32) -> void:
+    ywcount: mutable i32 = height >> 3
+    yd: mutable i32 = ywcount
+    if yd <= 0:
+        yd <- 100
+    yc: i32 = r.vy + r.vh / 2
+    ytop: i32 = yc - ywcount
+    yend: mutable i32 = yc + ywcount - 1
+    yw: mutable i32 = 63
+    # clip the part below the view: advance the texture coordinate accordingly
+    while yend >= r.vy + r.vh:
+        ywcount <- ywcount - 32
+        while ywcount <= 0:
+            ywcount <- ywcount + yd
+            yw <- yw - 1
+        yend <- yend - 1
+    if yw < 0:
+        return
+    # clamp the wall pic into the wall texture range (door/oob tiles)
+    wallpic: mutable i32 = pic
+    if wallpic < 0:
+        wallpic <- 0
+    if wallpic >= pm.sprite_start:
+        wallpic <- pm.sprite_start - 1
+    base: i32 = pm_wall_offset(pm, wallpic) + texcol * 64
+    col: mutable u8 = pm.raw[(base + yw).usize()]
+    top: mutable i32 = ytop
+    if top < r.vy:
+        top <- r.vy
+    y: mutable i32 = yend
+    while y >= top:
+        r.fb[(y * SCREENWIDTH + r.vx + x).usize()] <- col
+        ywcount <- ywcount - 32
+        if ywcount <= 0:
+            stop: mutable bool = false
+            while ywcount <= 0:
+                ywcount <- ywcount + yd
+                yw <- yw - 1
+            if yw < 0:
+                stop <- true
+            if not stop:
+                col <- pm.raw[(base + yw).usize()]
+            else:
+                return
+        y <- y - 1
+
+# ---- billboard sprites: spawn statics from plane 1, transform + scale with wall depth-clip ----
+
+# Static decoration/item codes occupy plane-1 values 23..(23+NUMSTATICS). Each maps linearly to a
+# sprite page (SPR_STAT_0 + index). "Blocking" statics (the majority) also obstruct movement.
+def spawn_statics(r: mutable Render&, w: WolfData&) -> void:
+    r.num_objs <- 0
+    for x in 0..<64:
+        for y in 0..<64:
+            v: i32 = map_tile(w, 1, x, y).i32()
+            if v >= 23 and v <= 70:
+                if r.num_objs >= 256:
+                    return
+                idx: i32 = v - 23
+                n: i32 = r.num_objs
+                r.obj_x[n.usize()] <- (x << 16) + 0x8000
+                r.obj_y[n.usize()] <- (y << 16) + 0x8000
+                r.obj_shape[n.usize()] <- SPR_STAT_0 + idx
+                r.obj_active[n.usize()] <- 1u8
+                r.obj_bkind[n.usize()] <- bonus_kind(idx)
+                r.obj_bamt[n.usize()] <- bonus_amount(idx)
+                r.num_objs <- n + 1
+                # block flag: most statics block; a handful (pickups/flat decals) don't. Use the
+                # non-blocking set from statinfo (puddle/skeleton/keys/food/etc.).
+                if static_blocks(idx):
+                    r.solid_static[(x * 64 + y).usize()] <- 1u8
+
+# Bonus classification for static index (from statinfo[] bonus types). kind: 1 ammo,2 health,3 treasure,4 key.
+def bonus_kind(idx: i32) -> i32:
+    if idx == 27 or idx == 28:
+        return 5                      # machine gun / chaingun (weapon + ammo)
+    if idx == 26:
+        return 1                      # clip (ammo)
+    if idx == 6 or idx == 24 or idx == 25 or idx == 33:
+        return 2                      # dog food / good food / first aid / one-up (health)
+    if idx == 29 or idx == 30 or idx == 31 or idx == 32:
+        return 3                      # cross / chalice / bible / crown (treasure)
+    if idx == 20 or idx == 21:
+        return 4                      # key 1 / key 2
+    return 0
+
+def bonus_amount(idx: i32) -> i32:
+    if idx == 6:
+        return 4                      # dog food
+    if idx == 24:
+        return 10                     # good food
+    if idx == 25:
+        return 25                     # first aid
+    if idx == 33:
+        return 99                     # one-up
+    if idx == 26:
+        return 8                      # clip
+    if idx == 27:
+        return 2                      # machine gun -> weapon type 2
+    if idx == 28:
+        return 3                      # chaingun -> weapon type 3
+    if idx == 29:
+        return 100                    # cross
+    if idx == 30:
+        return 500                    # chalice
+    if idx == 31:
+        return 1000                   # bible
+    if idx == 32:
+        return 5000                   # crown
+    if idx == 20:
+        return 1                      # key 1 -> bit 0
+    if idx == 21:
+        return 2                      # key 2 -> bit 1
+    return 0
+
+# Collect any bonus object the player is standing on.
+def collect_pickups(r: mutable Render&) -> void:
+    ptx: i32 = r.px >> 16
+    pty: i32 = r.py >> 16
+    for o in 0..<r.num_objs:
+        if r.obj_active[o.usize()] == 0u8 or r.obj_bkind[o.usize()] == 0:
+            continue
+        if (r.obj_x[o.usize()] >> 16) != ptx or (r.obj_y[o.usize()] >> 16) != pty:
+            continue
+        kind: i32 = r.obj_bkind[o.usize()]
+        amt: i32 = r.obj_bamt[o.usize()]
+        if kind == 1:
+            r.player_ammo <- r.player_ammo + amt
+            if r.player_ammo > 99:
+                r.player_ammo <- 99
+        elif kind == 2:
+            r.player_hp <- r.player_hp + amt
+            if r.player_hp > 100:
+                r.player_hp <- 100
+        elif kind == 3:
+            r.player_score <- r.player_score + amt
+        elif kind == 4:
+            r.player_keys <- r.player_keys | amt
+        elif kind == 5:
+            # weapon pickup: grant it, auto-switch, and add ammo
+            r.weapons_owned <- r.weapons_owned | (1 << amt.u32())
+            r.weapon_type <- amt
+            r.player_ammo <- r.player_ammo + 6
+            if r.player_ammo > 99:
+                r.player_ammo <- 99
+        r.obj_active[o.usize()] <- 0u8
+        r.obj_shape[o.usize()] <- -1       # remove from rendering
+
+# Non-blocking static indices (from statinfo[]: entries without `block`): puddles, flat skeletons,
+# keys, bonus items, junk, etc. Everything else blocks.
+def static_blocks(idx: i32) -> bool:
+    # passable: 0 puddle,4 chandelier,6 badfood,9 skeleton,14 ceiling light,15 kitchen,19 skel relax,
+    # 20 key1,21 key2,23 stuff,24..34 bonuses,38 gibs,40..44 junk,47 vines
+    if idx == 0 or idx == 4 or idx == 6 or idx == 9 or idx == 14 or idx == 15 or idx == 19:
+        return false
+    if idx == 20 or idx == 21 or idx == 23 or idx == 38 or idx == 47:
+        return false
+    if idx >= 24 and idx <= 34:
+        return false
+    if idx >= 40 and idx <= 44:
+        return false
+    return true
+
+# Project a world object into view space; returns true and fills (sx, height, nx) if visible.
+def transform_actor(r: Render&, ox: i32, oy: i32, sx: mutable i32&, height: mutable i32&, nx_out: mutable i32&) -> bool:
+    gx: i32 = ox - r.viewx
+    gy: i32 = oy - r.viewy
+    nx: i32 = fixed_mul(gx, r.viewcos) - fixed_mul(gy, r.viewsin) - ACTORSIZE
+    ny: i32 = fixed_mul(gx, r.viewsin) + fixed_mul(gy, r.viewcos)
+    if nx < MINDIST:
+        return false
+    sx <- (r.vw / 2) + (ny.i64() * r.scale.i64() / nx.i64()).i32()
+    height <- r.heightnumerator / (nx >> 8)
+    nx_out <- nx
+    return true
+
+# Draw one compiled sprite. scale_shift=3 + clip=true is the world ScaleShape (depth-clipped behind
+# nearer walls); scale_shift=1 + clip=false is SimpleScaleShape (fullscreen, e.g. the player weapon).
+def draw_sprite(r: mutable Render&, pm: VSwap&, xcenter: i32, shapenum: i32, height: i32, scale_shift: i32, clip: bool) -> void:
+    page: i32 = pm.sprite_start + shapenum
+    if page < 0 or page >= pm.chunks_in_file:
+        return
+    base: i32 = pm.page_offset[page.usize()].i32()
+    if base <= 0:
+        return
+    scale: i32 = height >> scale_shift.u32()
+    if scale <= 0:
+        return
+    pixheight: i32 = scale * 2
+    actx: i32 = xcenter - scale
+    upperedge: i32 = r.vy + r.vh / 2 - scale
+    leftpix: i32 = rd_u16(&pm.raw[0], base).i32()
+    rightpix: i32 = rd_u16(&pm.raw[0], base + 2).i32()
+    pixcnt: mutable i32 = leftpix * pixheight
+    rpix: mutable i32 = (pixcnt >> 6) + actx
+    i: mutable i32 = leftpix
+    while i <= rightpix:
+        lpix: mutable i32 = rpix
+        if lpix >= r.vw:
+            return
+        pixcnt <- pixcnt + pixheight
+        rpix <- (pixcnt >> 6) + actx
+        if lpix != rpix and rpix > 0:
+            if lpix < 0:
+                lpix <- 0
+            rpc: mutable i32 = rpix
+            if rpc > r.vw:
+                rpc <- r.vw
+            cmd: i32 = rd_u16(&pm.raw[0], base + 4 + (i - leftpix) * 2).i32()
+            cline: i32 = base + cmd
+            x: mutable i32 = lpix
+            while x < rpc:
+                if (not clip) or r.col_height[x.usize()] <= height:
+                    line: mutable i32 = cline
+                    posting: mutable bool = true
+                    while posting:
+                        endy: i32 = rd_u16(&pm.raw[0], line).i32()
+                        line <- line + 2
+                        if endy == 0:
+                            posting <- false
+                        else:
+                            ey: i32 = endy >> 1
+                            newstart: i32 = rd_u16(&pm.raw[0], line).i32()
+                            line <- line + 2
+                            starty: i32 = rd_u16(&pm.raw[0], line).i32() >> 1
+                            line <- line + 2
+                            j: mutable i32 = starty
+                            ycnt: mutable i32 = j * pixheight
+                            screndy: mutable i32 = (ycnt >> 6) + upperedge
+                            while j < ey:
+                                scrstarty: mutable i32 = screndy
+                                ycnt <- ycnt + pixheight
+                                screndy <- (ycnt >> 6) + upperedge
+                                if scrstarty != screndy and screndy > 0:
+                                    col: u8 = pm.raw[(base + newstart + j).usize()]
+                                    if scrstarty < r.vy:
+                                        scrstarty <- r.vy
+                                    se: mutable i32 = screndy
+                                    if se > r.vy + r.vh:
+                                        se <- r.vy + r.vh
+                                        j <- ey
+                                    yy: mutable i32 = scrstarty
+                                    while yy < se:
+                                        r.fb[(yy * SCREENWIDTH + r.vx + x).usize()] <- col
+                                        yy <- yy + 1
+                                j <- j + 1
+                x <- x + 1
+            if rpix > r.vw:
+                return
+        i <- i + 1
+
+# ---- enemy actors: spawn, directional-frame selection (CalcRotate), and a basic chase AI ----
+
+global DIRANGLE: array[i32, 9] = [0, 45, 90, 135, 180, 225, 270, 315, 0]
+# 8-dir step vectors (E, NE, N, NW, W, SW, S, SE), N is -y on the map.
+global DIR_DX: array[i32, 8] = [1, 1, 0, -1, -1, -1, 0, 1]
+global DIR_DY: array[i32, 8] = [0, -1, -1, -1, 0, 1, 1, 1]
+
+def add_actor(r: mutable Render&, x: i32, y: i32, dir: i32, walkbase: i32, standbase: i32, speed: i32, hp: i32, deathbase: i32, deadframe: i32) -> void:
+    if r.num_acts >= 128:
+        return
+    n: i32 = r.num_acts
+    r.act_x[n.usize()] <- (x << 16) + 0x8000
+    r.act_y[n.usize()] <- (y << 16) + 0x8000
+    r.act_dir[n.usize()] <- dir
+    r.act_walkbase[n.usize()] <- walkbase
+    r.act_standbase[n.usize()] <- standbase
+    r.act_state[n.usize()] <- 0
+    r.act_anim[n.usize()] <- 0
+    r.act_tic[n.usize()] <- 0
+    r.act_speed[n.usize()] <- speed
+    r.act_hp[n.usize()] <- hp
+    r.act_deathbase[n.usize()] <- deathbase
+    r.act_deadframe[n.usize()] <- deadframe
+    r.act_deathframe[n.usize()] <- 0
+    r.num_acts <- n + 1
+
+# Spawn guards/officers/SS from plane-1 codes. Stand codes face dir*2 (8-dir); patrol codes likewise.
+#   guard   108-111 stand / 112-115 patrol   (walk base 58)
+#   officer 116-119 stand / 120-123 patrol   (walk base 246)
+#   SS      126-129 stand / 130-133 patrol   (walk base 146)
+def spawn_actors(r: mutable Render&, w: WolfData&) -> void:
+    r.num_acts <- 0
+    for x in 0..<64:
+        for y in 0..<64:
+            raw_v: i32 = map_tile(w, 1, x, y).i32()
+            # difficulty tiers: hard codes = base+72 (spawn if diff>=3), medium = base+36 (diff>=2)
+            v: mutable i32 = raw_v
+            if raw_v >= 180 and raw_v <= 213:
+                if r.difficulty < 3:
+                    v <- -1
+                else:
+                    v <- raw_v - 72
+            elif raw_v >= 144 and raw_v <= 177:
+                if r.difficulty < 2:
+                    v <- -1
+                else:
+                    v <- raw_v - 36
+            if v >= 108 and v <= 115:
+                add_actor(r, x, y, ((v - 108) & 3) * 2, 58, 50, 0x1000, 3, 91, 95)        # guard
+            elif v >= 116 and v <= 123:
+                add_actor(r, x, y, ((v - 116) & 3) * 2, 246, 238, 0x1800, 10, 279, 283)   # officer
+            elif v >= 126 and v <= 133:
+                add_actor(r, x, y, ((v - 126) & 3) * 2, 146, 138, 0x1800, 6, 179, 183)    # SS
+            elif v >= 134 and v <= 141:
+                # dog: no standing frames (standbase = walkbase), faster, 3 die frames -> corpse 134
+                add_actor(r, x, y, ((v - 134) & 3) * 2, 99, 99, 0x2000, 1, 131, 134)
+
+# Pick the 0..7 rotation frame for an actor given its facing and screen position (CalcRotate).
+def calc_rotate(pangle: i32, viewx: i32, dir: i32) -> i32:
+    viewangle: i32 = pangle + (160 - viewx) / 8
+    angle: mutable i32 = (viewangle - 180) - DIRANGLE[dir.usize()]
+    angle <- angle + 22
+    while angle >= 360:
+        angle <- angle - 360
+    while angle < 0:
+        angle <- angle + 360
+    return angle / 45
+
+# Is a tile blocked for actor movement (walls, closed doors, other solids)?
+def actor_blocked(r: Render&, tx: i32, ty: i32) -> bool:
+    if tx < 0 or tx >= 64 or ty < 0 or ty >= 64:
+        return true
+    cell: i32 = r.tilemap[(tx * 64 + ty).usize()].i32()
+    if cell != 0:
+        if (cell & 0x80) != 0:
+            return r.door_action[(cell & 0x7F).usize()] != 2
+        return true
+    return r.solid_static[(tx * 64 + ty).usize()] != 0u8
+
+# Basic AI: when the player is near and roughly visible, chase; otherwise stand. Chasing actors face
+# the 8-dir toward the player, step forward if unobstructed, and cycle their walk frames.
+def move_actors(r: mutable Render&, tics: i32) -> void:
+    for a in 0..<r.num_acts:
+        if r.act_state[a.usize()] == 3:
+            continue                          # corpse
+        if r.act_state[a.usize()] == 2:
+            # dying: advance the death animation, then settle into a corpse
+            r.act_tic[a.usize()] <- r.act_tic[a.usize()] + tics
+            if r.act_tic[a.usize()] >= 8:
+                r.act_tic[a.usize()] <- 0
+                r.act_deathframe[a.usize()] <- r.act_deathframe[a.usize()] + 1
+                if r.act_deathframe[a.usize()] >= 3:
+                    r.act_state[a.usize()] <- 3
+            continue
+        dx: i32 = r.px - r.act_x[a.usize()]
+        dy: i32 = r.py - r.act_y[a.usize()]
+        adx: mutable i32 = dx
+        if adx < 0:
+            adx <- -adx
+        ady: mutable i32 = dy
+        if ady < 0:
+            ady <- -ady
+        # activation radius ~8 tiles
+        if r.act_state[a.usize()] == 0:
+            if adx < (8 << 16) and ady < (8 << 16) and actor_los(r, a):
+                r.act_state[a.usize()] <- 1
+                req_sound(r, DIGI_HALT)
+        if r.act_state[a.usize()] == 1:
+            # face the dominant axis toward the player
+            dir: mutable i32 = 0
+            if adx >= ady:
+                if dx >= 0:
+                    dir <- 0      # east
+                else:
+                    dir <- 4      # west
+            else:
+                if dy < 0:
+                    dir <- 2      # north
+                else:
+                    dir <- 6      # south
+            r.act_dir[a.usize()] <- dir
+            # step forward if the target tile is free; stop short of the player's tile
+            step: i32 = r.act_speed[a.usize()] * tics
+            nx: i32 = r.act_x[a.usize()] + DIR_DX[dir.usize()] * step
+            ny: i32 = r.act_y[a.usize()] + DIR_DY[dir.usize()] * step
+            if not actor_blocked(r, nx >> 16, ny >> 16) and not (adx < 0x9000 and ady < 0x9000):
+                r.act_x[a.usize()] <- nx
+                r.act_y[a.usize()] <- ny
+            # animate walk frames
+            r.act_tic[a.usize()] <- r.act_tic[a.usize()] + tics
+            if r.act_tic[a.usize()] >= 6:
+                r.act_tic[a.usize()] <- 0
+                r.act_anim[a.usize()] <- (r.act_anim[a.usize()] + 1) & 3
+            # shoot back: cooldown + damage scale with difficulty (Daddy slow/weak .. Death fast/strong)
+            r.act_shoottic[a.usize()] <- r.act_shoottic[a.usize()] + tics
+            cooldown: i32 = 96 - r.difficulty * 18                # 96/78/60/42 tics
+            if r.act_shoottic[a.usize()] >= cooldown and actor_los(r, a):
+                r.act_shoottic[a.usize()] <- 0
+                # distance in tiles (Chebyshev), closer = more likely to connect
+                dist: i32 = (adx + ady) >> 17
+                roll: i32 = rng_byte(r)
+                if roll > (dist * 16):
+                    dmg: i32 = (2 + (rng_byte(r) & 7)) * (r.difficulty + 2) / 3
+                    player_take_damage(r, dmg)
+
+# Tile-stepped line of sight between actor and player (blocked by any wall/closed door).
+def actor_los(r: Render&, a: i32) -> bool:
+    x0: i32 = r.act_x[a.usize()] >> 16
+    y0: i32 = r.act_y[a.usize()] >> 16
+    x1: i32 = r.px >> 16
+    y1: i32 = r.py >> 16
+    dx: i32 = x1 - x0
+    dy: i32 = y1 - y0
+    n: mutable i32 = dx
+    if n < 0:
+        n <- -n
+    m: i32 = dy
+    md: mutable i32 = m
+    if md < 0:
+        md <- -md
+    steps: mutable i32 = n
+    if md > steps:
+        steps <- md
+    if steps == 0:
+        return true
+    cx: mutable i32 = x0
+    cy: mutable i32 = y0
+    for s in 1..<steps:
+        cx <- x0 + (dx * s) / steps
+        cy <- y0 + (dy * s) / steps
+        if cx >= 0 and cx < 64 and cy >= 0 and cy < 64:
+            cell: i32 = r.tilemap[(cx * 64 + cy).usize()].i32()
+            if cell != 0:
+                if (cell & 0x80) != 0:
+                    if r.door_action[(cell & 0x7F).usize()] != 2:
+                        return false
+                else:
+                    return false
+    return true
+
+# Transform all objects + actors, sort far->near, and draw them over the walls.
+def draw_scaleds(r: mutable Render&, pm: VSwap&) -> void:
+    nvis: mutable i32 = 0
+    for o in 0..<r.num_objs:
+        if r.obj_active[o.usize()] == 0u8:
+            continue
+        sx: mutable i32 = 0
+        h: mutable i32 = 0
+        nx: mutable i32 = 0
+        if transform_actor(r, r.obj_x[o.usize()], r.obj_y[o.usize()], &sx, &h, &nx):
+            r.vis_x[nvis.usize()] <- sx
+            r.vis_height[nvis.usize()] <- h
+            r.vis_shape[nvis.usize()] <- r.obj_shape[o.usize()]
+            r.vis_nx[nvis.usize()] <- nx
+            nvis <- nvis + 1
+    # enemy actors: standing or walking frame + directional rotation
+    for a in 0..<r.num_acts:
+        if nvis >= 256:
+            continue
+        sxa: mutable i32 = 0
+        ha: mutable i32 = 0
+        nxa: mutable i32 = 0
+        if transform_actor(r, r.act_x[a.usize()], r.act_y[a.usize()], &sxa, &ha, &nxa):
+            base: i32 = r.act_walkbase[a.usize()]
+            shape: mutable i32 = r.act_standbase[a.usize()]    # standing base
+            st: i32 = r.act_state[a.usize()]
+            if st == 3:
+                shape <- r.act_deadframe[a.usize()]            # final corpse frame
+            elif st == 2:
+                shape <- r.act_deathbase[a.usize()] + r.act_deathframe[a.usize()]  # DIE_1..3
+            else:
+                if st == 1:
+                    shape <- base + r.act_anim[a.usize()] * 8  # walk frame
+                shape <- shape + calc_rotate(r.pangle, sxa, r.act_dir[a.usize()])
+            r.vis_x[nvis.usize()] <- sxa
+            r.vis_height[nvis.usize()] <- ha
+            r.vis_shape[nvis.usize()] <- shape
+            r.vis_nx[nvis.usize()] <- nxa
+            nvis <- nvis + 1
+    # selection sort by depth descending (farthest drawn first)
+    for a in 0..<nvis:
+        far: mutable i32 = a
+        for b in (a + 1)..<nvis:
+            if r.vis_nx[b.usize()] > r.vis_nx[far.usize()]:
+                far <- b
+        if far != a:
+            swap_vis(r, a, far)
+    for v in 0..<nvis:
+        draw_sprite(r, pm, r.vis_x[v.usize()], r.vis_shape[v.usize()], r.vis_height[v.usize()], 3, true)
+
+def swap_vis(r: mutable Render&, a: i32, b: i32) -> void:
+    tx: i32 = r.vis_x[a.usize()]
+    r.vis_x[a.usize()] <- r.vis_x[b.usize()]
+    r.vis_x[b.usize()] <- tx
+    th: i32 = r.vis_height[a.usize()]
+    r.vis_height[a.usize()] <- r.vis_height[b.usize()]
+    r.vis_height[b.usize()] <- th
+    ts: i32 = r.vis_shape[a.usize()]
+    r.vis_shape[a.usize()] <- r.vis_shape[b.usize()]
+    r.vis_shape[b.usize()] <- ts
+    tn: i32 = r.vis_nx[a.usize()]
+    r.vis_nx[a.usize()] <- r.vis_nx[b.usize()]
+    r.vis_nx[b.usize()] <- tn
+
+# ---- player weapon: bobbing pistol, fire animation, hit-scan combat ----
+
+global SPR_PISTOLREADY: i32 = 421
+# per-weapon: ready-frame sprite base, AdLib fire sound, attack-frame cadence (lower = faster)
+global WEAPON_READY: array[i32, 4] = [416, 421, 426, 430]
+global WEAPON_SOUND: array[i32, 4] = [24, 24, 26, 26]   # knife uses pistol-ish blip
+global WEAPON_CADENCE: array[i32, 4] = [7, 6, 3, 2]
+global WEAPON_RANGE: array[i32, 4] = [0x20000, 0x7FFFFFFF, 0x7FFFFFFF, 0x7FFFFFFF]  # knife is melee-only
+
+# WL6 digitized-sound indices (best-known order; bounds-checked before play).
+global DIGI_HALT: i32 = 1
+global DIGI_OPENDOOR: i32 = 3
+global DIGI_PISTOL: i32 = 5
+global DIGI_DEATH: i32 = 13
+
+# Queue a digi-sound index for the SDL layer to play this frame.
+def req_sound(r: mutable Render&, idx: i32) -> void:
+    if r.snd_count < 16:
+        r.snd_queue[r.snd_count.usize()] <- idx
+        r.snd_count <- r.snd_count + 1
+
+# Select a weapon (0-3) if owned.
+def select_weapon(r: mutable Render&, wt: i32) -> void:
+    if wt < 0 or wt > 3:
+        return
+    if (r.weapons_owned & (1 << wt.u32())) == 0:
+        return
+    if not r.weapon_firing:
+        r.weapon_type <- wt
+        r.weapon_frame <- 0
+
+# Begin a shot: enter the attack animation and consume a round (the knife uses no ammo).
+def start_fire(r: mutable Render&) -> void:
+    if r.weapon_firing:
+        return
+    if r.weapon_type != 0 and r.player_ammo <= 0:
+        return
+    r.weapon_firing <- true
+    r.weapon_frame <- 1
+    r.weapon_tic <- 0
+    r.weapon_hitdone <- false
+    if r.weapon_type != 0:
+        r.player_ammo <- r.player_ammo - 1
+    r.adlib_req <- WEAPON_SOUND[(r.weapon_type).usize()]
+
+# Advance the attack animation; resolve the hit-scan at the muzzle-flash frame.
+def weapon_update(r: mutable Render&, tics: i32) -> void:
+    if not r.weapon_firing:
+        return
+    r.weapon_tic <- r.weapon_tic + tics
+    if r.weapon_tic >= WEAPON_CADENCE[(r.weapon_type).usize()]:
+        r.weapon_tic <- 0
+        r.weapon_frame <- r.weapon_frame + 1
+        if r.weapon_frame == 3 and not r.weapon_hitdone:
+            player_fire(r)
+            r.weapon_hitdone <- true
+        if r.weapon_frame > 4:
+            r.weapon_frame <- 0
+            r.weapon_firing <- false
+
+# Hit-scan: damage the nearest living actor centered in the crosshair with clear line of sight.
+def player_fire(r: mutable Render&) -> void:
+    best: mutable i32 = -1
+    bestnx: mutable i32 = 0x7FFFFFFF
+    for a in 0..<r.num_acts:
+        if r.act_state[a.usize()] >= 2:
+            continue
+        sx: mutable i32 = 0
+        h: mutable i32 = 0
+        nx: mutable i32 = 0
+        if transform_actor(r, r.act_x[a.usize()], r.act_y[a.usize()], &sx, &h, &nx):
+            d: i32 = sx - 160
+            ad: mutable i32 = d
+            if ad < 0:
+                ad <- -ad
+            # within the crosshair column, in weapon range, closer than the best, with LOS
+            if ad < 20 and nx < bestnx and nx < WEAPON_RANGE[(r.weapon_type).usize()] and actor_los(r, a):
+                bestnx <- nx
+                best <- a
+    if best < 0:
+        return
+    r.act_hp[best.usize()] <- r.act_hp[best.usize()] - 1
+    # wake nearby actors when one is shot
+    if r.act_state[best.usize()] == 0:
+        r.act_state[best.usize()] <- 1
+    if r.act_hp[best.usize()] <= 0:
+        r.act_state[best.usize()] <- 2          # dying
+        r.act_tic[best.usize()] <- 0
+        r.act_deathframe[best.usize()] <- 0
+        req_sound(r, DIGI_DEATH)
+
+# Draw the player's weapon (fullscreen SimpleScaleShape) with a slight horizontal bob.
+def draw_weapon(r: mutable Render&, pm: VSwap&, bobx: i32) -> void:
+    draw_sprite(r, pm, r.vw / 2 + bobx, WEAPON_READY[(r.weapon_type).usize()] + r.weapon_frame, r.vh, 1, false)
+
+# Apply damage to the player; respawn at the level start on death (arcade-style).
+def player_take_damage(r: mutable Render&, dmg: i32) -> void:
+    r.player_hp <- r.player_hp - dmg
+    r.hurt_flash <- 4
+    if r.player_hp <= 0:
+        r.want_highscore <- true             # death -> let the front-end offer a high-score entry
+        r.player_hp <- 100
+        r.px <- r.spawn_x
+        r.py <- r.spawn_y
+        r.pangle <- r.spawn_angle
+        # send all actors back to standing
+        for a in 0..<r.num_acts:
+            if r.act_state[a.usize()] == 1:
+                r.act_state[a.usize()] <- 0
+
+# 3x5 pixel font for digits 0-9 (each row's low 3 bits, MSB = leftmost pixel).
+global DIGIT_FONT: array[u8, 50] = [
+    7, 5, 5, 5, 7,   2, 6, 2, 2, 7,   7, 1, 7, 4, 7,   7, 1, 7, 1, 7,   5, 5, 7, 1, 1,
+    7, 4, 7, 1, 7,   7, 4, 7, 5, 7,   7, 1, 2, 2, 2,   7, 5, 7, 5, 7,   7, 5, 7, 1, 7]
+
+def hud_fill_rect(r: mutable Render&, x0: i32, y0: i32, w: i32, h: i32, col: u8) -> void:
+    for yy in y0..<(y0 + h):
+        if yy >= 0 and yy < SCREENHEIGHT:
+            for xx in x0..<(x0 + w):
+                if xx >= 0 and xx < VIEWWIDTH:
+                    r.fb[(yy * VIEWWIDTH + xx).usize()] <- col
+
+# Draw one digit at pixel scale `s` (color index `col`).
+def hud_digit(r: mutable Render&, d: i32, px: i32, py: i32, s: i32, col: u8) -> void:
+    if d < 0 or d > 9:
+        return
+    for row in 0..<5:
+        bits: i32 = DIGIT_FONT[(d * 5 + row).usize()].i32()
+        for bit in 0..<3:
+            if (bits & (4 >> bit.u32())) != 0:
+                hud_fill_rect(r, px + bit * s, py + row * s, s, s, col)
+
+# Draw a right-aligned non-negative number ending at px.
+def hud_number(r: mutable Render&, value: i32, right_px: i32, py: i32, s: i32, col: u8) -> void:
+    v: mutable i32 = value
+    if v < 0:
+        v <- 0
+    x: mutable i32 = right_px - 3 * s
+    drawn: mutable bool = false
+    while v > 0 or not drawn:
+        hud_digit(r, v % 10, x, py, s, col)
+        v <- v / 10
+        x <- x - (4 * s)
+        drawn <- true
+
+# Blit Wolf's authentic number pics (LatchNumber): `width` 8px digit slots starting at column
+# `xtile` (x*8 px), within the status bar; `number` is right-aligned and left-padded with blanks.
+def hud_latch(r: mutable Render&, xtile: i32, width: i32, number: i32) -> void:
+    dw: i32 = r.digit_w
+    dh: i32 = r.digit_h
+    base_x: i32 = xtile * 8
+    yb: i32 = VIEWHEIGHT + 16
+    # decompose number into digits (buf[0] = ones place)
+    n: mutable i32 = number
+    if n < 0:
+        n <- 0
+    buf: mutable array[i32, 16] = zeroed
+    len: mutable i32 = 0
+    if n == 0:
+        buf[0u32] <- 0
+        len <- 1
+    else:
+        while n > 0 and len < 16:
+            buf[len.usize()] <- n % 10
+            n <- n / 10
+            len <- len + 1
+    for i in 0..<width:
+        pos_from_right: i32 = width - 1 - i
+        slot: mutable i32 = 0                     # blank
+        if pos_from_right < len:
+            slot <- buf[pos_from_right.usize()] + 1
+        sx: i32 = base_x + i * dw
+        sbase: i32 = slot * dw * dh
+        for yy in 0..<dh:
+            for xx in 0..<dw:
+                px: i32 = sx + xx
+                py: i32 = yb + yy
+                if px >= 0 and px < VIEWWIDTH and py >= 0 and py < SCREENHEIGHT:
+                    r.fb[(py * VIEWWIDTH + px).usize()] <- r.hud_digits[(sbase + yy * dw + xx).usize()]
+
+# Status bar: the authentic VGAGRAPH art with the live readouts drawn in Wolf's own number pics at
+# the real LatchNumber positions (floor x=2, score x=6, health x=21, ammo x=27 — all *8 px).
+def draw_hud(r: mutable Render&) -> void:
+    if r.has_statusbar:
+        for y in 0..<40:
+            for x in 0..<VIEWWIDTH:
+                r.fb[((VIEWHEIGHT + y) * VIEWWIDTH + x).usize()] <- r.statusbar[(y * VIEWWIDTH + x).usize()]
+    else:
+        hud_fill_rect(r, 0, VIEWHEIGHT, VIEWWIDTH, SCREENHEIGHT - VIEWHEIGHT, 28u8)
+        hud_fill_rect(r, 0, VIEWHEIGHT, VIEWWIDTH, 2, 0u8)
+    if r.has_digits:
+        hud_latch(r, 2, 2, r.current_map + 1)   # FLOOR
+        hud_latch(r, 6, 6, r.player_score)      # SCORE
+        hud_latch(r, 21, 3, r.player_hp)        # HEALTH
+        hud_latch(r, 27, 2, r.player_ammo)      # AMMO
+    else:
+        hud_number(r, r.player_hp, 216, VIEWHEIGHT + 16, 2, 15u8)
+        hud_number(r, r.player_ammo, 252, VIEWHEIGHT + 16, 2, 15u8)
+
+# ================================ tests ================================
+
+@test
+def loads_multiple_levels() -> void:
+    can Abort.Panic:
+        w: mutable WolfData = zeroed
+        if not ca_startup(&w,
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/MAPHEAD.WL6",
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/GAMEMAPS.WL6"):
+            panic("map load failed")
+        pm: mutable VSwap = zeroed
+        if not pm_startup(&pm,
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/VSWAP.WL6"):
+            panic("vswap load failed")
+        r: mutable Render = zeroed
+        render_init(&r, &pm)
+        # load the first three E1 levels; each should place the player and render without crashing
+        for m in 0..<3:
+            load_level(&r, &w, &pm, m)
+            if r.px <= 0 or r.py <= 0:
+                panic("player not placed on level load")
+            if r.current_map != m:
+                panic("current_map not updated")
+            wall_refresh(&r)
+            draw_frame(&r, &pm)
+            if m == 1:
+                outm: void&? = fopen("/tmp/wolf_e1m2.bin".cast[u8&], "wb".cast[u8&])
+                if outm != null:
+                    _ = fwrite(&r.fb[0], 1.usize(), 64000.usize(), outm)
+                    _ = fclose(outm)
+
+@test
+def render_e1m1_frame() -> void:
+    can Abort.Panic:
+        w: mutable WolfData = zeroed
+        base: cstr = "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/"
+        if not ca_startup(&w,
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/MAPHEAD.WL6",
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/GAMEMAPS.WL6"):
+            panic("map load failed")
+        pm: mutable VSwap = zeroed
+        if not pm_startup(&pm,
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/VSWAP.WL6"):
+            panic("vswap load failed")
+        ca_cache_map(&w, 0)
+        r: mutable Render = zeroed
+        render_init(&r, &pm)
+        build_tilemap(&r, &w)
+        spawn_statics(&r, &w)
+        spawn_actors(&r, &w)
+        spawn_pushwalls(&r, &w)
+        place_player(&r, &w)
+        wall_refresh(&r)
+        draw_frame(&r, &pm)
+        # sanity: at least some columns hit a wall and the framebuffer isn't uniform
+        hits: mutable i32 = 0
+        for x in 0..<VIEWWIDTH:
+            if r.col_hit[x.usize()] == 1u8:
+                hits <- hits + 1
+        if hits < 200:
+            panic("too few wall columns hit")
+        # dump framebuffer for external visual verification
+        out: void&? = fopen("/tmp/wolf_fb.bin".cast[u8&], "wb".cast[u8&])
+        if out != null:
+            _ = fwrite(&r.fb[0], 1.usize(), 64000.usize(), out)
+            _ = fclose(out)
+        # open every door halfway and re-render to verify the door-slit raycasting
+        for d in 0..<r.num_doors:
+            r.door_action[d.usize()] <- 1
+            r.door_position[d.usize()] <- 0x8000
+        wall_refresh(&r)
+        draw_frame(&r, &pm)
+        out2: void&? = fopen("/tmp/wolf_fb2.bin".cast[u8&], "wb".cast[u8&])
+        if out2 != null:
+            _ = fwrite(&r.fb[0], 1.usize(), 64000.usize(), out2)
+            _ = fclose(out2)
+        # teleport in front of the first actor (facing it) to verify enemy sprite rendering
+        if r.num_acts > 0:
+            ax: i32 = r.act_x[0u32]
+            ay: i32 = r.act_y[0u32]
+            d0: i32 = r.act_dir[0u32]
+            # stand 2 tiles in front of the guard (the way it faces = open space), look back at it
+            r.px <- ax + DIR_DX[d0.usize()] * (2 << 16)
+            r.py <- ay + DIR_DY[d0.usize()] * (2 << 16)
+            opp: i32 = (DIRANGLE[d0.usize()] + 180) % 360
+            r.pangle <- opp
+            # load the decoded status bar (dumped by the VGA test) to preview the composited HUD
+            sb: void&? = fopen("/tmp/wolf_statusbar.bin".cast[u8&], "rb".cast[u8&])
+            if sb != null:
+                _ = fread(&r.statusbar[0], 1.usize(), 12800.usize(), sb)
+                _ = fclose(sb)
+                r.has_statusbar <- true
+            r.player_score <- 1300
+            wall_refresh(&r)
+            draw_frame(&r, &pm)
+            out3: void&? = fopen("/tmp/wolf_fb3.bin".cast[u8&], "wb".cast[u8&])
+            if out3 != null:
+                _ = fwrite(&r.fb[0], 1.usize(), 64000.usize(), out3)
+                _ = fclose(out3)
+            # switch to the chaingun and re-render to verify weapon sprites + switching
+            r.weapons_owned <- 15
+            select_weapon(&r, 3)
+            draw_frame(&r, &pm)
+            out5: void&? = fopen("/tmp/wolf_fb5.bin".cast[u8&], "wb".cast[u8&])
+            if out5 != null:
+                _ = fwrite(&r.fb[0], 1.usize(), 64000.usize(), out5)
+                _ = fclose(out5)
+            # fire enough shots to kill the guard, advance its death animation, and dump the corpse
+            for _ in 0..<5:
+                player_fire(&r)
+            if r.act_state[0u32] < 2:
+                panic("guard should be dying/dead after 5 hits")
+            for _ in 0..<40:
+                move_actors(&r, 3)
+            if r.act_state[0u32] != 3:
+                panic("guard should have settled into a corpse")
+            wall_refresh(&r)
+            draw_frame(&r, &pm)
+            out4: void&? = fopen("/tmp/wolf_fb4.bin".cast[u8&], "wb".cast[u8&])
+            if out4 != null:
+                _ = fwrite(&r.fb[0], 1.usize(), 64000.usize(), out4)
+                _ = fclose(out4)
+        # pushwall: find a secret wall with open floor behind it and verify it slides on Use
+        pushed: mutable bool = false
+        for px2 in 1..<63:
+            for py2 in 1..<63:
+                if r.pushwall[(px2 * 64 + py2).usize()] == 1u8 and not pushed:
+                    # try pushing toward +x if the player can stand at -x and floor exists at +x,+2x
+                    if r.tilemap[((px2 - 1) * 64 + py2).usize()] == 0u8 and r.tilemap[((px2 + 1) * 64 + py2).usize()] == 0u8:
+                        if try_pushwall(&r, px2 - 1, py2, px2, py2):
+                            if r.tilemap[(px2 * 64 + py2).usize()] != 0u8:
+                                panic("pushwall source tile should be cleared after sliding")
+                            pushed <- true
+        # (E1M1 has pushwalls; if none matched this exact geometry that's fine — the path is exercised)
+
+        # pickups: stand on a bonus object and verify it is collected and removed
+        found_bonus: mutable bool = false
+        for o in 0..<r.num_objs:
+            if r.obj_bkind[o.usize()] != 0 and not found_bonus:
+                found_bonus <- true
+                r.px <- r.obj_x[o.usize()]
+                r.py <- r.obj_y[o.usize()]
+                r.player_hp <- 1
+                r.player_ammo <- 0
+                r.player_score <- 0
+                r.player_keys <- 0
+                before_score: i32 = r.player_score
+                before_ammo: i32 = r.player_ammo
+                before_hp: i32 = r.player_hp
+                collect_pickups(&r)
+                if r.obj_active[o.usize()] != 0u8:
+                    panic("bonus object should be removed after pickup")
+                if r.player_score == before_score and r.player_ammo == before_ammo and r.player_hp == before_hp and r.player_keys == 0:
+                    panic("pickup had no effect")
+        # damage + respawn: lethal damage should reset HP and return the player to spawn
+        player_take_damage(&r, 9999)
+        if r.player_hp != 100:
+            panic("lethal damage should respawn with full HP")
+        if r.px != r.spawn_x or r.py != r.spawn_y:
+            panic("respawn should restore the spawn position")
+
+# Change View: render E1M1 into a shrunk viewport and verify the geometry math + a clean frame.
+@test
+def render_shrunk_view() -> void:
+    can Abort.Panic:
+        w: mutable WolfData = zeroed
+        if not ca_startup(&w,
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/MAPHEAD.WL6",
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/GAMEMAPS.WL6"):
+            panic("map load failed")
+        pm: mutable VSwap = zeroed
+        if not pm_startup(&pm,
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/VSWAP.WL6"):
+            panic("vswap load failed")
+        ca_cache_map(&w, 0)
+        r: mutable Render = zeroed
+        render_init(&r, &pm)
+        # full screen by default
+        if r.vw != 320 or r.vh != 160 or r.vx != 0 or r.vy != 0:
+            panic("default view should be full screen")
+        build_tilemap(&r, &w)
+        spawn_statics(&r, &w)
+        spawn_actors(&r, &w)
+        place_player(&r, &w)
+        # shrink to size 6 and validate the derived geometry
+        set_view_size(&r, 6)
+        if r.vw != 224:                                  # 320 - 6*16 = 224, already a multiple of 16
+            panic("vw geometry wrong")
+        if r.vh != r.vw / 2:
+            panic("vh should be half of vw at the 320x160 ratio")
+        if r.vx != (320 - r.vw) / 2 or r.vy != (160 - r.vh) / 2:
+            panic("viewport should be centered")
+        if (r.vw & 15) != 0:
+            panic("vw must stay a multiple of 16")
+        wall_refresh(&r)
+        # only the active columns 0..vw should have been cast
+        for x in r.vw..<320:
+            if r.col_hit[x.usize()] != 0u8:
+                panic("columns past vw should not be raycast")
+        draw_frame(&r, &pm)
+        # the four screen corners of the top region are bezel (outside the centered viewport)
+        if r.fb[0u32] != 0x7Du8:
+            panic("top-left corner should be bezel after shrink")
+        if r.fb[(159 * SCREENWIDTH + 319).usize()] != 0x7Du8:
+            panic("bottom-right of 3D region should be bezel after shrink")
+        out: void&? = fopen("/tmp/wolf_fb_shrunk.bin".cast[u8&], "wb".cast[u8&])
+        if out != null:
+            _ = fwrite(&r.fb[0], 1.usize(), 64000.usize(), out)
+            _ = fclose(out)
+        # restore full screen and confirm the round-trip
+        set_view_size(&r, 0)
+        if r.vw != 320 or r.vh != 160 or r.vx != 0 or r.vy != 0:
+            panic("restoring size 0 should return to full screen")

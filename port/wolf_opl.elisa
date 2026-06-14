@@ -1,0 +1,362 @@
+include "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/port/wolf_render.elisa"
+
+# AdLib (OPL2 / YM3812) — a from-scratch, register-driven 9-channel 2-operator FM synth driving the
+# real AUDIOT.WL6 data, for both sound effects AND music.
+#
+# Everything routes through alOut(reg,val) — the same interface the OPL2 chip exposes — so SFX and
+# music share one synth. SFX program channel 0 from an Instrument and step note bytes at 140Hz;
+# music is an IMF stream of (reg,val,delay) tuples played at 700Hz. Per sample we advance both
+# sequencers, run all 18 operator envelopes + phase generators, do per-channel FM (modulator phase-
+# modulates carrier) or additive synthesis, and mix the 9 channels to S16.
+#
+# Simplified vs a register-accurate MAME core (no feedback, no key-scaling/KSL, no rhythm mode,
+# approximate envelope rates), but it is a real multi-voice FM synth: it produces actual music and
+# effects from the unmodified game data. Output S16 mono @ 44100 for a dedicated SDL device.
+
+global OPL_RATE: i32 = 44100
+global OPL_SFX_TICSAMPLES: i32 = 315      # 44100/140
+global OPL_MUS_TICSAMPLES: i32 = 63       # 44100/700 (IMF rate)
+global STARTADLIBSOUNDS: i32 = 87
+global STARTMUSIC: i32 = 261              # 3*LASTSOUND
+global OPL_MULT2: array[i32, 16] = [1, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 20, 24, 24, 30, 30]
+# operator-slot register offsets (0x20-group); slot i lives at offset OPL_OFF[i]
+global OPL_OFF: array[i32, 18] = [0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21]
+# per-channel modulator/carrier operator slots
+global CHAN_MOD: array[i32, 9] = [0, 1, 2, 6, 7, 8, 12, 13, 14]
+global CHAN_CAR: array[i32, 9] = [3, 4, 5, 9, 10, 11, 15, 16, 17]
+
+struct Opl layout c:
+    audiohed: mutable array[u8, 1280]
+    audiot: mutable array[u8, 360000]
+    audiot_len: mutable i32
+    sine: mutable array[i32, 1024]
+    off2slot: mutable array[i32, 32]       # register offset -> operator slot (or -1)
+    # 18 operators
+    op_mult: mutable array[i32, 18]
+    op_tl: mutable array[i32, 18]
+    op_ar: mutable array[i32, 18]
+    op_dr: mutable array[i32, 18]
+    op_sl: mutable array[i32, 18]
+    op_rr: mutable array[i32, 18]
+    op_wave: mutable array[i32, 18]
+    op_phase: mutable array[u32, 18]
+    op_env: mutable array[i32, 18]         # 0..1024
+    op_stage: mutable array[i32, 18]       # 0 off,1 attack,2 decay,3 sustain,4 release
+    # 9 channels
+    ch_fnum: mutable array[i32, 9]
+    ch_block: mutable array[i32, 9]
+    ch_conn: mutable array[i32, 9]         # 0 FM, 1 additive
+    ch_keyon: mutable array[u8, 9]
+    # SFX note player (channel 0)
+    sfx_playing: mutable bool
+    sfx_off: mutable i32
+    sfx_len: mutable i32
+    sfx_idx: mutable i32
+    sfx_acc: mutable i32
+    sfx_block: mutable i32
+    # IMF music sequencer
+    mus_playing: mutable bool
+    mus_start: mutable i32
+    mus_off: mutable i32
+    mus_end: mutable i32
+    mus_acc: mutable i32
+    mus_delay: mutable i32
+
+def opl_init(opl: mutable Opl&) -> void:
+    for i in 0..<1024:
+        ang: f64 = (i.f64() * 6.283185307179586) / 1024.0
+        opl.sine[i.usize()] <- (sin(ang) * 4096.0).i32()
+    for i in 0..<32:
+        opl.off2slot[i.usize()] <- -1
+    for i in 0..<18:
+        opl.off2slot[(OPL_OFF[i.usize()]).usize()] <- i
+
+def opl_load(opl: mutable Opl&, audiohed_path: cstr, audiot_path: cstr) -> bool:
+    if read_whole_file(audiohed_path, &opl.audiohed[0], 1280) < 8:
+        return false
+    n: i32 = read_whole_file(audiot_path, &opl.audiot[0], 360000)
+    if n < 0:
+        return false
+    opl.audiot_len <- n
+    opl_init(opl)
+    return true
+
+# Which channel owns an operator slot (for key-on); -1 if none.
+def opl_chan_of_slot(slot: i32) -> i32:
+    for c in 0..<9:
+        if CHAN_MOD[c.usize()] == slot or CHAN_CAR[c.usize()] == slot:
+            return c
+    return -1
+
+# Write an OPL2 register — the single entry point for both SFX and music.
+def al_out(opl: mutable Opl&, reg: i32, val: i32) -> void:
+    if reg >= 0x20 and reg <= 0x35:
+        slot: i32 = opl.off2slot[(reg - 0x20).usize()]
+        if slot >= 0:
+            opl.op_mult[slot.usize()] <- val & 0x0F
+    elif reg >= 0x40 and reg <= 0x55:
+        slot: i32 = opl.off2slot[(reg - 0x40).usize()]
+        if slot >= 0:
+            opl.op_tl[slot.usize()] <- val & 0x3F
+    elif reg >= 0x60 and reg <= 0x75:
+        slot: i32 = opl.off2slot[(reg - 0x60).usize()]
+        if slot >= 0:
+            opl.op_ar[slot.usize()] <- (val >> 4) & 0x0F
+            opl.op_dr[slot.usize()] <- val & 0x0F
+    elif reg >= 0x80 and reg <= 0x95:
+        slot: i32 = opl.off2slot[(reg - 0x80).usize()]
+        if slot >= 0:
+            opl.op_sl[slot.usize()] <- (val >> 4) & 0x0F
+            opl.op_rr[slot.usize()] <- val & 0x0F
+    elif reg >= 0xE0 and reg <= 0xF5:
+        slot: i32 = opl.off2slot[(reg - 0xE0).usize()]
+        if slot >= 0:
+            opl.op_wave[slot.usize()] <- val & 3
+    elif reg >= 0xA0 and reg <= 0xA8:
+        c: i32 = reg - 0xA0
+        opl.ch_fnum[c.usize()] <- (opl.ch_fnum[c.usize()] & 0x300) | (val & 0xFF)
+    elif reg >= 0xB0 and reg <= 0xB8:
+        c: i32 = reg - 0xB0
+        opl.ch_fnum[c.usize()] <- ((val & 3) << 8) | (opl.ch_fnum[c.usize()] & 0xFF)
+        opl.ch_block[c.usize()] <- (val >> 2) & 7
+        newkey: mutable u8 = 0u8
+        if (val & 0x20) != 0:
+            newkey <- 1u8
+        if newkey != opl.ch_keyon[c.usize()]:
+            opl.ch_keyon[c.usize()] <- newkey
+            mod: i32 = CHAN_MOD[c.usize()]
+            car: i32 = CHAN_CAR[c.usize()]
+            if newkey == 1u8:
+                opl.op_stage[mod.usize()] <- 1
+                opl.op_stage[car.usize()] <- 1
+                opl.op_phase[mod.usize()] <- 0u32
+                opl.op_phase[car.usize()] <- 0u32
+            else:
+                opl.op_stage[mod.usize()] <- 4
+                opl.op_stage[car.usize()] <- 4
+    elif reg >= 0xC0 and reg <= 0xC8:
+        c: i32 = reg - 0xC0
+        opl.ch_conn[c.usize()] <- val & 1
+
+def opl_wave_sample(opl: Opl&, wave: i32, phase: u32) -> i32:
+    idx: i32 = ((phase >> 6u32) & 1023u32).i32()
+    s: i32 = opl.sine[idx.usize()]
+    if wave == 0:
+        return s
+    if wave == 1:
+        if s < 0:
+            return 0
+        return s
+    if wave == 2:
+        if s < 0:
+            return -s
+        return s
+    q: i32 = idx & 511
+    if q >= 256:
+        return 0
+    if s < 0:
+        return -s
+    return s
+
+def opl_env_step(opl: mutable Opl&, op: i32) -> i32:
+    stage: i32 = opl.op_stage[op.usize()]
+    e: mutable i32 = opl.op_env[op.usize()]
+    if stage == 1:
+        e <- e + (opl.op_ar[op.usize()] * opl.op_ar[op.usize()] / 2 + 2)
+        if e >= 1024:
+            e <- 1024
+            opl.op_stage[op.usize()] <- 2
+    elif stage == 2:
+        target: i32 = 1024 - opl.op_sl[op.usize()] * 64
+        e <- e - (opl.op_dr[op.usize()] * opl.op_dr[op.usize()] / 6 + 1)
+        if e <= target:
+            e <- target
+            opl.op_stage[op.usize()] <- 3
+    elif stage == 4:
+        e <- e - (opl.op_rr[op.usize()] * opl.op_rr[op.usize()] / 4 + 1)
+        if e <= 0:
+            e <- 0
+            opl.op_stage[op.usize()] <- 0
+    opl.op_env[op.usize()] <- e
+    return e
+
+# base phase increment per sample for a channel's current fnum/block (pre-multiplier)
+def opl_chan_inc(opl: Opl&, c: i32) -> u32:
+    shift: i32 = 20 - opl.ch_block[c.usize()]
+    fhz: i32 = (opl.ch_fnum[c.usize()] * 49716) >> shift.u32()
+    return ((fhz.i64() * 65536i64) / OPL_RATE.i64()).u32()
+
+# ---- SFX ----
+def opl_set_op_regs(opl: mutable Opl&, cell: i32, char_b: i32, scale_b: i32, attack_b: i32, sus_b: i32, wave_b: i32) -> void:
+    al_out(opl, 0x20 + cell, char_b)
+    al_out(opl, 0x40 + cell, scale_b)
+    al_out(opl, 0x60 + cell, attack_b)
+    al_out(opl, 0x80 + cell, sus_b)
+    al_out(opl, 0xE0 + cell, wave_b)
+
+def opl_play(opl: mutable Opl&, soundenum: i32) -> void:
+    chunk: i32 = STARTADLIBSOUNDS + soundenum
+    if chunk < 0 or chunk >= 288:
+        return
+    start: i32 = rd_u32(&opl.audiohed[0], chunk * 4).i32()
+    endp: i32 = rd_u32(&opl.audiohed[0], (chunk + 1) * 4).i32()
+    if endp <= start or start < 0 or endp > opl.audiot_len:
+        return
+    length: i32 = rd_u32(&opl.audiot[0], start).i32()
+    if length <= 0 or start + 23 + length > opl.audiot_len:
+        return
+    opl.sfx_block <- opl.audiot[(start + 22).usize()].i32()
+    # modulator = cell 0, carrier = cell 3 (channel 0)
+    opl_set_op_regs(opl, 0, opl.audiot[(start + 6).usize()].i32(), opl.audiot[(start + 8).usize()].i32(),
+                    opl.audiot[(start + 10).usize()].i32(), opl.audiot[(start + 12).usize()].i32(), opl.audiot[(start + 14).usize()].i32())
+    opl_set_op_regs(opl, 3, opl.audiot[(start + 7).usize()].i32(), opl.audiot[(start + 9).usize()].i32(),
+                    opl.audiot[(start + 11).usize()].i32(), opl.audiot[(start + 13).usize()].i32(), opl.audiot[(start + 15).usize()].i32())
+    al_out(opl, 0xC0, 0)
+    opl.sfx_off <- start + 23
+    opl.sfx_len <- length
+    opl.sfx_idx <- 0
+    opl.sfx_acc <- 0
+    opl.sfx_playing <- true
+
+def opl_sfx_tick(opl: mutable Opl&) -> void:
+    if opl.sfx_idx >= opl.sfx_len:
+        opl.sfx_playing <- false
+        al_out(opl, 0xB0, (opl.sfx_block & 7) << 2)   # key off
+        return
+    b: i32 = opl.audiot[(opl.sfx_off + opl.sfx_idx).usize()].i32()
+    opl.sfx_idx <- opl.sfx_idx + 1
+    if b == 0:
+        al_out(opl, 0xB0, (opl.sfx_block & 7) << 2)
+    else:
+        al_out(opl, 0xA0, b)
+        al_out(opl, 0xB0, ((opl.sfx_block & 7) << 2) | 0x20)
+
+# ---- music (IMF type-1: leading u16 length, then (reg,val,u16 delay) tuples @ 700Hz) ----
+# Episode-1 per-floor song table (Wolf songs[]): GETTHEM, SEARCHN, POW, SUSPENSE x2, boss, secret.
+global SONGS_E1: array[i32, 10] = [3, 11, 9, 12, 3, 11, 9, 12, 2, 0]
+
+def opl_play_level_music(opl: mutable Opl&, mapnum: i32) -> void:
+    floor: mutable i32 = mapnum
+    if floor < 0:
+        floor <- 0
+    floor <- floor % 10            # episode-1 floor index
+    opl_play_music(opl, SONGS_E1[floor.usize()])
+
+def opl_play_music(opl: mutable Opl&, musicnum: i32) -> void:
+    chunk: i32 = STARTMUSIC + musicnum
+    if chunk < 0 or chunk + 1 >= 289:
+        return
+    start: i32 = rd_u32(&opl.audiohed[0], chunk * 4).i32()
+    endp: i32 = rd_u32(&opl.audiohed[0], (chunk + 1) * 4).i32()
+    if endp <= start or start < 0 or endp > opl.audiot_len:
+        return
+    imflen: i32 = rd_u16(&opl.audiot[0], start).i32()
+    if imflen <= 0 or start + 2 + imflen > opl.audiot_len:
+        return
+    opl.mus_start <- start + 2
+    opl.mus_off <- start + 2
+    opl.mus_end <- start + 2 + imflen
+    opl.mus_acc <- 0
+    opl.mus_delay <- 0
+    opl.mus_playing <- true
+
+def opl_mus_tick(opl: mutable Opl&) -> void:
+    if opl.mus_delay > 0:
+        opl.mus_delay <- opl.mus_delay - 1
+        return
+    going: mutable bool = true
+    while going:
+        if opl.mus_off + 4 > opl.mus_end:
+            opl.mus_off <- opl.mus_start        # loop the song
+            opl.mus_delay <- 0
+            going <- false
+        else:
+            reg: i32 = opl.audiot[(opl.mus_off).usize()].i32()
+            val: i32 = opl.audiot[(opl.mus_off + 1).usize()].i32()
+            delay: i32 = rd_u16(&opl.audiot[0], opl.mus_off + 2).i32()
+            opl.mus_off <- opl.mus_off + 4
+            al_out(opl, reg, val)
+            if delay > 0:
+                opl.mus_delay <- delay
+                going <- false
+
+# ---- render: advance sequencers + synth, mix 9 channels to S16 ----
+def opl_render(opl: mutable Opl&, buf: mutable i16&, n: i32) -> void:
+    for s in 0..<n:
+        if opl.sfx_playing:
+            opl.sfx_acc <- opl.sfx_acc + 1
+            if opl.sfx_acc >= OPL_SFX_TICSAMPLES:
+                opl.sfx_acc <- 0
+                opl_sfx_tick(opl)
+        if opl.mus_playing:
+            opl.mus_acc <- opl.mus_acc + 1
+            if opl.mus_acc >= OPL_MUS_TICSAMPLES:
+                opl.mus_acc <- 0
+                opl_mus_tick(opl)
+        mix: mutable i32 = 0
+        for c in 0..<9:
+            mod: i32 = CHAN_MOD[c.usize()]
+            car: i32 = CHAN_CAR[c.usize()]
+            if opl.op_stage[mod.usize()] == 0 and opl.op_stage[car.usize()] == 0:
+                continue
+            base: u32 = opl_chan_inc(opl, c)
+            menv: i32 = opl_env_step(opl, mod)
+            cenv: i32 = opl_env_step(opl, car)
+            opl.op_phase[mod.usize()] <- opl.op_phase[mod.usize()] + ((base * OPL_MULT2[(opl.op_mult[mod.usize()]).usize()].u32()) >> 1u32)
+            opl.op_phase[car.usize()] <- opl.op_phase[car.usize()] + ((base * OPL_MULT2[(opl.op_mult[car.usize()]).usize()].u32()) >> 1u32)
+            msamp: i32 = opl_wave_sample(opl, opl.op_wave[mod.usize()], opl.op_phase[mod.usize()]) * menv / 1024 * (63 - opl.op_tl[mod.usize()]) / 63
+            out: mutable i32 = 0
+            if opl.ch_conn[c.usize()] == 0:
+                cphase: u32 = opl.op_phase[car.usize()] + (msamp * 8).u32()
+                out <- opl_wave_sample(opl, opl.op_wave[car.usize()], cphase) * cenv / 1024 * (63 - opl.op_tl[car.usize()]) / 63
+            else:
+                csamp: i32 = opl_wave_sample(opl, opl.op_wave[car.usize()], opl.op_phase[car.usize()]) * cenv / 1024 * (63 - opl.op_tl[car.usize()]) / 63
+                out <- msamp + csamp
+            mix <- mix + out
+        mix <- mix * 2
+        if mix > 32767:
+            mix <- 32767
+        if mix < -32768:
+            mix <- -32768
+        buf[s.usize()] <- mix.i16()
+
+# ================================ tests ================================
+
+@test
+def opl_sfx_and_music_play() -> void:
+    can Abort.Panic:
+        opl: mutable Opl = zeroed
+        if not opl_load(&opl,
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/AUDIOHED.WL6",
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/AUDIOT.WL6"):
+            panic("failed to load AUDIOHED/AUDIOT")
+        if opl.sine[256u32] < 4000:
+            panic("sine table wrong")
+        # SFX: pistol must produce audible varied output
+        opl_play(&opl, 24)
+        if not opl.sfx_playing:
+            panic("pistol AdLib SFX did not start")
+        buf: mutable array[i16, 13230] = zeroed
+        opl_render(&opl, &buf[0], 13230)
+        nz: mutable i32 = 0
+        for i in 0..<13230:
+            if buf[i.usize()].i32() != 0:
+                nz <- nz + 1
+        if nz < 1000:
+            panic("SFX render near-silent")
+        # Music: song 0 must drive multiple channels and produce sustained output over ~0.5s
+        opl2: mutable Opl = zeroed
+        _ = opl_load(&opl2,
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/AUDIOHED.WL6",
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/AUDIOT.WL6")
+        opl_play_music(&opl2, 0)
+        if not opl2.mus_playing:
+            panic("music song 0 did not start")
+        mbuf: mutable array[i16, 22050] = zeroed
+        opl_render(&opl2, &mbuf[0], 22050)
+        mnz: mutable i32 = 0
+        for i in 0..<22050:
+            if mbuf[i.usize()].i32() != 0:
+                mnz <- mnz + 1
+        if mnz < 2000:
+            panic("music render near-silent (sequencer or synth broken)")

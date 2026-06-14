@@ -1,0 +1,125 @@
+include "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/port/wolf_data.elisa"
+
+# VSWAP page file — a from-scratch port of id_pm.c (the Page Manager).
+#
+# VSWAP.WL6 is a flat collection of "pages": wall textures first (64x64 = 4096 bytes of palette
+# indices, stored COLUMN-major), then sprites (a compressed post format), then digitized sounds.
+# The header is three u16 counts followed by a u32 offset table and a u16 length table:
+#
+#   ChunksInFile, SpriteStart, SoundStart    (u16 each)
+#   pageOffsets[ChunksInFile]                (u32, file byte offset of each page; 0 = sparse)
+#   pageLengths[ChunksInFile]                (u16)
+#
+# Unlike id's loader we keep the whole VSWAP resident and index pages directly by their file
+# offset, so no realignment/padding repack is needed. A wall texel is texture[col*64 + row].
+
+struct VSwap layout c:
+    raw: mutable array[u8, 2097152]      # whole VSWAP.WL6 (~1.5MB), padded to 2MB
+    raw_len: mutable i32
+    chunks_in_file: mutable i32
+    sprite_start: mutable i32
+    sound_start: mutable i32
+    page_offset: mutable array[u32, 2048]
+    page_length: mutable array[u16, 2048]
+    # digitized sounds (8-bit unsigned PCM @ 7000Hz), parsed from the sound-info page
+    num_digi: mutable i32
+    digi_startpage: mutable array[i32, 256]
+    digi_len: mutable array[i32, 256]
+
+def pm_startup(pm: mutable VSwap&, vswap_path: cstr) -> bool:
+    n: i32 = read_whole_file(vswap_path, &pm.raw[0], 2097152)
+    if n < 6:
+        return false
+    pm.raw_len <- n
+    pm.chunks_in_file <- rd_u16(&pm.raw[0], 0).i32()
+    pm.sprite_start <- rd_u16(&pm.raw[0], 2).i32()
+    pm.sound_start <- rd_u16(&pm.raw[0], 4).i32()
+    c: i32 = pm.chunks_in_file
+    if c > 2048:
+        return false
+    # offset table starts at byte 6; length table follows it
+    off_base: i32 = 6
+    len_base: i32 = 6 + c * 4
+    for i in 0..<c:
+        pm.page_offset[i.usize()] <- rd_u32(&pm.raw[0], off_base + i * 4)
+        pm.page_length[i.usize()] <- rd_u16(&pm.raw[0], len_base + i * 2)
+    return true
+
+# Parse the digitized-sound directory from the last VSWAP page (pairs of u16: startpage, length).
+def pm_setup_digi(pm: mutable VSwap&) -> void:
+    last: i32 = pm.chunks_in_file - 1
+    info_base: i32 = pm.page_offset[last.usize()].i32()
+    info_size: i32 = pm.page_length[last.usize()].i32()
+    nd: mutable i32 = info_size / 4
+    if nd > 256:
+        nd <- 256
+    count: mutable i32 = 0
+    for i in 0..<nd:
+        sp: i32 = rd_u16(&pm.raw[0], info_base + i * 4).i32()
+        ln: i32 = rd_u16(&pm.raw[0], info_base + i * 4 + 2).i32()
+        if sp >= last:
+            count <- i
+            pm.num_digi <- count
+            return
+        pm.digi_startpage[i.usize()] <- sp
+        pm.digi_len[i.usize()] <- ln
+        count <- i + 1
+    pm.num_digi <- count
+
+# Byte offset of digi sound `i` in pm.raw (its data starts at page sound_start + startpage).
+def pm_digi_offset(pm: VSwap&, i: i32) -> i32:
+    return pm.page_offset[(pm.sound_start + pm.digi_startpage[i.usize()]).usize()].i32()
+
+# Number of wall texture pages (== sprite_start).
+def pm_num_walls(pm: VSwap&) -> i32:
+    return pm.sprite_start
+
+# Byte offset into pm.raw of a wall texture page's first texel. Page 0 of VSWAP is wall texture 0.
+def pm_wall_offset(pm: VSwap&, wall: i32) -> i32:
+    return pm.page_offset[wall.usize()].i32()
+
+# Sample a wall texture texel (column-major). col,row in 0..63.
+def pm_wall_texel(pm: VSwap&, wall: i32, col: i32, row: i32) -> u8:
+    base: i32 = pm_wall_offset(pm, wall)
+    return pm.raw[(base + col * 64 + row).usize()]
+
+# ================================ tests ================================
+
+@test
+def vswap_loads_walls() -> void:
+    can Abort.Panic:
+        pm: mutable VSwap = zeroed
+        ok: bool = pm_startup(&pm,
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/VSWAP.WL6")
+        if not ok:
+            panic("failed to load VSWAP")
+        # WL6 registered VSWAP: sprites begin at page 106 (so 106 wall textures), sounds later.
+        if pm.sprite_start != 106:
+            panic("unexpected sprite_start")
+        if pm.sound_start <= pm.sprite_start:
+            panic("sound_start must follow sprite_start")
+        if pm.chunks_in_file <= pm.sound_start:
+            panic("chunks_in_file must exceed sound_start")
+        # Wall page 0's offset must be inside the file and 4096-byte page readable.
+        base: i32 = pm_wall_offset(&pm, 0)
+        if base <= 0 or base + 4096 > pm.raw_len:
+            panic("wall page 0 offset out of range")
+        # A real wall texture is not all one color — verify it has variation across texels.
+        first: u8 = pm_wall_texel(&pm, 0, 0, 0)
+        varied: mutable bool = false
+        for col in 0..<64:
+            for row in 0..<64:
+                if pm_wall_texel(&pm, 0, col, row) != first:
+                    varied <- true
+        if not varied:
+            panic("wall texture 0 is a flat color (decode wrong)")
+        # digitized sounds: WL6 has ~46; each has a positive length and an in-range start page
+        pm_setup_digi(&pm)
+        if pm.num_digi < 10 or pm.num_digi > 256:
+            panic("unexpected digi sound count")
+        for d in 0..<pm.num_digi:
+            if pm.digi_len[d.usize()] <= 0:
+                panic("digi sound has non-positive length")
+            off: i32 = pm_digi_offset(&pm, d)
+            if off <= 0 or off + pm.digi_len[d.usize()] > pm.raw_len:
+                panic("digi sound data out of range")

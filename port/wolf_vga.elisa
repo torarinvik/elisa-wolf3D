@@ -1,0 +1,416 @@
+include "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/port/wolf_data.elisa"
+
+# VGAGRAPH decoder — the authentic Wolf UI graphics (status bar, fonts, menu art). This is the
+# hardest WL6 format: Huffman-compressed, 4-plane VGA pics whose dimensions live in a compressed
+# "pic table" chunk.
+#
+#   VGADICT.WL6   256 Huffman nodes {bit0:u16, bit1:u16}; the head node is #254.
+#   VGAHEAD.WL6   24-bit little-endian file offsets into VGAGRAPH, one per chunk (+1 end).
+#   VGAGRAPH.WL6  chunks; each non-tile chunk is [u32 expanded-length][Huffman data]. Chunk 0
+#                 (STRUCTPIC) decompresses to the pic table: (width:u16, height:u16) per pic.
+#
+# A decoded pic is stored as 4 planes (plane p holds the pixels where x%4==p); we de-plane it back to
+# linear width*height palette indices. Pic index into the table is (picnum - STARTPICS).
+
+global STRUCTPIC: i32 = 0
+global STARTFONT: i32 = 1
+global STARTPICS: i32 = 3
+global STATUSBARPIC: i32 = 86
+global TITLEPIC: i32 = 87
+
+struct Vga layout c:
+    bit0: mutable array[u16, 256]          # Huffman dictionary
+    bit1: mutable array[u16, 256]
+    head: mutable array[u8, 512]           # VGAHEAD (24-bit offsets)
+    graph: mutable array[u8, 320000]       # whole VGAGRAPH.WL6 (~276KB)
+    graph_len: mutable i32
+    num_pics: mutable i32
+    pic_w: mutable array[i32, 200]
+    pic_h: mutable array[i32, 200]
+    planebuf: mutable array[u8, 70000]     # scratch for a decoded (still-planar) pic
+    # font (chunk STARTFONT): height + per-char location/width + 1-byte-per-pixel char bitmaps
+    font_height: mutable i32
+    font_loc: mutable array[i32, 256]
+    font_width: mutable array[i32, 256]
+    font_buf: mutable array[u8, 32000]
+
+# 24-bit little-endian file offset of a chunk from VGAHEAD.
+def grfilepos(v: Vga&, chunk: i32) -> i32:
+    b0: i32 = v.head[(chunk * 3).usize()].i32()
+    b1: i32 = v.head[(chunk * 3 + 1).usize()].i32()
+    b2: i32 = v.head[(chunk * 3 + 2).usize()].i32()
+    val: i32 = b0 | (b1 << 8) | (b2 << 16)
+    if val == 0x00FFFFFF:
+        return -1
+    return val
+
+# Huffman-expand `length` bytes from graph[src_off] into dest. Head node is #254.
+def huff_expand(v: Vga&, src_off: i32, dest: mutable u8&, length: i32) -> void:
+    node: mutable i32 = 254
+    written: mutable i32 = 0
+    pos: mutable i32 = src_off
+    val: mutable i32 = v.graph[pos.usize()].i32()
+    pos <- pos + 1
+    mask: mutable i32 = 1
+    running: mutable bool = true
+    while running:
+        nodeval: mutable i32 = 0
+        if (val & mask) == 0:
+            nodeval <- v.bit0[node.usize()].i32()
+        else:
+            nodeval <- v.bit1[node.usize()].i32()
+        if mask == 0x80:
+            val <- v.graph[pos.usize()].i32()
+            pos <- pos + 1
+            mask <- 1
+        else:
+            mask <- mask << 1
+        if nodeval < 256:
+            dest[written.usize()] <- nodeval.u8()
+            written <- written + 1
+            node <- 254
+            if written >= length:
+                running <- false
+        else:
+            node <- nodeval - 256
+
+def vga_load(v: mutable Vga&, dict_path: cstr, head_path: cstr, graph_path: cstr) -> bool:
+    dictbuf: mutable array[u8, 1024] = zeroed
+    if read_whole_file(dict_path, &dictbuf[0], 1024) < 1024:
+        return false
+    for i in 0..<256:
+        v.bit0[i.usize()] <- rd_u16(&dictbuf[0], i * 4)
+        v.bit1[i.usize()] <- rd_u16(&dictbuf[0], i * 4 + 2)
+    if read_whole_file(head_path, &v.head[0], 512) < 6:
+        return false
+    n: i32 = read_whole_file(graph_path, &v.graph[0], 320000)
+    if n < 0:
+        return false
+    v.graph_len <- n
+    # decompress the pic table (chunk 0): [u32 len][huffman] -> (w,h) u16 pairs
+    pos: i32 = grfilepos(v, STRUCTPIC)
+    expanded: i32 = rd_u32(&v.graph[0], pos).i32()
+    tbl: mutable array[u8, 4096] = zeroed
+    if expanded > 4096:
+        return false
+    huff_expand(v, pos + 4, &tbl[0], expanded)
+    v.num_pics <- expanded / 4
+    if v.num_pics > 200:
+        v.num_pics <- 200
+    for i in 0..<v.num_pics:
+        v.pic_w[i.usize()] <- rd_u16(&tbl[0], i * 4).i32()
+        v.pic_h[i.usize()] <- rd_u16(&tbl[0], i * 4 + 2).i32()
+    # decompress the proportional font (chunk STARTFONT): [u32 len][huffman]
+    fpos: i32 = grfilepos(v, STARTFONT)
+    fexp: i32 = rd_u32(&v.graph[0], fpos).i32()
+    if fexp > 0 and fexp <= 32000:
+        huff_expand(v, fpos + 4, &v.font_buf[0], fexp)
+        v.font_height <- rd_u16(&v.font_buf[0], 0).i32()
+        for c in 0..<256:
+            v.font_loc[c.usize()] <- rd_u16(&v.font_buf[0], 2 + c * 2).i32()
+            v.font_width[c.usize()] <- v.font_buf[(514 + c).usize()].i32()
+    return true
+
+# Draw one font glyph at (px,py) in `color` into an 8bpp buffer (1-byte-per-pixel mask, row-major).
+def vga_char_width(v: Vga&, ch: i32) -> i32:
+    if ch < 0 or ch > 255:
+        return 0
+    return v.font_width[ch.usize()]
+
+def vga_draw_char(v: Vga&, dest: mutable u8&, pitch: i32, dw: i32, dh: i32, px: i32, py: i32, ch: i32, color: u8) -> i32:
+    w: i32 = v.font_width[ch.usize()]
+    h: i32 = v.font_height
+    loc: i32 = v.font_loc[ch.usize()]
+    for yy in 0..<h:
+        for xx in 0..<w:
+            if v.font_buf[(loc + yy * w + xx).usize()] != 0u8:
+                dx: i32 = px + xx
+                dy: i32 = py + yy
+                if dx >= 0 and dx < dw and dy >= 0 and dy < dh:
+                    dest[(dy * pitch + dx).usize()] <- color
+    return w
+
+# Draw a null-terminated string; returns the end x. Letters are upper-cased to match the font set.
+def vga_draw_string(v: Vga&, dest: mutable u8&, pitch: i32, dw: i32, dh: i32, px: i32, py: i32, text: u8&, color: u8) -> i32:
+    cx: mutable i32 = px
+    i: mutable i32 = 0
+    going: mutable bool = true
+    while going:
+        ch: i32 = text[i.usize()].i32()
+        if ch == 0:
+            going <- false
+        else:
+            cx <- cx + vga_draw_char(v, dest, pitch, dw, dh, cx, py, ch, color)
+            i <- i + 1
+    return cx
+
+# Decompress a pic into `dest` as linear width*height palette indices; returns true on success.
+# Fills wout/hout with the dimensions.
+def vga_get_pic(v: mutable Vga&, picnum: i32, dest: mutable u8&, wout: mutable i32&, hout: mutable i32&) -> bool:
+    ti: i32 = picnum - STARTPICS
+    if ti < 0 or ti >= v.num_pics:
+        return false
+    w: i32 = v.pic_w[ti.usize()]
+    h: i32 = v.pic_h[ti.usize()]
+    if w <= 0 or h <= 0 or w * h > 70000:
+        return false
+    pos: i32 = grfilepos(v, picnum)
+    if pos < 0:
+        return false
+    expanded: i32 = rd_u32(&v.graph[0], pos).i32()
+    if expanded != w * h:
+        return false
+    huff_expand(v, pos + 4, &v.planebuf[0], expanded)
+    # de-plane: pixel (x,y) lives in plane x%4 at column x/4
+    linewidth: i32 = w >> 2
+    for plane in 0..<4:
+        pbase: i32 = plane * (linewidth * h)
+        for y in 0..<h:
+            for x in 0..<linewidth:
+                dest[(y * w + x * 4 + plane).usize()] <- v.planebuf[(pbase + y * linewidth + x).usize()]
+    wout <- w
+    hout <- h
+    return true
+
+# Decode a text/article chunk (e.g. T_HELPART=138): [u32 expanded-len][huffman text] -> ASCII.
+# Returns the number of bytes written (clamped to maxlen-1, NUL-terminated).
+def vga_get_text(v: mutable Vga&, chunk: i32, dest: mutable u8&, maxlen: i32) -> i32:
+    pos: i32 = grfilepos(v, chunk)
+    if pos < 0:
+        dest[0u32] <- 0u8
+        return 0
+    expanded: mutable i32 = rd_u32(&v.graph[0], pos).i32()
+    if expanded < 0:
+        expanded <- 0
+    if expanded > maxlen - 1:
+        expanded <- maxlen - 1
+    huff_expand(v, pos + 4, dest, expanded)
+    dest[expanded.usize()] <- 0u8
+    return expanded
+
+# test helper: blit Wolf number pics onto a 320-wide buffer (mirrors hud_latch)
+def blit_latch(digits: u8&, dw: i32, dh: i32, dest: mutable u8&, xtile: i32, yb: i32, width: i32, number: i32) -> void:
+    base_x: i32 = xtile * 8
+    n: mutable i32 = number
+    buf: mutable array[i32, 16] = zeroed
+    len: mutable i32 = 0
+    if n == 0:
+        len <- 1
+    else:
+        while n > 0 and len < 16:
+            buf[len.usize()] <- n % 10
+            n <- n / 10
+            len <- len + 1
+    for i in 0..<width:
+        pos_from_right: i32 = width - 1 - i
+        slot: mutable i32 = 0
+        if pos_from_right < len:
+            slot <- buf[pos_from_right.usize()] + 1
+        sbase: i32 = slot * dw * dh
+        for yy in 0..<dh:
+            for xx in 0..<dw:
+                px: i32 = base_x + i * dw + xx
+                if px >= 0 and px < 320 and (yb + yy) < 40:
+                    dest[((yb + yy) * 320 + px).usize()] <- digits[(sbase + yy * dw + xx).usize()]
+
+# ================================ tests ================================
+
+@test
+def vga_decodes_status_bar() -> void:
+    can Abort.Panic:
+        v: mutable Vga = zeroed
+        root: cstr = "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/"
+        if not vga_load(&v,
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/VGADICT.WL6",
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/VGAHEAD.WL6",
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/VGAGRAPH.WL6"):
+            panic("failed to load VGAGRAPH set")
+        if v.num_pics < 80:
+            panic("pic table too small")
+        pic: mutable array[u8, 70000] = zeroed
+        w: mutable i32 = 0
+        h: mutable i32 = 0
+        if not vga_get_pic(&v, STATUSBARPIC, &pic[0], &w, &h):
+            panic("failed to decode STATUSBARPIC")
+        # Wolf status bar is 320x40
+        if w != 320 or h != 40:
+            panic("status bar wrong dimensions")
+        # must not be a flat color (real decoded art varies)
+        first: u8 = pic[0u32]
+        varied: mutable bool = false
+        for i in 0..<(w * h):
+            if pic[i.usize()] != first:
+                varied <- true
+        if not varied:
+            panic("status bar decoded to a flat color (huffman/deplane wrong)")
+        # dump for visual verification
+        out: void&? = fopen("/tmp/wolf_statusbar.bin".cast[u8&], "wb".cast[u8&])
+        if out != null:
+            _ = fwrite(&pic[0], 1.usize(), (w * h).usize(), out)
+            _ = fclose(out)
+        # decode the full-screen title screen (320x200) for the menu front-end
+        tw: mutable i32 = 0
+        th: mutable i32 = 0
+        if not vga_get_pic(&v, 87, &pic[0], &tw, &th):     # TITLEPIC
+            panic("failed to decode TITLEPIC")
+        if tw != 320 or th != 200:
+            panic("title pic wrong size")
+        tout: void&? = fopen("/tmp/wolf_title.bin".cast[u8&], "wb".cast[u8&])
+        if tout != null:
+            _ = fwrite(&pic[0], 1.usize(), 64000.usize(), tout)
+            _ = fclose(tout)
+        # font: render menu text onto a band for visual verification
+        if v.font_height <= 0 or v.font_height > 32:
+            panic("font height implausible (chunk decode wrong)")
+        band: mutable array[u8, 25600] = zeroed   # 320x80
+        for i in 0..<25600:
+            band[i.usize()] <- 28u8
+        _ = vga_draw_string(&v, &band[0], 320, 320, 80, 20, 10, "NEW GAME".cast[u8&], 16u8)
+        _ = vga_draw_string(&v, &band[0], 320, 320, 80, 20, 30, "SOUND".cast[u8&], 16u8)
+        _ = vga_draw_string(&v, &band[0], 320, 320, 80, 20, 50, "QUIT".cast[u8&], 16u8)
+        fout: void&? = fopen("/tmp/wolf_font.bin".cast[u8&], "wb".cast[u8&])
+        if fout != null:
+            _ = fwrite(&band[0], 1.usize(), 25600.usize(), fout)
+            _ = fclose(fout)
+        # composite a pause menu over the title (mirrors draw_menu) for visual verification
+        _ = vga_get_pic(&v, 87, &pic[0], &tw, &th)
+        bx: i32 = 96
+        by: i32 = 64
+        for yy in by..<(by + 76):
+            for xx in bx..<(bx + 128):
+                edge: bool = yy == by or yy == by + 75 or xx == bx or xx == bx + 127
+                cc: mutable u8 = 0u8
+                if edge:
+                    cc <- 15u8
+                pic[(yy * 320 + xx).usize()] <- cc
+        _ = vga_draw_string(&v, &pic[0], 320, 320, 200, bx + 22, by + 12, "RESUME".cast[u8&], 15u8)
+        _ = vga_draw_string(&v, &pic[0], 320, 320, 200, bx + 22, by + 32, "NEW GAME".cast[u8&], 31u8)
+        _ = vga_draw_string(&v, &pic[0], 320, 320, 200, bx + 22, by + 52, "QUIT".cast[u8&], 31u8)
+        _ = vga_draw_string(&v, &pic[0], 320, 320, 200, bx + 8, by + 12, ">".cast[u8&], 15u8)
+        mout: void&? = fopen("/tmp/wolf_menu.bin".cast[u8&], "wb".cast[u8&])
+        if mout != null:
+            _ = fwrite(&pic[0], 1.usize(), 64000.usize(), mout)
+            _ = fclose(mout)
+        # authentic main menu composite (mirrors draw_main_menu): bronze bg, logo, window, items, gun
+        for i in 0..<64000:
+            pic[i.usize()] <- 0x29u8
+        for yy in 10..<34:
+            for xx in 0..<320:
+                pic[(yy * 320 + xx).usize()] <- 0u8
+        for xx in 0..<320:
+            pic[(32 * 320 + xx).usize()] <- 0x2Cu8
+        logo: mutable array[u8, 32000] = zeroed
+        lw: mutable i32 = 0
+        lh: mutable i32 = 0
+        gun: mutable array[u8, 4096] = zeroed
+        gw: mutable i32 = 0
+        gh: mutable i32 = 0
+        _ = vga_get_pic(&v, 10, &logo[0], &lw, &lh)
+        _ = vga_get_pic(&v, 11, &gun[0], &gw, &gh)
+        for yy in 0..<lh:
+            for xx in 0..<lw:
+                if (84 + xx) < 320 and yy < 200:
+                    pic[(yy * 320 + 84 + xx).usize()] <- logo[(yy * lw + xx).usize()]
+        for yy in 52..<188:
+            for xx in 68..<246:
+                pic[(yy * 320 + xx).usize()] <- 0x2Du8
+        sel: i32 = 0
+        for it in 0..<10:
+            col: mutable u8 = 0x17u8
+            if it == 4:
+                col <- 0x2Bu8
+            elif it == sel:
+                col <- 0x13u8
+            yrow: i32 = 55 + it * 13
+            if it == 0:
+                _ = vga_draw_string(&v, &pic[0], 320, 320, 200, 100, yrow, "New Game".cast[u8&], col)
+            elif it == 1:
+                _ = vga_draw_string(&v, &pic[0], 320, 320, 200, 100, yrow, "Sound".cast[u8&], col)
+            elif it == 2:
+                _ = vga_draw_string(&v, &pic[0], 320, 320, 200, 100, yrow, "Control".cast[u8&], col)
+            elif it == 3:
+                _ = vga_draw_string(&v, &pic[0], 320, 320, 200, 100, yrow, "Load Game".cast[u8&], col)
+            elif it == 4:
+                _ = vga_draw_string(&v, &pic[0], 320, 320, 200, 100, yrow, "Save Game".cast[u8&], col)
+            elif it == 5:
+                _ = vga_draw_string(&v, &pic[0], 320, 320, 200, 100, yrow, "Change View".cast[u8&], col)
+            elif it == 6:
+                _ = vga_draw_string(&v, &pic[0], 320, 320, 200, 100, yrow, "Read This!".cast[u8&], col)
+            elif it == 7:
+                _ = vga_draw_string(&v, &pic[0], 320, 320, 200, 100, yrow, "View Scores".cast[u8&], col)
+            elif it == 8:
+                _ = vga_draw_string(&v, &pic[0], 320, 320, 200, 100, yrow, "Back to Demo".cast[u8&], col)
+            else:
+                _ = vga_draw_string(&v, &pic[0], 320, 320, 200, 100, yrow, "Quit".cast[u8&], col)
+        for yy in 0..<gh:
+            for xx in 0..<gw:
+                pic[((53 + sel * 13 + yy) * 320 + 76 + xx).usize()] <- gun[(yy * gw + xx).usize()]
+        mmout: void&? = fopen("/tmp/wolf_mainmenu.bin".cast[u8&], "wb".cast[u8&])
+        if mmout != null:
+            _ = fwrite(&pic[0], 1.usize(), 64000.usize(), mmout)
+            _ = fclose(mmout)
+        # episode-select composite: bg + window + 6 episode pics (C_EPISODE1PIC=30..35) + gun
+        for i in 0..<64000:
+            pic[i.usize()] <- 0x29u8
+        for yy in 19..<181:
+            for xx in 6..<314:
+                pic[(yy * 320 + xx).usize()] <- 0x2Du8
+        _ = vga_draw_string(&v, &pic[0], 320, 320, 200, 72, 4, "Which episode to play?".cast[u8&], 0x47u8)
+        escr: mutable array[u8, 20000] = zeroed
+        for i in 0..<6:
+            ew: mutable i32 = 0
+            eh: mutable i32 = 0
+            if vga_get_pic(&v, 30 + i, &escr[0], &ew, &eh):
+                for yy in 0..<eh:
+                    for xx in 0..<ew:
+                        dx: i32 = 42 + xx
+                        dy: i32 = 23 + i * 26 + yy
+                        if dx < 320 and dy < 200:
+                            pic[(dy * 320 + dx).usize()] <- escr[(yy * ew + xx).usize()]
+        for yy in 0..<gh:
+            for xx in 0..<gw:
+                pic[((22 + 0 * 26 + yy) * 320 + 12 + xx).usize()] <- gun[(yy * gw + xx).usize()]
+        eout: void&? = fopen("/tmp/wolf_episode.bin".cast[u8&], "wb".cast[u8&])
+        if eout != null:
+            _ = fwrite(&pic[0], 1.usize(), 64000.usize(), eout)
+            _ = fclose(eout)
+        # composite the authentic HUD numbers onto the real status bar (mirrors hud_latch)
+        sbar: mutable array[u8, 12800] = zeroed
+        sw2: mutable i32 = 0
+        sh2: mutable i32 = 0
+        _ = vga_get_pic(&v, STATUSBARPIC, &sbar[0], &sw2, &sh2)
+        digits: mutable array[u8, 4096] = zeroed
+        dpic: mutable array[u8, 512] = zeroed
+        ddw: mutable i32 = 0
+        ddh: mutable i32 = 0
+        for slot in 0..<11:
+            _ = vga_get_pic(&v, 98 + slot, &dpic[0], &ddw, &ddh)
+            for k in 0..<(ddw * ddh):
+                digits[(slot * ddw * ddh + k).usize()] <- dpic[k.usize()]
+        # blit health "100" (x=21) and ammo "99" (x=27), y=16, into the 320x40 bar
+        blit_latch(&digits[0], ddw, ddh, &sbar[0], 21, 16, 3, 100)
+        blit_latch(&digits[0], ddw, ddh, &sbar[0], 27, 16, 2, 99)
+        blit_latch(&digits[0], ddw, ddh, &sbar[0], 2, 16, 2, 1)
+        blit_latch(&digits[0], ddw, ddh, &sbar[0], 6, 16, 6, 1300)
+        hout: void&? = fopen("/tmp/wolf_hud.bin".cast[u8&], "wb".cast[u8&])
+        if hout != null:
+            _ = fwrite(&sbar[0], 1.usize(), 12800.usize(), hout)
+            _ = fclose(hout)
+
+@test
+def vga_dumps_helpart() -> void:
+    can Abort.Panic:
+        v: mutable Vga = zeroed
+        if not vga_load(&v,
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/VGADICT.WL6",
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/VGAHEAD.WL6",
+            "/Users/torarinvikbjarko/Documents/Coding Projects/Go projects/Elisa-core/elisa-wolf3d/WOLF3D/VGAGRAPH.WL6"):
+            panic("failed to load VGAGRAPH set")
+        txt: mutable array[u8, 16000] = zeroed
+        n: i32 = vga_get_text(&v, 138, &txt[0], 16000)   # T_HELPART
+        if n <= 0:
+            panic("helpart decoded empty")
+        out: void&? = fopen("/tmp/wolf_helpart.txt".cast[u8&], "wb".cast[u8&])
+        if out != null:
+            _ = fwrite(&txt[0], 1.usize(), n.usize(), out)
+            _ = fclose(out)

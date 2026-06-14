@@ -1,0 +1,4 @@
+# compiled binary + local runtime artifacts (not source)
+wolf3d
+*.sav
+*.scores
