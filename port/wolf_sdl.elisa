@@ -181,6 +181,15 @@ def blit_pic(r: mutable Render&, src: u8&, sw: i32, sh: i32, dx: i32, dy: i32) -
             if px >= 0 and px < VIEWWIDTH and py >= 0 and py < SCREENHEIGHT:
                 r.fb[(py * VIEWWIDTH + px).usize()] <- src[(y * sw + x).usize()]
 
+# Draw the animated menu gun cursor (C_CURSOR1PIC held / C_CURSOR2PIC flash) at (x,y).
+def blit_menu_gun(r: mutable Render&, x: i32, y: i32) -> void:
+    if not r.has_menugfx:
+        return
+    if r.gun_frame == 1:
+        blit_pic(r, &r.menu_gun2[0], r.gun2_w, r.gun2_h, x, y)
+    else:
+        blit_pic(r, &r.menu_gun[0], r.gun_w, r.gun_h, x, y)
+
 # one menu item: TEXTCOLOR(0x17), HIGHLIGHT(0x13) if selected, DEACTIVE(0x2b) if disabled (Save Game)
 def menu_item(r: mutable Render&, v: Vga&, sel: i32, i: i32, text: u8&) -> void:
     col: mutable i32 = 0x17
@@ -231,7 +240,7 @@ def draw_main_menu(r: mutable Render&, v: Vga&, sel: i32) -> void:
     menu_item(r, v, sel, 9, "Quit".cast[u8&])
     # gun cursor at the selected row
     if r.has_menugfx:
-        blit_pic(r, &r.menu_gun[0], r.gun_w, r.gun_h, 76, 53 + sel * 13)
+        blit_menu_gun(r,76, 53 + sel * 13)
 
 # Wolf DrawWindow: BKGDCOLOR fill + outline (top/left DEACTIVE 0x2b, bottom/right BORD2 0x23).
 def draw_window(r: mutable Render&, wx: i32, wy: i32, ww: i32, wh: i32) -> void:
@@ -285,7 +294,7 @@ def draw_episode_menu(r: mutable Render&, v: mutable Vga&, sel: i32) -> void:
             _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 112, ty + 11, "Confrontation".cast[u8&], col)
         ei <- ei + 1
     if r.has_menugfx:
-        blit_pic(r, &r.menu_gun[0], r.gun_w, r.gun_h, 12, 22 + sel * 26)
+        blit_menu_gun(r,12, 22 + sel * 26)
 
 # Difficulty screen (DrawNewGame + DrawNewGameDiff): 4 skill names + the BJ face (C_BABYMODEPIC=19+d).
 def draw_difficulty_menu(r: mutable Render&, v: mutable Vga&, sel: i32) -> void:
@@ -315,7 +324,7 @@ def draw_difficulty_menu(r: mutable Render&, v: mutable Vga&, sel: i32) -> void:
     if vga_get_pic(v, 19 + sel, &fscratch[0], &fw, &fh):
         blit_pic(r, &fscratch[0], fw, fh, 235, 97)
     if r.has_menugfx:
-        blit_pic(r, &r.menu_gun[0], r.gun_w, r.gun_h, 52, 98 + sel * 13)
+        blit_menu_gun(r,52, 98 + sel * 13)
 
 # Sound submenu: toggle AdLib (music+FX) and Digitized (speech) channels.
 # --- Sound menu: faithful 3-section radio layout (wl_menu.cpp DrawSoundMenu) ---
@@ -384,7 +393,7 @@ def draw_sound_menu(r: mutable Render&, v: mutable Vga&, sel: i32, fx_sel: i32, 
             rbtn <- 14                          # C_SELECTEDPIC
         rt_draw_pic(r, v, rbtn, 72, y + 2)
     if r.has_menugfx:
-        blit_pic(r, &r.menu_gun[0], r.gun_w, r.gun_h, 48, 20 + sel * 13)
+        blit_menu_gun(r,48, 20 + sel * 13)
 
 # A plain titled info screen (used by Control / Read This! / View Scores). Press a key to return.
 def draw_info_header(r: mutable Render&, v: mutable Vga&, title: u8&) -> void:
@@ -512,7 +521,7 @@ def draw_control_list(r: mutable Render&, v: mutable Vga&) -> void:
     rt_draw_pic(r, v, 13, 56, 89)              # mouse-enabled checkbox: not selected
     rt_draw_pic(r, v, 13, 56, 115)             # joystick-enabled checkbox: not selected
     if r.has_menugfx:
-        blit_pic(r, &r.menu_gun[0], r.gun_w, r.gun_h, 48, 125)   # gun cursor on Customize
+        blit_menu_gun(r,48, 125)   # gun cursor on Customize
 
 def draw_control_screen2(r: mutable Render&, v: mutable Vga&, sel: i32, rebinding: bool) -> void:
     draw_info_header(r, v, "Customize Controls".cast[u8&])
@@ -926,13 +935,18 @@ def main(argc: int, argv: u8&&) -> int:
             lh: mutable i32 = 0
             gw: mutable i32 = 0
             gh: mutable i32 = 0
+            g2w: mutable i32 = 0
+            g2h: mutable i32 = 0
             ok_logo: bool = vga_get_pic(&vga, 10, &r.menu_logo[0], &lw, &lh)
             ok_gun: bool = vga_get_pic(&vga, 11, &r.menu_gun[0], &gw, &gh)
-            if ok_logo and ok_gun:
+            ok_gun2: bool = vga_get_pic(&vga, 12, &r.menu_gun2[0], &g2w, &g2h)   # C_CURSOR2PIC
+            if ok_logo and ok_gun and ok_gun2:
                 r.logo_w <- lw
                 r.logo_h <- lh
                 r.gun_w <- gw
                 r.gun_h <- gh
+                r.gun2_w <- g2w
+                r.gun2_h <- g2h
                 r.has_menugfx <- true
 
         # DEBUG: headless Read This! dump — `wolf3d dumpread` writes all pages to /tmp/wolf_read_all.bin
@@ -1257,6 +1271,16 @@ def main(argc: int, argv: u8&&) -> int:
             mm_pl <- mlk
             mm_pr <- mrk
             mm_pk <- anyk
+            # animate the menu gun cursor: hold C_CURSOR1PIC ~1s, flash C_CURSOR2PIC ~0.11s (Wolf blink)
+            nowt: i32 = (SDL_GetTicks() & 0x3FFFFFFFu32).i32()
+            if r.gun_frame == 0:
+                if nowt - r.gun_timer > 1000:
+                    r.gun_frame <- 1
+                    r.gun_timer <- nowt
+            else:
+                if nowt - r.gun_timer > 110:
+                    r.gun_frame <- 0
+                    r.gun_timer <- nowt
             if menu_phase == 0:
                 draw_main_menu(&r, &vga, mmsel)
             elif menu_phase == 1:

@@ -169,6 +169,11 @@ struct Render layout c:
     menu_gun: mutable array[u8, 4096]
     gun_w: mutable i32
     gun_h: mutable i32
+    menu_gun2: mutable array[u8, 4096]        # C_CURSOR2PIC (the brief "wink" frame)
+    gun2_w: mutable i32
+    gun2_h: mutable i32
+    gun_frame: mutable i32                    # 0 = C_CURSOR1PIC (held), 1 = C_CURSOR2PIC (flash)
+    gun_timer: mutable i32                    # ms accumulator driving the blink
     has_menugfx: mutable bool
     # output framebuffer, 8bpp palette indices, VIEWWIDTH x SCREENHEIGHT (3D view on top, HUD below)
     fb: mutable array[u8, 64000]            # 320*200
