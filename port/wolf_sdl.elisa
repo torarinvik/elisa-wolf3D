@@ -831,14 +831,40 @@ def draw_int(r: mutable Render&, v: mutable Vga&, x: i32, y: i32, val: i32, col:
         n <- n / 10
     _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, x, y, &buf[p.u32()], col)
 
+# Draw a non-negative number right-justified so its last digit ends at right_x.
+def draw_int_right(r: mutable Render&, v: mutable Vga&, right_x: i32, y: i32, val: i32, col: u8) -> void:
+    buf: mutable array[u8, 16] = zeroed
+    n: mutable i32 = val
+    if n < 0:
+        n <- 0
+    p: mutable i32 = 15
+    buf[15u32] <- 0u8
+    if n == 0:
+        p <- p - 1
+        buf[p.u32()] <- 48u8
+    while n > 0 and p > 0:
+        p <- p - 1
+        buf[p.u32()] <- (48 + n % 10).u8()
+        n <- n / 10
+    w: mutable i32 = 0
+    q: mutable i32 = p
+    while buf[q.usize()] != 0u8:
+        w <- w + vga_char_width(v, buf[q.usize()].i32())
+        q <- q + 1
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, right_x - w, y, &buf[p.u32()], col)
+
 def draw_viewscores_screen(r: mutable Render&, v: mutable Vga&, h: HiScores&) -> void:
-    draw_info_header(r, v, "High Scores".cast[u8&])
+    for i in 0..<64000:                        # ClearMScreen: BORDCOLOR field
+        r.fb[i.usize()] <- 0x29u8
+    rt_draw_pic(r, v, 90, 48, 0)               # HIGHSCORESPIC title
+    rt_draw_pic(r, v, 39, 32, 68)              # C_NAMEPIC  column header
+    rt_draw_pic(r, v, 38, 160, 68)             # C_LEVELPIC column header
+    rt_draw_pic(r, v, 40, 224, 68)             # C_SCOREPIC column header
     for i in 0..<HS_COUNT:
-        y: i32 = 44 + i * 18
-        _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 32, y, &h.names[(i * HS_NAMELEN).usize()], 0x17u8)
-        draw_int(r, v, 150, y, h.levels[i.usize()], 0x17u8)
-        draw_int(r, v, 200, y, h.scores[i.usize()], 0x17u8)
-    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 60, 176, "Press a key to return".cast[u8&], 0x13u8)
+        y: i32 = 76 + i * 16
+        _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 16, y, &h.names[(i * HS_NAMELEN).usize()], 0x17u8)
+        draw_int_right(r, v, 194, y, h.levels[i.usize()], 0x17u8)
+        draw_int_right(r, v, 292, y, h.scores[i.usize()], 0x17u8)
 
 # the in-game name-entry overlay shown when a death produced a qualifying score
 def draw_name_entry(r: mutable Render&, v: mutable Vga&, name: u8&, score: i32) -> void:
@@ -937,6 +963,17 @@ def main(argc: int, argv: u8&&) -> int:
             if outc != null:
                 _ = fwrite(&r.fb[0], 1.usize(), 64000.usize(), outc)
                 _ = fclose(outc)
+            return 0
+
+        # DEBUG: headless View-Scores dump — `wolf3d view` writes /tmp/wolf_view.bin
+        if argc >= 2 and argv[1][0u32] == 118u8:        # first arg starts with 'v'
+            hs_dbg: mutable HiScores = zeroed
+            hs_load(&hs_dbg, HISCORE_PATH)
+            draw_viewscores_screen(&r, &vga, &hs_dbg)
+            outv: void&? = fopen("/tmp/wolf_view.bin".cast[u8&], "wb".cast[u8&])
+            if outv != null:
+                _ = fwrite(&r.fb[0], 1.usize(), 64000.usize(), outv)
+                _ = fclose(outv)
             return 0
 
         if SDL_Init(0x30) != 0:        # SDL_INIT_VIDEO | SDL_INIT_AUDIO
