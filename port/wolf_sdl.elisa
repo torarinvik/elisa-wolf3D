@@ -318,29 +318,73 @@ def draw_difficulty_menu(r: mutable Render&, v: mutable Vga&, sel: i32) -> void:
         blit_pic(r, &r.menu_gun[0], r.gun_w, r.gun_h, 52, 98 + sel * 13)
 
 # Sound submenu: toggle AdLib (music+FX) and Digitized (speech) channels.
-def draw_sound_menu(r: mutable Render&, v: mutable Vga&, sel: i32, adlib_on: bool, digi_on: bool) -> void:
-    for i in 0..<64000:
+# --- Sound menu: faithful 3-section radio layout (wl_menu.cpp DrawSoundMenu) ---
+# 12 slots: 0-2 Sound Effects, 5-7 Digitized Sound, 10-11 Background Music (3/4/8/9 blank).
+def snd_label(i: i32) -> cstr:
+    if i == 0 or i == 5 or i == 10:
+        return "None"
+    if i == 1:
+        return "PC Speaker"
+    if i == 2 or i == 11:
+        return "AdLib/Sound Blaster"
+    if i == 6:
+        return "Disney Sound Source"
+    if i == 7:
+        return "Sound Blaster"
+    return ""
+
+# Options this port actually supports (others are shown greyed/inactive, like the original on a PC
+# without that hardware): SFX None/AdLib, Digitized None/SoundBlaster, Music None/AdLib.
+def snd_active(i: i32) -> bool:
+    return i == 0 or i == 2 or i == 5 or i == 7 or i == 10 or i == 11
+
+def snd_radio_on(i: i32, fx_sel: i32, digi_sel: i32, music_sel: i32) -> bool:
+    if i <= 2:
+        return i == fx_sel
+    if i >= 5 and i <= 7:
+        return i == digi_sel
+    return i == music_sel
+
+# next selectable slot in direction dir (+1/-1), skipping blanks and inactive items
+def snd_next(cur: i32, dir: i32) -> i32:
+    i: mutable i32 = cur
+    for _ in 0..<12:
+        i <- i + dir
+        if i < 0:
+            i <- 11
+        if i > 11:
+            i <- 0
+        if snd_active(i):
+            return i
+    return cur
+
+def draw_sound_menu(r: mutable Render&, v: mutable Vga&, sel: i32, fx_sel: i32, digi_sel: i32, music_sel: i32) -> void:
+    for i in 0..<64000:                        # ClearMScreen: BORDCOLOR field
         r.fb[i.usize()] <- 0x29u8
-    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 130, 12, "Sound".cast[u8&], 0x47u8)
-    draw_window(r, 50, 50, 220, 60)
-    c0: mutable u8 = 0x17u8
-    c1: mutable u8 = 0x17u8
-    if sel == 0:
-        c0 <- 0x13u8
-    if sel == 1:
-        c1 <- 0x13u8
-    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 62, 58, "AdLib Sound & Music".cast[u8&], c0)
-    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 62, 78, "Digitized Sound".cast[u8&], c1)
-    a_txt: mutable cstr = "Off"
-    if adlib_on:
-        a_txt <- "On"
-    d_txt: mutable cstr = "Off"
-    if digi_on:
-        d_txt <- "On"
-    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 236, 58, a_txt.cast[u8&], 0x13u8)
-    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 236, 78, d_txt.cast[u8&], 0x13u8)
+    rt_draw_pic(r, v, 18, 112, 184)            # C_MOUSELBACKPIC bottom decoration
+    draw_window(r, 40, 17, 250, 45)            # FX section window   (SM_X-8, SM_Y1-3, SM_W, SM_H1)
+    draw_window(r, 40, 82, 250, 45)            # Digitized section
+    draw_window(r, 40, 147, 250, 32)           # Music section
+    rt_draw_pic(r, v, 15, 100, 0)              # C_FXTITLEPIC   "SOUND EFFECTS"
+    rt_draw_pic(r, v, 16, 100, 65)             # C_DIGITITLEPIC "DIGITIZED SOUND"
+    rt_draw_pic(r, v, 17, 100, 130)            # C_MUSICTITLEPIC "BACKGROUND MUSIC"
+    for i in 0..<12:
+        lbl: cstr = snd_label(i)
+        if lbl.cast[u8&][0u32] == 0u8:         # blank separator slot
+            continue
+        y: i32 = 20 + i * 13
+        col: mutable u8 = 0x17u8               # TEXTCOLOR
+        if not snd_active(i):
+            col <- 0x2bu8                       # DEACTIVE (greyed)
+        if sel == i:
+            col <- 0x13u8                       # HIGHLIGHT
+        _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 100, y, lbl.cast[u8&], col)
+        rbtn: mutable i32 = 13                 # C_NOTSELECTEDPIC
+        if snd_radio_on(i, fx_sel, digi_sel, music_sel):
+            rbtn <- 14                          # C_SELECTEDPIC
+        rt_draw_pic(r, v, rbtn, 72, y + 2)
     if r.has_menugfx:
-        blit_pic(r, &r.menu_gun[0], r.gun_w, r.gun_h, 52, 56 + sel * 20)
+        blit_pic(r, &r.menu_gun[0], r.gun_w, r.gun_h, 48, 20 + sel * 13)
 
 # A plain titled info screen (used by Control / Read This! / View Scores). Press a key to return.
 def draw_info_header(r: mutable Render&, v: mutable Vga&, title: u8&) -> void:
@@ -859,6 +903,15 @@ def main(argc: int, argv: u8&&) -> int:
                 _ = fclose(outp)
             return 0
 
+        # DEBUG: headless Sound-menu dump — `wolf3d sound` writes /tmp/wolf_sound.bin
+        if argc >= 2 and argv[1][0u32] == 115u8:        # first arg starts with 's'
+            draw_sound_menu(&r, &vga, 2, 2, 7, 11)
+            outs: void&? = fopen("/tmp/wolf_sound.bin".cast[u8&], "wb".cast[u8&])
+            if outs != null:
+                _ = fwrite(&r.fb[0], 1.usize(), 64000.usize(), outs)
+                _ = fclose(outs)
+            return 0
+
         if SDL_Init(0x30) != 0:        # SDL_INIT_VIDEO | SDL_INIT_AUDIO
             return 1
         # 4:3 window so the 320x200 framebuffer is stretched to Wolf's display aspect (taller walls)
@@ -938,7 +991,11 @@ def main(argc: int, argv: u8&&) -> int:
         crebind: mutable bool = false          # Control screen: awaiting a key to bind
         crebind_armed: mutable bool = false    # waiting for keys-released before capture
         menu_phase: mutable i32 = 0
-        adlib_on: mutable bool = true
+        # Sound menu radio selections: fx 0/1/2 (None/PC/AdLib), digi 5/6/7 (None/Disney/SB),
+        # music 10/11 (None/AdLib). Defaults = everything on.
+        fx_sel: mutable i32 = 2
+        digi_sel: mutable i32 = 7
+        music_sel: mutable i32 = 11
         digi_on: mutable bool = true
         mm_pu: mutable bool = true
         mm_pd: mutable bool = true
@@ -1038,22 +1095,30 @@ def main(argc: int, argv: u8&&) -> int:
                 if bk_edge:
                     menu_phase <- 1
             elif menu_phase == 3:
-                # Sound submenu: nav 2 items, Enter toggles the device
-                if up_edge or dn_edge:
-                    ssel <- 1 - ssel
+                # Sound submenu: nav the radio options; Enter selects one in its section
+                if dn_edge:
+                    ssel <- snd_next(ssel, 1)
+                if up_edge:
+                    ssel <- snd_next(ssel, -1)
                 if en_edge:
-                    if ssel == 0:
-                        adlib_on <- not adlib_on
-                        pa: mutable int = 0
-                        if not adlib_on:
-                            pa <- 1
-                        SDL_PauseAudioDevice(opl_dev, pa)
-                    else:
-                        digi_on <- not digi_on
+                    if ssel <= 2:                     # Sound Effects
+                        fx_sel <- ssel
+                        opl.fx_enabled <- (fx_sel == 2)
+                    elif ssel <= 7:                   # Digitized Sound
+                        digi_sel <- ssel
+                        digi_on <- (digi_sel == 7)
                         pdd: mutable int = 0
                         if not digi_on:
                             pdd <- 1
                         SDL_PauseAudioDevice(audio_dev, pdd)
+                    else:                             # Background Music
+                        music_sel <- ssel
+                        if music_sel == 11:
+                            opl.music_enabled <- true
+                            opl_play_level_music(&opl, r.current_map)
+                        else:
+                            opl.music_enabled <- false
+                            opl_stop_music(&opl)
                 if bk_edge:
                     menu_phase <- 0
             elif menu_phase == 7:
@@ -1127,7 +1192,7 @@ def main(argc: int, argv: u8&&) -> int:
             elif menu_phase == 2:
                 draw_difficulty_menu(&r, &vga, dsel)
             elif menu_phase == 3:
-                draw_sound_menu(&r, &vga, ssel, adlib_on, digi_on)
+                draw_sound_menu(&r, &vga, ssel, fx_sel, digi_sel, music_sel)
             elif menu_phase == 4:
                 draw_control_screen2(&r, &vga, csel, crebind)
             elif menu_phase == 5:

@@ -61,8 +61,13 @@ struct Opl layout c:
     mus_end: mutable i32
     mus_acc: mutable i32
     mus_delay: mutable i32
+    # Sound-menu enables (set true after load): gate SFX / music playback independently
+    fx_enabled: mutable bool
+    music_enabled: mutable bool
 
 def opl_init(opl: mutable Opl&) -> void:
+    opl.fx_enabled <- true
+    opl.music_enabled <- true
     for i in 0..<1024:
         ang: f64 = (i.f64() * 6.283185307179586) / 1024.0
         opl.sine[i.usize()] <- (sin(ang) * 4096.0).i32()
@@ -242,6 +247,12 @@ def opl_play_level_music(opl: mutable Opl&, mapnum: i32) -> void:
     floor <- floor % 10            # episode-1 floor index
     opl_play_music(opl, SONGS_E1[floor.usize()])
 
+# Stop music and silence all 9 channels (used when the Background Music option is set to None).
+def opl_stop_music(opl: mutable Opl&) -> void:
+    opl.mus_playing <- false
+    for c in 0..<9:
+        al_out(opl, 0xB0 + c, 0)              # key-off each channel
+
 def opl_play_music(opl: mutable Opl&, musicnum: i32) -> void:
     chunk: i32 = STARTMUSIC + musicnum
     if chunk < 0 or chunk + 1 >= 289:
@@ -283,12 +294,12 @@ def opl_mus_tick(opl: mutable Opl&) -> void:
 # ---- render: advance sequencers + synth, mix 9 channels to S16 ----
 def opl_render(opl: mutable Opl&, buf: mutable i16&, n: i32) -> void:
     for s in 0..<n:
-        if opl.sfx_playing:
+        if opl.sfx_playing and opl.fx_enabled:
             opl.sfx_acc <- opl.sfx_acc + 1
             if opl.sfx_acc >= OPL_SFX_TICSAMPLES:
                 opl.sfx_acc <- 0
                 opl_sfx_tick(opl)
-        if opl.mus_playing:
+        if opl.mus_playing and opl.music_enabled:
             opl.mus_acc <- opl.mus_acc + 1
             if opl.mus_acc >= OPL_MUS_TICSAMPLES:
                 opl.mus_acc <- 0
