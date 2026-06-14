@@ -9,3 +9,10 @@ xcuserdata
 Debug
 Release
 Backup
+/build
+/WOLF3D
+*.o
+*.d
+*.WL6
+WOLF3D.EXE
+Chocolate-Wolfenstein-3D
