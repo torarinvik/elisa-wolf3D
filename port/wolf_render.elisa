@@ -123,15 +123,16 @@ struct Render layout c:
     vx: mutable i32                           # viewport left  offset on screen
     vy: mutable i32                           # viewport top   offset on screen
     # Control: bindable SDL scancodes (Customize Controls)
-    kb_fwd: mutable i32
-    kb_back: mutable i32
-    kb_left: mutable i32
-    kb_right: mutable i32
-    kb_strafeL: mutable i32
-    kb_strafeR: mutable i32
-    kb_fire: mutable i32
-    kb_use: mutable i32
-    kb_run: mutable i32
+    # Wolf control model: 4 direction keys + 4 button keys (Strafe is a hold-modifier that
+    # turns Left/Right into side-step). Matches wl_menu.cpp DrawCustomScreen / id_in buttonscan.
+    kb_fwd: mutable i32                       # di_north / "Frwd"
+    kb_back: mutable i32                      # di_south / "Bkwrd"
+    kb_left: mutable i32                      # di_west  / "Left"  (turn, or strafe-left if Strafe held)
+    kb_right: mutable i32                     # di_east  / "Right" (turn, or strafe-right if Strafe held)
+    kb_fire: mutable i32                      # bt_attack / "Fire"
+    kb_strafe: mutable i32                    # bt_strafe / "Strafe" (modifier)
+    kb_run: mutable i32                       # bt_run   / "Run" (modifier)
+    kb_use: mutable i32                       # bt_use   / "Open"
     want_highscore: mutable bool             # death raised: SDL layer should run name entry
     # Read This! help article (T_HELPART) decoded once, paginated on '^P'
     rt_text: mutable array[u8, 16000]
@@ -420,15 +421,14 @@ def render_init(r: mutable Render&, pm: VSwap&) -> void:
     r.weapons_owned <- 3               # knife + pistol
     r.adlib_req <- -1
     # default control bindings (SDL scancodes): arrows + Ctrl/Space, A/D strafe, Shift run
-    r.kb_fwd <- 82
-    r.kb_back <- 81
-    r.kb_left <- 80
-    r.kb_right <- 79
-    r.kb_strafeL <- 4
-    r.kb_strafeR <- 7
-    r.kb_fire <- 224
-    r.kb_use <- 44
-    r.kb_run <- 225
+    r.kb_fwd <- 82                            # Up arrow
+    r.kb_back <- 81                           # Down arrow
+    r.kb_left <- 80                           # Left arrow
+    r.kb_right <- 79                          # Right arrow
+    r.kb_fire <- 224                          # Left Ctrl
+    r.kb_strafe <- 226                        # Left Alt
+    r.kb_run <- 225                           # Left Shift
+    r.kb_use <- 44                            # Space
 
 # Load a level: cache the map, reset per-level state, rebuild the world, place the player.
 # Player hp/ammo/score/keys carry over between levels.
