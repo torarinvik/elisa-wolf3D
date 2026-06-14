@@ -470,9 +470,14 @@ def draw_control_screen2(r: mutable Render&, v: mutable Vga&, sel: i32, rebindin
     _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 24, 176, "Enter=bind  Esc=back".cast[u8&], 0x13u8)
 
 # --- Read This!: the REAL T_HELPART article, paginated on '^P', rendered with control codes ---
+# Faithful to wl_text.cpp PageLayout: BACKCOLOR fill + 4-pic window frame + LEFT/RIGHT/TOP margins 16.
 global RT_LEFT: i32 = 16
-global RT_RIGHT: i32 = 300
-global RT_TOP: i32 = 4
+global RT_RIGHT: i32 = 304                # SCREENPIXWIDTH(320) - RIGHTMARGIN(16)
+global RT_TOP: i32 = 16                   # TOPMARGIN
+global RT_BACKCOLOR: u8 = 0x11u8          # help-screen background (dark blue), not black
+global RT_FONTHEIGHT: i32 = 10            # FONTHEIGHT
+global RT_PICMARGIN: i32 = 8              # PICMARGIN: gap between a ^G picture and the text beside it
+global RT_SCREENMID: i32 = 160            # SCREENMID: pics past this go on the right, text wraps left
 
 def hexval(c: i32) -> i32:
     if c >= 48 and c <= 57:
@@ -518,23 +523,41 @@ def rt_word_width(r: Render&, v: Vga&, i: i32, end: i32) -> i32:
             j <- j + 1
     return w
 
+# Decode chunk `num` and blit it at (x,y). Used for the window frame and ^G article graphics.
+def rt_draw_pic(r: mutable Render&, v: mutable Vga&, num: i32, x: i32, y: i32) -> void:
+    pic: mutable array[u8, 64000] = zeroed
+    pw: mutable i32 = 0
+    ph: mutable i32 = 0
+    if vga_get_pic(v, num, &pic[0], &pw, &ph):
+        blit_pic(r, &pic[0], pw, ph, x, y)
+
 def draw_readthis_screen(r: mutable Render&, v: mutable Vga&) -> void:
     rt_load(r, v)
-    # plain dark background, like the article screen
+    # PageLayout: clear whole screen to BACKCOLOR, then draw the 4-pic window frame
     for k in 0..<64000:
-        r.fb[k.usize()] <- 0x00u8
+        r.fb[k.usize()] <- RT_BACKCOLOR
+    rt_draw_pic(r, v, 6, 0, 0)              # H_TOPWINDOWPIC
+    rt_draw_pic(r, v, 7, 0, 8)              # H_LEFTWINDOWPIC
+    rt_draw_pic(r, v, 8, 312, 8)            # H_RIGHTWINDOWPIC
+    rt_draw_pic(r, v, 9, 8, 176)           # H_BOTTOMINFOPIC
     page: i32 = r.rt_page
     start: i32 = r.rt_page_off[page.usize()]
     endp: mutable i32 = r.rt_len
     if page + 1 < r.rt_npages:
         endp <- r.rt_page_off[(page + 1).usize()]
+    # per-row margins (PageLayout model): text flows around ^G pictures
+    leftm: mutable array[i32, 16] = zeroed
+    rightm: mutable array[i32, 16] = zeroed
+    for rr in 0..<16:
+        leftm[rr.usize()] <- RT_LEFT
+        rightm[rr.usize()] <- RT_RIGHT
+    rowon: mutable i32 = 0
     px: mutable i32 = RT_LEFT
-    py: mutable i32 = RT_TOP
     color: mutable u8 = 0x17u8
-    lh: i32 = v.font_height + 1
     pic: mutable array[u8, 64000] = zeroed
     i: mutable i32 = start
     while i < endp:
+        py: i32 = RT_TOP + rowon * RT_FONTHEIGHT
         c: i32 = r.rt_text[i.usize()].i32()
         if c == 94:                            # '^' command
             n: i32 = r.rt_text[(i + 1).usize()].i32()
@@ -543,11 +566,11 @@ def draw_readthis_screen(r: mutable Render&, v: mutable Vga&) -> void:
                 while i < endp and r.rt_text[i.usize()].i32() != 13:
                     i <- i + 1
                 i <- i + 1
-                px <- RT_LEFT
+                px <- leftm[rowon.usize()]
             elif n == 67 or n == 99:           # ^c## hex color
                 color <- (hexval(r.rt_text[(i + 2).usize()].i32()) * 16 + hexval(r.rt_text[(i + 3).usize()].i32())).u8()
                 i <- i + 4
-            elif n == 71 or n == 103:          # ^G y,x,chunk  graphic
+            elif n == 71 or n == 103:          # ^G y,x,chunk  graphic + margin reflow
                 j: mutable i32 = i + 2
                 nums: mutable array[i32, 3] = zeroed
                 ni: mutable i32 = 0
@@ -568,12 +591,32 @@ def draw_readthis_screen(r: mutable Render&, v: mutable Vga&) -> void:
                     nums[ni.usize()] <- cur
                     ni <- ni + 1
                 if ni >= 3:
+                    picy: i32 = nums[0u32]
+                    picx: i32 = nums[1u32] & (-8)      # VWB_DrawPic aligns x to a multiple of 8
                     pw: mutable i32 = 0
                     ph: mutable i32 = 0
                     if vga_get_pic(v, nums[2u32], &pic[0], &pw, &ph):
-                        blit_pic(r, &pic[0], pw, ph, nums[1u32], nums[0u32])
+                        blit_pic(r, &pic[0], pw, ph, picx, picy)
+                        # adjust per-row margins so text wraps beside the picture
+                        picmid: i32 = picx + pw / 2
+                        margin: mutable i32 = picx + pw + RT_PICMARGIN     # new left margin
+                        if picmid > RT_SCREENMID:
+                            margin <- picx - RT_PICMARGIN                  # new right margin
+                        top: mutable i32 = (picy - RT_TOP) / RT_FONTHEIGHT
+                        if top < 0:
+                            top <- 0
+                        bot: mutable i32 = (picy + ph - RT_TOP) / RT_FONTHEIGHT
+                        if bot > 15:
+                            bot <- 15
+                        for rr2 in top..<(bot + 1):
+                            if picmid > RT_SCREENMID:
+                                rightm[rr2.usize()] <- margin
+                            else:
+                                leftm[rr2.usize()] <- margin
+                        if px < leftm[rowon.usize()]:
+                            px <- leftm[rowon.usize()]
                 i <- j
-            elif n == 76 or n == 108:          # ^L x,y  set location
+            elif n == 76 or n == 108:          # ^L y,x  set print location (py first, then px)
                 j2: mutable i32 = i + 2
                 lnums: mutable array[i32, 2] = zeroed
                 li: mutable i32 = 0
@@ -589,41 +632,57 @@ def draw_readthis_screen(r: mutable Render&, v: mutable Vga&) -> void:
                     j2 <- j2 + 1
                 if li < 2:
                     lnums[li.usize()] <- lcur
-                px <- lnums[0u32]
-                py <- lnums[1u32]
+                rowon <- (lnums[0u32] - RT_TOP) / RT_FONTHEIGHT
+                if rowon < 0:
+                    rowon <- 0
+                if rowon > 14:
+                    rowon <- 14
+                px <- lnums[1u32]
                 i <- j2
+            elif n == 62:                      # ^> : jump to mid-line
+                px <- 160
+                i <- i + 2
             elif n == 69 or n == 101:          # ^E end of article
                 i <- endp
             else:
                 i <- i + 2
-        elif c == 13:                          # CR -> newline
-            px <- RT_LEFT
-            py <- py + lh
-            i <- i + 1
+        elif c == 13:                          # CR -> newline (stop at the last visible row)
+            rowon <- rowon + 1
+            if rowon > 15:
+                i <- endp
+            else:
+                px <- leftm[rowon.usize()]
+                i <- i + 1
         elif c == 10:
             i <- i + 1
-        elif c == 9:                           # tab -> next ~28px stop, bounded
-            px <- ((px / 28) + 1) * 28
-            if px > 260:
-                px <- 260
+        elif c == 9:                           # tab -> next 8-pixel-group stop within the column
+            px <- ((px - leftm[rowon.usize()]) / 80 + 1) * 80 + leftm[rowon.usize()]
             i <- i + 1
         elif c == 32:                          # space
             px <- px + vga_char_width(v, 32)
             i <- i + 1
-        else:                                  # word start: wrap if it would overflow
+        else:                                  # word start: wrap if it would overflow this row's right margin
             ww: i32 = rt_word_width(r, v, i, endp)
-            if px + ww > RT_RIGHT and px > RT_LEFT:
-                px <- RT_LEFT
-                py <- py + lh
+            if px + ww > rightm[rowon.usize()] and px > leftm[rowon.usize()]:
+                rowon <- rowon + 1
+                if rowon > 15:
+                    rowon <- 15
+                px <- leftm[rowon.usize()]
+            wpy: i32 = RT_TOP + rowon * RT_FONTHEIGHT
             wgoing: mutable bool = true
             while wgoing and i < endp:
                 wc: i32 = r.rt_text[i.usize()].i32()
                 if wc == 32 or wc == 13 or wc == 10 or wc == 9 or wc == 94:
                     wgoing <- false
                 else:
-                    px <- px + vga_draw_char(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, px, py, wc, color)
+                    px <- px + vga_draw_char(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, px, wpy, wc, color)
                     i <- i + 1
-    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 60, 190, "Enter/Down=next  Up=prev  Esc=back".cast[u8&], 0x13u8)
+    # page indicator on the bottom-info bar ("pg X of Y", fontcolor 0x4f), like PageLayout
+    pgx: i32 = 213
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, pgx, 183, "pg".cast[u8&], 0x4fu8)
+    draw_int(r, v, pgx + 20, 183, r.rt_page + 1, 0x4fu8)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, pgx + 36, 183, "of".cast[u8&], 0x4fu8)
+    draw_int(r, v, pgx + 56, 183, r.rt_npages, 0x4fu8)
 
 # --- Persistent high scores: 7 entries (name[16], score, level), raw-struct file ---
 global HS_COUNT: i32 = 7
@@ -787,6 +846,18 @@ def main(argc: int, argv: u8&&) -> int:
                 r.gun_w <- gw
                 r.gun_h <- gh
                 r.has_menugfx <- true
+
+        # DEBUG: headless Read This! dump — `wolf3d dumpread` writes all pages to /tmp/wolf_read_all.bin
+        if argc >= 2 and argv[1][0u32] == 100u8:        # first arg starts with 'd'
+            rt_load(&r, &vga)
+            outp: void&? = fopen("/tmp/wolf_read_all.bin".cast[u8&], "wb".cast[u8&])
+            if outp != null:
+                for pg in 0..<r.rt_npages:
+                    r.rt_page <- pg
+                    draw_readthis_screen(&r, &vga)
+                    _ = fwrite(&r.fb[0], 1.usize(), 64000.usize(), outp)
+                _ = fclose(outp)
+            return 0
 
         if SDL_Init(0x30) != 0:        # SDL_INIT_VIDEO | SDL_INIT_AUDIO
             return 1
