@@ -876,12 +876,36 @@ def draw_viewscores_screen(r: mutable Render&, v: mutable Vga&, h: HiScores&) ->
         draw_int_right(r, v, 292, y, h.scores[i.usize()], 0x17u8)
 
 # the in-game name-entry overlay shown when a death produced a qualifying score
-def draw_name_entry(r: mutable Render&, v: mutable Vga&, name: u8&, score: i32) -> void:
-    draw_info_header(r, v, "New High Score!".cast[u8&])
-    draw_int(r, v, 120, 60, score, 0x13u8)
-    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 32, 90, "Enter your name:".cast[u8&], 0x17u8)
-    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 32, 110, name, 0x13u8)
-    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 60, 176, "Enter when done".cast[u8&], 0x13u8)
+# Name entry: render the full high-score table with the new entry typed inline at its rank row
+# (like the original US_LineInput over DrawHighScores), with a blinking-style underscore caret.
+def draw_name_entry(r: mutable Render&, v: mutable Vga&, h: HiScores&, rank: i32, name: u8&, score: i32, level: i32) -> void:
+    for i in 0..<64000:                        # ClearMScreen: BORDCOLOR field
+        r.fb[i.usize()] <- 0x29u8
+    rt_draw_pic(r, v, 90, 48, 0)               # HIGHSCORESPIC title
+    rt_draw_pic(r, v, 39, 32, 68)              # C_NAMEPIC
+    rt_draw_pic(r, v, 38, 160, 68)             # C_LEVELPIC
+    rt_draw_pic(r, v, 40, 224, 68)             # C_SCOREPIC
+    # render with the pending entry spliced in at `rank` (rows below shift down, last drops off)
+    for i in 0..<HS_COUNT:
+        y: i32 = 76 + i * 16
+        if i == rank:
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 16, y, name, 0x13u8)
+            draw_int_right(r, v, 194, y, level, 0x13u8)
+            draw_int_right(r, v, 292, y, score, 0x13u8)
+        else:
+            src: mutable i32 = i
+            if i > rank:
+                src <- i - 1                    # entries at/after the insert point shift down
+            _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 16, y, &h.names[(src * HS_NAMELEN).usize()], 0x17u8)
+            draw_int_right(r, v, 194, y, h.levels[src.usize()], 0x17u8)
+            draw_int_right(r, v, 292, y, h.scores[src.usize()], 0x17u8)
+    # caret after the typed name on the editing row
+    nw: mutable i32 = 0
+    j: mutable i32 = 0
+    while name[j.usize()] != 0u8:
+        nw <- nw + vga_char_width(v, name[j.usize()].i32())
+        j <- j + 1
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 16 + nw, 76 + rank * 16, "_".cast[u8&], 0x13u8)
 
 def main(argc: int, argv: u8&&) -> int:
     can Console, Abort.Panic:
@@ -977,6 +1001,20 @@ def main(argc: int, argv: u8&&) -> int:
             if outc != null:
                 _ = fwrite(&r.fb[0], 1.usize(), 64000.usize(), outc)
                 _ = fclose(outc)
+            return 0
+
+        # DEBUG: headless name-entry dump — `wolf3d name` writes /tmp/wolf_name.bin
+        if argc >= 2 and argv[1][0u32] == 110u8:        # first arg starts with 'n'
+            hn_dbg: mutable HiScores = zeroed
+            hs_load(&hn_dbg, HISCORE_PATH)
+            nm_dbg: mutable array[u8, 16] = zeroed
+            nm_dbg[0u32] <- 66u8                       # "BJ"
+            nm_dbg[1u32] <- 74u8
+            draw_name_entry(&r, &vga, &hn_dbg, 0, &nm_dbg[0], 99000, 3)
+            outn: void&? = fopen("/tmp/wolf_name.bin".cast[u8&], "wb".cast[u8&])
+            if outn != null:
+                _ = fwrite(&r.fb[0], 1.usize(), 64000.usize(), outn)
+                _ = fclose(outn)
             return 0
 
         # DEBUG: headless View-Scores dump — `wolf3d view` writes /tmp/wolf_view.bin
@@ -1437,7 +1475,7 @@ def main(argc: int, argv: u8&&) -> int:
                     hs_save(&hiscores, HISCORE_PATH)
                     entering_name <- false
                 prev_enter <- keys[40u32] != 0u8
-                draw_name_entry(&r, &vga, &namebuf[0], r.player_score)
+                draw_name_entry(&r, &vga, &hiscores, pending_rank, &namebuf[0], r.player_score, r.current_map + 1)
                 blit_palette(&r, &pixels[0])
                 _ = SDL_UpdateTexture(tex, null, (&pixels[0]).cast[void&], VIEWWIDTH * 4)
                 _ = SDL_RenderClear(ren)
