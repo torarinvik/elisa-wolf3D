@@ -496,6 +496,24 @@ def keyname(sc: i32, buf: mutable u8&) -> u8&:
     buf[7u32] <- 0u8
     return buf
 
+# Control menu list (wl_menu.cpp DrawCtlScreen): Mouse/Joystick toggles (inactive — unsupported)
+# plus the only active item, "Customize controls", which opens the rebind screen.
+def draw_control_list(r: mutable Render&, v: mutable Vga&) -> void:
+    for i in 0..<64000:                        # ClearMScreen: BORDCOLOR field
+        r.fb[i.usize()] <- 0x29u8
+    rt_draw_pic(r, v, 26, 80, 0)               # C_CONTROLPIC "CONTROL" title
+    rt_draw_pic(r, v, 18, 112, 184)            # C_MOUSELBACKPIC bottom hint bar
+    draw_window(r, 16, 81, 284, 60)            # CTL_X-8, CTL_Y-5, CTL_W, CTL_H
+    # 4 items; only "Customize controls" is active in this port (no mouse/joystick)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 80, 86, "Mouse Enabled".cast[u8&], 0x2bu8)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 80, 99, "Mouse Sensitivity".cast[u8&], 0x2bu8)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 80, 112, "Joystick Enabled".cast[u8&], 0x2bu8)
+    _ = vga_draw_string(v, &r.fb[0], VIEWWIDTH, VIEWWIDTH, SCREENHEIGHT, 80, 125, "Customize controls".cast[u8&], 0x13u8)
+    rt_draw_pic(r, v, 13, 56, 89)              # mouse-enabled checkbox: not selected
+    rt_draw_pic(r, v, 13, 56, 115)             # joystick-enabled checkbox: not selected
+    if r.has_menugfx:
+        blit_pic(r, &r.menu_gun[0], r.gun_w, r.gun_h, 48, 125)   # gun cursor on Customize
+
 def draw_control_screen2(r: mutable Render&, v: mutable Vga&, sel: i32, rebinding: bool) -> void:
     draw_info_header(r, v, "Customize Controls".cast[u8&])
     nb: mutable array[u8, 16] = zeroed
@@ -912,6 +930,15 @@ def main(argc: int, argv: u8&&) -> int:
                 _ = fclose(outs)
             return 0
 
+        # DEBUG: headless Control-list dump — `wolf3d control` writes /tmp/wolf_control.bin
+        if argc >= 2 and argv[1][0u32] == 99u8:         # first arg starts with 'c'
+            draw_control_list(&r, &vga)
+            outc: void&? = fopen("/tmp/wolf_control.bin".cast[u8&], "wb".cast[u8&])
+            if outc != null:
+                _ = fwrite(&r.fb[0], 1.usize(), 64000.usize(), outc)
+                _ = fclose(outc)
+            return 0
+
         if SDL_Init(0x30) != 0:        # SDL_INIT_VIDEO | SDL_INIT_AUDIO
             return 1
         # 4:3 window so the 320x200 framebuffer is stretched to Wolf's display aspect (taller walls)
@@ -1130,6 +1157,14 @@ def main(argc: int, argv: u8&&) -> int:
                 if bk_edge or en_edge:
                     menu_phase <- 0
             elif menu_phase == 4:
+                # Control list: only "Customize controls" is active (no mouse/joystick support)
+                if en_edge:
+                    menu_phase <- 8
+                    csel <- 0
+                    crebind <- false
+                if bk_edge:
+                    menu_phase <- 0
+            elif menu_phase == 8:
                 # Customize Controls: nav 9 actions, Enter rebinds the selected one
                 if crebind:
                     # scan whole keyboard; arm only after all keys are released
@@ -1162,7 +1197,7 @@ def main(argc: int, argv: u8&&) -> int:
                         crebind <- true
                         crebind_armed <- false
                     if bk_edge:
-                        menu_phase <- 0
+                        menu_phase <- 4
             elif menu_phase == 5:
                 # Read This!: page through the help article
                 if en_edge or rt_edge or dn_edge:
@@ -1194,6 +1229,8 @@ def main(argc: int, argv: u8&&) -> int:
             elif menu_phase == 3:
                 draw_sound_menu(&r, &vga, ssel, fx_sel, digi_sel, music_sel)
             elif menu_phase == 4:
+                draw_control_list(&r, &vga)
+            elif menu_phase == 8:
                 draw_control_screen2(&r, &vga, csel, crebind)
             elif menu_phase == 5:
                 draw_readthis_screen(&r, &vga)
